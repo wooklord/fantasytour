@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Fantasy Tour — Eggy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,400..900,0..100,0..1&family=Outfit:wght@300..800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+:root{
+  --indigo:#171233; --pit:#100C26; --panel:#1F1941; --panel2:#28214F;
+  --yolk:#FFC53D; --yolk-deep:#E8A916; --coral:#FF6B5E; --mint:#7FE8C3;
+  --cream:#FFF3DC; --cream-dim:#CFC5AC; --ink:#2B2140; --ink-soft:#5A4E78;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--pit)}
+body{
+  font-family:'Outfit',system-ui,sans-serif;color:var(--cream);
+  background:
+    radial-gradient(1200px 500px at 50% -10%, #2A2058 0%, transparent 60%),
+    radial-gradient(700px 380px at 85% 8%, rgba(255,107,94,.10), transparent 65%),
+    var(--indigo);
+  min-height:100vh;font-size:16px;line-height:1.45;
+}
+h1,h2,h3,.display{font-family:'Fraunces',serif;font-variation-settings:'SOFT' 80,'WONK' 1,'opsz' 60}
+a{color:var(--yolk)}
+button{font-family:inherit;cursor:pointer}
+input,select{font-family:inherit;font-size:16px}
+.wrap{max-width:680px;margin:0 auto;padding:0 16px 96px}
+
+/* ---------- top bar ---------- */
+header{position:sticky;top:0;z-index:50;background:rgba(16,12,38,.88);backdrop-filter:blur(10px);border-bottom:1px solid #2E2660}
+.bar{max-width:680px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 16px}
+.logo{font-family:'Fraunces',serif;font-weight:800;font-size:1.35rem;letter-spacing:.5px;color:var(--yolk);font-variation-settings:'SOFT' 100,'WONK' 1}
+.logo span{color:var(--cream);font-weight:500;font-style:italic}
+.who{margin-left:auto;font-size:.85rem;color:var(--cream-dim)}
+.who b{color:var(--cream)}
+.linkbtn{background:none;border:none;color:var(--coral);font-size:.8rem;text-decoration:underline;padding:2px 4px}
+
+/* ---------- tabs ---------- */
+nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:50;display:flex;background:rgba(16,12,38,.94);backdrop-filter:blur(10px);border-top:1px solid #2E2660;padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs button{flex:1;background:none;border:none;color:var(--cream-dim);padding:13px 4px 11px;font-size:.85rem;font-weight:600;letter-spacing:.4px;border-top:2px solid transparent}
+nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
+
+/* ---------- cards / panels ---------- */
+.panel{background:var(--panel);border:1px solid #2E2660;border-radius:14px;padding:16px;margin:14px 0}
+.panel h2{font-size:1.25rem;margin-bottom:8px}
+.muted{color:var(--cream-dim);font-size:.88rem}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{display:inline-block;font-family:var(--mono);font-size:.75rem;padding:3px 10px;border-radius:999px;border:1px solid #3A3170;color:var(--cream-dim)}
+.pill.live{border-color:var(--coral);color:var(--coral);animation:pulse 1.6s infinite}
+.pill.open{border-color:var(--mint);color:var(--mint)}
+.pill.locked{border-color:var(--yolk);color:var(--yolk)}
+.pill.final{border-color:#6C61A8;color:#9A8FD6}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.showrow{display:flex;gap:12px;align-items:center;padding:13px 4px;border-bottom:1px dashed #322A63}
+.showrow:last-child{border-bottom:none}
+.showrow .date{font-family:var(--mono);color:var(--yolk);font-size:.85rem;min-width:74px}
+.showrow .v{flex:1;min-width:0}
+.showrow .v .venue{font-weight:600}
+.showrow .v .loc{font-size:.82rem;color:var(--cream-dim)}
+.showrow button{background:var(--panel2);color:var(--cream);border:1px solid #3A3170;border-radius:10px;padding:8px 12px;font-size:.82rem;font-weight:600}
+
+/* ---------- the setlist card (signature) ---------- */
+.sheet{position:relative;background:var(--cream);color:var(--ink);border-radius:6px;padding:26px 22px 22px;margin:22px 6px;box-shadow:0 14px 40px rgba(0,0,0,.5), 0 2px 0 rgba(0,0,0,.2);transform:rotate(-.5deg)}
+.sheet::before,.sheet::after{content:'';position:absolute;width:86px;height:26px;background:rgba(120,120,128,.55);top:-12px;transform:rotate(-4deg);left:14%;box-shadow:inset 0 0 6px rgba(0,0,0,.25)}
+.sheet::after{left:auto;right:12%;transform:rotate(5deg)}
+.sheet h2{font-size:1.5rem;font-variation-settings:'SOFT' 100,'WONK' 1;margin-bottom:2px}
+.sheet .sub{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);margin-bottom:16px;text-transform:uppercase;letter-spacing:1px}
+.slotline{display:flex;align-items:baseline;gap:10px;margin:14px 0}
+.slotline label{font-family:'Fraunces',serif;font-weight:700;font-size:1rem;min-width:86px}
+.slotline .pts{font-family:var(--mono);font-size:.7rem;color:var(--ink-soft);border:1px solid var(--ink-soft);border-radius:999px;padding:1px 7px;white-space:nowrap}
+.slotline input{flex:1;min-width:0;background:transparent;border:none;border-bottom:2px dashed var(--ink-soft);color:var(--ink);padding:4px 2px;font-size:1rem;font-family:'Outfit'}
+.slotline input:focus{outline:none;border-bottom-color:var(--yolk-deep);border-bottom-style:solid}
+.sheet .divider{border-top:1px solid rgba(43,33,64,.2);margin:18px 0 6px;padding-top:10px;font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:1px;text-transform:uppercase}
+.savebtn{width:100%;margin-top:18px;background:var(--ink);color:var(--cream);border:none;border-radius:10px;padding:14px;font-size:1.05rem;font-weight:700;font-family:'Fraunces',serif;letter-spacing:.5px}
+.savebtn:disabled{opacity:.45}
+.countbig{font-family:var(--mono);text-align:center;margin:6px 0 0;font-size:.85rem;color:var(--ink-soft)}
+.countbig b{color:var(--coral)}
+
+/* ---------- leaderboard ---------- */
+.lb{width:100%;border-collapse:collapse}
+.lb td,.lb th{padding:10px 8px;text-align:left;border-bottom:1px dashed #322A63}
+.lb th{font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--cream-dim);font-weight:600}
+.lb .rank{font-family:var(--mono);color:var(--yolk);width:36px}
+.lb .pts{font-family:var(--mono);text-align:right;font-size:1.05rem}
+.lb tr.me td{background:rgba(255,197,61,.07)}
+
+/* ---------- setlist + results ---------- */
+.songrow{display:flex;gap:10px;padding:7px 2px;border-bottom:1px dashed #2C2459;align-items:baseline}
+.songrow .pos{font-family:var(--mono);font-size:.72rem;color:var(--cream-dim);min-width:44px}
+.songrow.hitmine{background:linear-gradient(90deg,rgba(255,197,61,.14),transparent);border-radius:6px}
+.songrow.hitmine .name{color:var(--yolk);font-weight:700}
+.pickres{display:flex;gap:8px;align-items:baseline;padding:5px 0;font-size:.9rem}
+.pickres .sl{font-family:var(--mono);font-size:.7rem;color:var(--cream-dim);min-width:64px;text-transform:uppercase}
+.pickres .pt{margin-left:auto;font-family:var(--mono)}
+.pickres.hit .pt{color:var(--mint)}
+.pickres.miss{opacity:.55}
+
+/* ---------- forms / auth / admin ---------- */
+.field{margin:12px 0}
+.field label{display:block;font-size:.8rem;color:var(--cream-dim);margin-bottom:5px;letter-spacing:.4px}
+.field input,.field select{width:100%;background:var(--pit);border:1px solid #3A3170;border-radius:10px;color:var(--cream);padding:11px 12px}
+.btn{background:var(--yolk);color:#221A0A;border:none;border-radius:10px;padding:12px 18px;font-weight:700;font-size:.95rem}
+.btn.ghost{background:var(--panel2);color:var(--cream);border:1px solid #3A3170}
+.btn.small{padding:7px 12px;font-size:.8rem}
+.btn:disabled{opacity:.5}
+.err{color:var(--coral);font-size:.85rem;margin-top:8px;min-height:1.2em}
+.admin-slot{display:flex;gap:8px;margin:6px 0}
+.admin-slot input{background:var(--pit);border:1px solid #3A3170;border-radius:8px;color:var(--cream);padding:8px 10px}
+.admin-slot input.k{flex:2}.admin-slot input.p{width:70px;font-family:var(--mono)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* ---------- toasts ---------- */
+#toasts{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:99;width:min(92vw,420px);display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--cream);color:var(--ink);border-radius:12px;padding:12px 14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.5);border-left:6px solid var(--yolk);animation:drop .35s cubic-bezier(.2,1.4,.4,1)}
+.toast.score{border-left-color:var(--mint)}
+@keyframes drop{from{transform:translateY(-16px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+.autocomplete{position:relative}
+.acc-list{position:absolute;top:100%;left:0;right:0;background:var(--cream);border-radius:0 0 10px 10px;box-shadow:0 12px 28px rgba(0,0,0,.35);z-index:30;max-height:210px;overflow:auto}
+.acc-list div{padding:9px 12px;color:var(--ink);font-size:.92rem;border-bottom:1px solid rgba(43,33,64,.08);cursor:pointer}
+.acc-list div small{color:var(--ink-soft);font-family:var(--mono);float:right}
+.acc-list div:hover,.acc-list div.sel{background:var(--yolk)}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<header><div class="bar">
+  <div class="logo">Fantasy Tour <span>egg division</span></div>
+  <div class="who" id="whoami"></div>
+</div></header>
+
+<div id="toasts"></div>
+<main class="wrap" id="main"></main>
+
+<nav class="tabs" id="tabs" style="display:none">
+  <button data-tab="shows" class="on">Shows</button>
+  <button data-tab="board">Standings</button>
+  <button data-tab="admin" id="admintab" style="display:none">Admin</button>
+</nav>
+
+<script>
+/* =================== CONFIG — EDIT THESE =================== */
+const SUPABASE_URL  = "https://YOUR-PROJECT-REF.supabase.co";
+const SUPABASE_ANON = "YOUR-ANON-PUBLIC-KEY";
+/* =========================================================== */
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const FN_URL = SUPABASE_URL + "/functions/v1/carton-sync";
+const $ = (s, el=document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let session = JSON.parse(localStorage.getItem("ft_session") || "null");
+let tab = "shows", currentShow = null, songList = [], cfg = null, timers = [];
+
+/* ---------------- utilities ---------------- */
+function toast(msg, cls=""){
+  const t = document.createElement("div");
+  t.className = "toast " + cls; t.textContent = msg;
+  $("#toasts").appendChild(t);
+  setTimeout(() => t.remove(), 6000);
+}
+function fmtDate(d){ return new Date(d + "T12:00:00").toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}); }
+function fmtCutoff(ts){ return new Date(ts).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }
+function countdown(ts){
+  const ms = new Date(ts) - Date.now();
+  if (ms <= 0) return null;
+  const h = Math.floor(ms/36e5), m = Math.floor(ms%36e5/6e4), s = Math.floor(ms%6e4/1e3);
+  return h > 0 ? `${h}h ${m}m` : `${m}m ${String(s).padStart(2,"0")}s`;
+}
+function clearTimers(){ timers.forEach(clearInterval); timers = []; }
+async function rpc(fn, args){
+  const { data, error } = await db.rpc(fn, args);
+  if (error) throw new Error(error.message.replace(/^.*?: /,""));
+  return data;
+}
+async function edgeFn(action){
+  const r = await fetch(FN_URL, { method:"POST",
+    headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+SUPABASE_ANON, "apikey":SUPABASE_ANON },
+    body: JSON.stringify({ action }) });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || "edge function failed");
+  return j;
+}
+function showState(s){
+  if (s.status === "final") return "final";
+  if (!s.cutoff_at) return "no cutoff";
+  if (new Date(s.cutoff_at) > new Date()) return "open";
+  return s.status === "live" ? "live" : "locked";
+}
+
+/* ---------------- boot ---------------- */
+async function loadConfig(){
+  const { data } = await db.from("game_config").select("data").eq("id",1).single();
+  cfg = data.data;
+}
+async function loadSongs(){
+  const { data } = await db.from("songs_cache").select("*").order("times_played",{ascending:false});
+  songList = data || [];
+}
+function renderWho(){
+  $("#whoami").innerHTML = session
+    ? `<b>${esc(session.name)}</b> <button class="linkbtn" onclick="logout()">log out</button>` : "";
+}
+function logout(){ session = null; localStorage.removeItem("ft_session"); location.reload(); }
+
+async function boot(){
+  renderWho();
+  if (!session){ renderAuth(); return; }
+  $("#tabs").style.display = "flex";
+  if (session.is_admin) $("#admintab").style.display = "";
+  await Promise.all([loadConfig(), loadSongs()]);
+  subscribeRealtime();
+  renderShows();
+}
+
+/* ---------------- auth ---------------- */
+function renderAuth(){
+  $("#main").innerHTML = `
+    <div class="panel" style="margin-top:38px">
+      <h2 class="display">Who's picking?</h2>
+      <p class="muted">Name + PIN. That's the whole account.</p>
+      <div class="field"><label>Name</label><input id="a-name" autocomplete="username" placeholder="Wooklord"></div>
+      <div class="field"><label>PIN (4–8 digits)</label><input id="a-pin" inputmode="numeric" autocomplete="current-password" type="password" placeholder="••••"></div>
+      <div class="row">
+        <button class="btn" onclick="doLogin()">Log in</button>
+        <button class="btn ghost" onclick="doRegister()">New player</button>
+      </div>
+      <div class="err" id="a-err"></div>
+    </div>`;
+}
+async function doLogin(){ authFlow("login"); }
+async function doRegister(){ authFlow("register_player"); }
+async function authFlow(fn){
+  $("#a-err").textContent = "";
+  try{
+    const d = await rpc(fn, { p_name: $("#a-name").value, p_pin: $("#a-pin").value });
+    session = { ...d, pin: $("#a-pin").value };
+    localStorage.setItem("ft_session", JSON.stringify(session));
+    location.reload();
+  }catch(e){ $("#a-err").textContent = e.message; }
+}
+
+/* ---------------- shows list ---------------- */
+async function renderShows(){
+  clearTimers(); tab = "shows"; markTab();
+  const today = new Date(Date.now() - 2*864e5).toISOString().slice(0,10);
+  const [{ data: up }, { data: past }] = await Promise.all([
+    db.from("shows").select("*").gte("showdate", today).order("showdate"),
+    db.from("shows").select("*").lt("showdate", today).order("showdate",{ascending:false}).limit(12),
+  ]);
+  const row = s => {
+    const st = showState(s);
+    const cls = { open:"open", live:"live", locked:"locked", final:"final" }[st] || "";
+    const cd = st === "open" ? countdown(s.cutoff_at) : null;
+    return `<div class="showrow">
+      <div class="date">${fmtDate(s.showdate)}</div>
+      <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
+        <div class="loc">${esc(s.city||"")}${s.state?", "+esc(s.state):""}
+          <span class="pill ${cls}" data-cd="${st==='open'?s.cutoff_at:''}">${st==='open'&&cd ? "locks in "+cd : st}</span></div></div>
+      <button onclick="openShow(${s.id})">${st==='open'?'Pick':'View'}</button>
+    </div>`;
+  };
+  $("#main").innerHTML = `
+    <div class="panel"><h2>Upcoming</h2>${(up||[]).map(row).join("") || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
+    <div class="panel"><h2>Recent</h2>${(past||[]).map(row).join("") || '<p class="muted">Nothing yet.</p>'}</div>`;
+  timers.push(setInterval(() => {
+    document.querySelectorAll("[data-cd]").forEach(el => {
+      if (!el.dataset.cd) return;
+      const cd = countdown(el.dataset.cd);
+      el.textContent = cd ? "locks in " + cd : "locked";
+    });
+  }, 1000));
+}
+
+/* ---------------- pick sheet / show detail ---------------- */
+async function openShow(id){
+  clearTimers();
+  const { data: show } = await db.from("shows").select("*").eq("id", id).single();
+  currentShow = show;
+  const st = showState(show);
+  if (st === "open") renderPickSheet(show);
+  else renderShowDetail(show);
+}
+
+function slotDefs(){
+  const slots = (cfg.slots||[]).map(s => ({ key:s.key, label:s.label, pts:s.points }));
+  for (let i=1; i<=(cfg.flat_picks||0); i++) slots.push({ key:"flat"+i, label:"Pick "+i, pts:cfg.flat_points||1, flat:true });
+  return slots;
+}
+
+async function renderPickSheet(show){
+  let mine = [];
+  try{ mine = await rpc("get_my_picks", { p_name:session.name, p_pin:session.pin, p_show_id:show.id }); }catch(e){}
+  const val = k => esc((mine.find(p => p.slot===k)||{}).songname || "");
+  const slots = slotDefs();
+  const slotHtml = s => `
+    <div class="slotline autocomplete">
+      <label>${esc(s.label)}</label>
+      <input data-slot="${s.key}" value="${val(s.key)}" placeholder="song…" autocomplete="off" spellcheck="false">
+      <span class="pts">${s.pts} pt${s.pts===1?"":"s"}</span>
+    </div>`;
+  const structured = slots.filter(s=>!s.flat), flats = slots.filter(s=>s.flat);
+  $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button></p>
+    <div class="sheet">
+      <h2>${esc(show.venue||"TBA")}</h2>
+      <div class="sub">${fmtDate(show.showdate)} · ${esc(show.city||"")}${show.state?", "+esc(show.state):""}</div>
+      ${structured.map(slotHtml).join("")}
+      ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
+      <button class="savebtn" id="save">Lock 'em in</button>
+      <div class="countbig">Picks lock <b id="cd">${fmtCutoff(show.cutoff_at)}</b></div>
+      <div class="err" id="p-err" style="text-align:center"></div>
+    </div>`;
+  document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
+  $("#save").onclick = savePicks;
+  timers.push(setInterval(() => {
+    const cd = countdown(show.cutoff_at);
+    if (cd) $("#cd").textContent = cd + " from now";
+    else { toast("Picks are locked — enjoy the show 🥚"); openShow(show.id); }
+  }, 1000));
+}
+
+function attachAutocomplete(input){
+  let list = null, sel = -1;
+  const close = () => { list?.remove(); list = null; sel = -1; };
+  input.addEventListener("input", () => {
+    close();
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 1) return;
+    const hits = songList.filter(s => s.songname.toLowerCase().includes(q)).slice(0, 8);
+    if (!hits.length) return;
+    list = document.createElement("div"); list.className = "acc-list";
+    hits.forEach(h => {
+      const d = document.createElement("div");
+      d.innerHTML = `${esc(h.songname)} <small>${h.times_played ?? "–"}×</small>`;
+      d.onmousedown = e => { e.preventDefault(); input.value = h.songname; close(); };
+      list.appendChild(d);
+    });
+    input.parentElement.appendChild(list);
+  });
+  input.addEventListener("keydown", e => {
+    if (!list) return;
+    const items = [...list.children];
+    if (e.key === "ArrowDown"){ sel = Math.min(sel+1, items.length-1); }
+    else if (e.key === "ArrowUp"){ sel = Math.max(sel-1, 0); }
+    else if (e.key === "Enter"){ e.preventDefault(); if (sel>=0){ input.value = items[sel].textContent.replace(/\s*\S*×$/,"").trim(); } close(); return; }
+    else return;
+    items.forEach((it,i) => it.classList.toggle("sel", i===sel));
+  });
+  input.addEventListener("blur", () => setTimeout(close, 150));
+}
+
+async function savePicks(){
+  $("#p-err").textContent = "";
+  const picks = [...document.querySelectorAll(".slotline input")]
+    .map(i => ({ slot: i.dataset.slot, songname: i.value.trim() }))
+    .filter(p => p.songname);
+  // warn on unknown songs (typos) but allow — could be a debut call
+  const unknown = picks.filter(p => !songList.some(s => s.songname.toLowerCase() === p.songname.toLowerCase()));
+  if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):\n${unknown.map(u=>u.songname).join("\n")}\n\nSave anyway?`)) return;
+  try{
+    await rpc("submit_picks", { p_name:session.name, p_pin:session.pin, p_show_id:currentShow.id, p_picks:picks });
+    toast("Picks saved ✔", "score");
+  }catch(e){ $("#p-err").textContent = e.message; }
+}
+
+async function renderShowDetail(show){
+  clearTimers();
+  const [{ data: setlist }, picks, { data: scores }, { data: plist }] = await Promise.all([
+    db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
+    rpc("get_show_picks", { p_show_id: show.id }).catch(() => []),
+    db.from("scores").select("*").eq("show_id", show.id).order("points",{ascending:false}),
+    db.from("players_public").select("id,name"),
+  ]);
+  const pname = Object.fromEntries((plist||[]).map(p => [p.id, p.name]));
+  const mineHits = new Set((picks||[]).filter(p => p.player_id === session.id).map(p => p.songname.toLowerCase()));
+  const setHtml = (setlist||[]).map(s => `
+    <div class="songrow ${mineHits.has(s.songname.toLowerCase()) ? "hitmine" : ""}">
+      <span class="pos">${s.is_encore ? "E" : "S"+esc(s.setnumber)}·${s.position}</span>
+      <span class="name">${esc(s.songname)}</span>
+    </div>`).join("");
+  const scoreHtml = (scores||[]).map(sc => `
+    <div class="panel" style="padding:12px">
+      <div class="row"><b>${esc(pname[sc.player_id] || "?")}</b>
+        <span class="pts" style="margin-left:auto;font-family:var(--mono);color:var(--yolk)">${sc.points} pts</span></div>
+      ${(sc.breakdown||[]).map(b => `
+        <div class="pickres ${b.points>0?"hit":b.hit?"":"miss"}">
+          <span class="sl">${esc(b.slot)}</span><span>${esc(b.songname)}</span>
+          <span class="pt">${b.points>0?"+"+b.points:"·"} <small class="muted">${esc(b.reason)}</small></span>
+        </div>`).join("")}
+    </div>`).join("");
+  $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button>
+      <span class="pill ${showState(show)==='live'?'live':'final'}">${showState(show)}</span></p>
+    <div class="panel"><h2>${esc(show.venue||"")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
+      ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>
+    <h2 style="margin:18px 4px 4px">Scores</h2>
+    ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet.</p>'}`;
+}
+
+/* ---------------- leaderboard ---------------- */
+async function renderBoard(){
+  clearTimers(); tab = "board"; markTab();
+  const [{ data }, { data: plist }] = await Promise.all([
+    db.from("scores").select("points, player_id"),
+    db.from("players_public").select("id,name"),
+  ]);
+  const pname = Object.fromEntries((plist||[]).map(p => [p.id, p.name]));
+  const totals = {};
+  (data||[]).forEach(s => {
+    const k = s.player_id;
+    totals[k] ??= { name: pname[k] || "?", pts: 0, shows: 0 };
+    totals[k].pts += s.points; totals[k].shows++;
+  });
+  const rows = Object.entries(totals).sort((a,b) => b[1].pts - a[1].pts);
+  $("#main").innerHTML = `
+    <div class="panel"><h2>Tour standings</h2>
+    <table class="lb"><tr><th></th><th>Player</th><th>Shows</th><th style="text-align:right">Pts</th></tr>
+    ${rows.map(([id,r],i) => `<tr class="${id===session.id?"me":""}">
+      <td class="rank">${i+1}</td><td>${esc(r.name)}</td><td class="muted">${r.shows}</td><td class="pts">${r.pts}</td></tr>`).join("")
+      || '<tr><td colspan="4" class="muted">No scores yet — pick some songs.</td></tr>'}
+    </table></div>`;
+}
+
+/* ---------------- admin ---------------- */
+async function renderAdmin(){
+  clearTimers(); tab = "admin"; markTab();
+  await loadConfig();
+  const b = cfg.bonuses || {};
+  const slotRows = (cfg.slots||[]).map((s,i) => adminSlotRow(s,i)).join("");
+  const { data: shows } = await db.from("shows").select("*").gte("showdate", new Date(Date.now()-864e5).toISOString().slice(0,10)).order("showdate");
+  $("#main").innerHTML = `
+    <div class="panel"><h2>Game rules</h2>
+      <p class="muted">Slotted picks (position matters):</p>
+      <div id="slots">${slotRows}</div>
+      <button class="btn ghost small" onclick="addSlot()">+ add slot</button>
+      <div class="grid2" style="margin-top:14px">
+        <div class="field"><label>Flat picks (count)</label><input id="c-flat" type="number" min="0" value="${cfg.flat_picks}"></div>
+        <div class="field"><label>Points per flat pick</label><input id="c-flatpts" type="number" min="0" value="${cfg.flat_points}"></div>
+        <div class="field"><label>Partial credit (slot song played elsewhere)</label>
+          <select id="c-partial"><option value="true" ${cfg.partial_credit?"selected":""}>On</option><option value="false" ${!cfg.partial_credit?"selected":""}>Off</option></select></div>
+        <div class="field"><label>Partial points</label><input id="c-partpts" type="number" min="0" value="${cfg.partial_points}"></div>
+        <div class="field"><label>Bonus: cover</label><input id="c-bcover" type="number" min="0" value="${b.cover||0}"></div>
+        <div class="field"><label>Bonus: debut</label><input id="c-bdebut" type="number" min="0" value="${b.debut||0}"></div>
+        <div class="field"><label>Allow duplicate songs across picks</label>
+          <select id="c-dupes"><option value="false" ${!cfg.allow_duplicates?"selected":""}>No</option><option value="true" ${cfg.allow_duplicates?"selected":""}>Yes</option></select></div>
+      </div>
+      <button class="btn" onclick="saveConfig()">Save rules</button>
+      <div class="err" id="cfg-err"></div>
+      <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments.</p>
+    </div>
+    <div class="panel"><h2>Shows & cutoffs</h2>
+      ${(shows||[]).map(s => `<div class="showrow">
+        <div class="date">${fmtDate(s.showdate)}</div>
+        <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
+          <div class="loc"><input type="datetime-local" data-show="${s.id}" value="${s.cutoff_at ? new Date(new Date(s.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16) : ""}" style="background:var(--pit);border:1px solid #3A3170;color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.8rem"></div></div>
+        <button onclick="saveCutoff(${s.id}, this)">Set</button>
+      </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
+    </div>
+    <div class="panel"><h2>Data</h2>
+      <div class="row">
+        <button class="btn ghost small" onclick="runEdge('sync_shows', this)">Sync shows</button>
+        <button class="btn ghost small" onclick="runEdge('sync_songs', this)">Sync song catalog</button>
+        <button class="btn ghost small" onclick="runEdge('score', this)">Run scoring now</button>
+      </div>
+      <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
+    </div>`;
+}
+function adminSlotRow(s, i){
+  return `<div class="admin-slot" data-i="${i}">
+    <input class="k" placeholder="key" value="${esc(s.key)}" title="key (used in scoring)">
+    <input class="k" placeholder="Label" value="${esc(s.label)}">
+    <input class="p" type="number" min="0" value="${s.points}">
+    <button class="btn ghost small" onclick="this.parentElement.remove()">✕</button></div>`;
+}
+function addSlot(){ $("#slots").insertAdjacentHTML("beforeend", adminSlotRow({key:"",label:"",points:2}, 99)); }
+async function saveConfig(){
+  $("#cfg-err").textContent = "";
+  const slots = [...document.querySelectorAll(".admin-slot")].map(r => {
+    const [k, l, p] = r.querySelectorAll("input");
+    return { key: k.value.trim().toLowerCase(), label: l.value.trim(), points: Number(p.value) };
+  }).filter(s => s.key && s.label);
+  const data = {
+    slots,
+    flat_picks: Number($("#c-flat").value), flat_points: Number($("#c-flatpts").value),
+    partial_credit: $("#c-partial").value === "true", partial_points: Number($("#c-partpts").value),
+    allow_duplicates: $("#c-dupes").value === "true",
+    bonuses: { cover: Number($("#c-bcover").value), debut: Number($("#c-bdebut").value), jamchart: 0 },
+  };
+  try{
+    await rpc("admin_update_config", { p_name:session.name, p_pin:session.pin, p_data:data });
+    cfg = data; toast("Rules saved ✔", "score");
+  }catch(e){ $("#cfg-err").textContent = e.message; }
+}
+async function saveCutoff(showId, btn){
+  const input = document.querySelector(`input[data-show="${showId}"]`);
+  if (!input.value) return;
+  try{
+    await rpc("admin_set_cutoff", { p_name:session.name, p_pin:session.pin, p_show_id:showId, p_cutoff:new Date(input.value).toISOString() });
+    btn.textContent = "✔"; setTimeout(() => btn.textContent = "Set", 1500);
+  }catch(e){ toast(e.message); }
+}
+async function runEdge(action, btn){
+  btn.disabled = true; const old = btn.textContent; btn.textContent = "…";
+  try{ const r = await edgeFn(action); toast(JSON.stringify(r).slice(0,120), "score"); if(action==="sync_songs") loadSongs(); }
+  catch(e){ toast(e.message); }
+  btn.disabled = false; btn.textContent = old;
+}
+
+/* ---------------- realtime ---------------- */
+function subscribeRealtime(){
+  db.channel("live")
+    .on("postgres_changes", { event:"INSERT", schema:"public", table:"setlist_songs" }, p => {
+      const s = p.new;
+      toast(`🎵 ${s.songname}${s.is_encore ? " (encore)" : ""}`);
+      if (currentShow && tab !== "admin" && s.show_id === currentShow.id) openShow(currentShow.id);
+    })
+    .on("postgres_changes", { event:"*", schema:"public", table:"scores" }, p => {
+      if (p.new?.player_id === session?.id){
+        toast(`You're at ${p.new.points} pts for this show`, "score");
+      }
+      if (tab === "board") renderBoard();
+    })
+    .subscribe();
+}
+
+/* ---------------- tabs ---------------- */
+function markTab(){
+  document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+}
+document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
+  ({ shows: renderShows, board: renderBoard, admin: renderAdmin })[b.dataset.tab]();
+});
+
+boot();
+</script>
+</body>
+</html>
