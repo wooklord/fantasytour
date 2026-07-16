@@ -248,11 +248,15 @@ async function authFlow(fn){
 /* ---------------- shows list ---------------- */
 async function renderShows(){
   clearTimers(); tab = "shows"; markTab();
-  const today = new Date(Date.now() - 2*864e5).toISOString().slice(0,10);
+  const todayStr = new Date().toLocaleDateString('sv');
+  const graceStr = new Date(Date.now() - 2*864e5).toISOString().slice(0,10);
   const [{ data: up }, { data: past }] = await Promise.all([
-    db.from("shows").select("*").gte("showdate", today).order("showdate"),
-    db.from("shows").select("*").lt("showdate", today).order("showdate",{ascending:false}).limit(12),
+    db.from("shows").select("*").gte("showdate", graceStr).order("showdate"),
+    db.from("shows").select("*").lt("showdate", graceStr).order("showdate",{ascending:false}).limit(12),
   ]);
+  const isRecent = s => s.showdate < todayStr || s.status === "final";
+  const upcoming = (up||[]).filter(s => !isRecent(s));
+  const justPlayed = (up||[]).filter(isRecent);
   const row = s => {
     const st = showState(s);
     const cls = { open:"open", live:"live", locked:"locked", final:"final" }[st] || "";
@@ -266,7 +270,8 @@ async function renderShows(){
     </div>`;
   };
   $("#main").innerHTML = `
-    <div class="panel"><h2>Upcoming</h2>${(up||[]).map(row).join("") || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
+    ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(row).join("")}</div>` : ""}
+    <div class="panel"><h2>Upcoming</h2>${upcoming.map(row).join("") || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${(past||[]).map(row).join("") || '<p class="muted">Nothing yet.</p>'}</div>`;
   timers.push(setInterval(() => {
     document.querySelectorAll("[data-cd]").forEach(el => {
