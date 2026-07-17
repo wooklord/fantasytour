@@ -201,6 +201,8 @@ function showState(s){
   if (s.status === "final") return "final";
   if (!s.cutoff_at) return "no cutoff";
   if (new Date(s.cutoff_at) > new Date()) return "open";
+  const twoDaysAgo = new Date(Date.now() - 2*864e5).toLocaleDateString('sv');
+  if (s.showdate < twoDaysAgo) return "played";
   return s.status === "live" ? "live" : "locked";
 }
 
@@ -283,7 +285,7 @@ async function renderShows(){
   }
   const row = s => {
     const st = showState(s);
-    const cls = { open:"open", live:"live", locked:"locked", final:"final" }[st] || "";
+    const cls = { open:"open", live:"live", locked:"locked", final:"final", played:"final" }[st] || "";
     const cd = st === "open" ? countdown(s.cutoff_at) : null;
     const txt = st === "final" ? "complete" : (st === "open" && cd ? "locks in " + cd : st);
     const win = st === "final" && winners[s.id]
