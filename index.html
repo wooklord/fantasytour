@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -113,9 +114,9 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .btn.small{padding:7px 12px;font-size:.8rem}
 .btn:disabled{opacity:.5}
 .err{color:var(--coral);font-size:.85rem;margin-top:8px;min-height:1.2em}
-.admin-slot{display:flex;gap:8px;margin:6px 0}
-.admin-slot input{background:var(--pit);border:1px solid #3A3170;border-radius:8px;color:var(--cream);padding:8px 10px}
-.admin-slot input.k{flex:2}.admin-slot input.p{width:70px;font-family:var(--mono)}
+.admin-slot{display:flex;gap:8px;margin:6px 0;flex-wrap:wrap}
+.admin-slot input,.admin-slot select{background:var(--pit);border:1px solid #3A3170;border-radius:8px;color:var(--cream);padding:8px 10px;font-size:.85rem}
+.admin-slot select.k,.admin-slot input.k{flex:1 1 130px;min-width:0}.admin-slot input.p{width:64px;font-family:var(--mono)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
 /* ---------- toasts ---------- */
@@ -163,10 +164,15 @@ let session = JSON.parse(localStorage.getItem("ft_session") || "null");
 let tab = "shows", currentShow = null, songList = [], cfg = null, timers = [];
 
 /* ---------------- utilities ---------------- */
-function toast(msg, cls=""){
+const seenToasts = new Set();
+function toast(msg, cls="", key=null){
+  if (key){ if (seenToasts.has(key)) return; seenToasts.add(key); }
+  const box = $("#toasts");
+  while (box.children.length >= 4) box.firstChild.remove();
   const t = document.createElement("div");
   t.className = "toast " + cls; t.textContent = msg;
-  $("#toasts").appendChild(t);
+  t.onclick = () => t.remove();
+  box.appendChild(t);
   setTimeout(() => t.remove(), 6000);
 }
 function fmtDate(d){ return new Date(d + "T12:00:00").toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}); }
@@ -262,15 +268,31 @@ async function renderShows(){
   const isRecent = s => s.showdate < todayStr || s.status === "final";
   const upcoming = (up||[]).filter(s => !isRecent(s));
   const justPlayed = (up||[]).filter(isRecent);
+  const finals = [...(up||[]), ...(past||[])].filter(s => s.status === "final").map(s => s.id);
+  const winners = {};
+  if (finals.length){
+    const [{ data: sc }, { data: pl }] = await Promise.all([
+      db.from("scores").select("show_id,player_id,points").in("show_id", finals),
+      db.from("players_public").select("id,name"),
+    ]);
+    const pn = Object.fromEntries((pl||[]).map(p => [p.id, p.name]));
+    for (const s of sc||[]){
+      if (!winners[s.show_id] || s.points > winners[s.show_id].points)
+        winners[s.show_id] = { points: s.points, name: pn[s.player_id] || "?" };
+    }
+  }
   const row = s => {
     const st = showState(s);
     const cls = { open:"open", live:"live", locked:"locked", final:"final" }[st] || "";
     const cd = st === "open" ? countdown(s.cutoff_at) : null;
+    const txt = st === "final" ? "complete" : (st === "open" && cd ? "locks in " + cd : st);
+    const win = st === "final" && winners[s.id]
+      ? ` <span style="color:var(--yolk);font-size:.82rem">👑 ${esc(winners[s.id].name)} · ${winners[s.id].points}</span>` : "";
     return `<div class="showrow">
       <div class="date">${fmtDate(s.showdate)}</div>
       <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
         <div class="loc">${esc(s.city||"")}${s.state?", "+esc(s.state):""}
-          <span class="pill ${cls}" data-cd="${st==='open'?s.cutoff_at:''}">${st==='open'&&cd ? "locks in "+cd : st}</span></div></div>
+          <span class="pill ${cls}" data-cd="${st==='open'?s.cutoff_at:''}">${txt}</span>${win}</div></div>
       <button onclick="openShow(${s.id})">${st==='open'?'Pick':'View'}</button>
     </div>`;
   };
@@ -406,7 +428,10 @@ async function renderShowDetail(show){
     </div>`).join("");
   $("#main").innerHTML = `
     <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button>
-      <span class="pill ${showState(show)==='live'?'live':'final'}">${showState(show)}</span></p>
+      <span class="pill ${showState(show)==='live'?'live':'final'}">${showState(show)==='final'?'complete':showState(show)}</span></p>
+    ${show.status==='final' && (scores||[]).length ? `<div class="panel" style="border-color:var(--yolk)">
+      <h2>👑 ${esc(pname[scores[0].player_id]||"?")} takes it</h2>
+      <p class="muted">${scores[0].points} points</p></div>` : ""}
     <div class="panel"><h2>${esc(show.venue||"")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>
     <h2 style="margin:18px 4px 4px">Scores</h2>
@@ -470,6 +495,7 @@ async function renderAdmin(){
         <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
           <div class="loc"><input type="datetime-local" data-show="${s.id}" value="${s.cutoff_at ? new Date(new Date(s.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16) : ""}" style="background:var(--pit);border:1px solid #3A3170;color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.8rem"></div></div>
         <button onclick="saveCutoff(${s.id}, this)">Set</button>
+        ${s.status!=='final' && s.cutoff_at && new Date(s.cutoff_at) < new Date() ? '<button onclick="finalizeShow('+s.id+', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ''}
       </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
     </div>
     <div class="panel"><h2>Who's picked</h2>
@@ -505,20 +531,35 @@ async function loadRoster(){
       </div>`).join("")}`;
   }catch(e){ $("#roster").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
+const SLOT_TYPES = {
+  opener: "Opener — first song of the show",
+  set1_closer: "Set 1 closer",
+  set2_opener: "Set 2 opener",
+  closer: "Closer — last pre-encore song",
+  encore: "Encore — any encore song",
+  show_closer: "Show closer — final song of the night",
+};
 function adminSlotRow(s, i){
+  const opts = Object.entries(SLOT_TYPES).map(([k,d]) =>
+    `<option value="${k}" ${k===s.key?"selected":""}>${d}</option>`).join("");
   return `<div class="admin-slot" data-i="${i}">
-    <input class="k" placeholder="key" value="${esc(s.key)}" title="key (used in scoring)">
-    <input class="k" placeholder="Label" value="${esc(s.label)}">
+    <select class="k" title="which position this slot scores against">${opts}</select>
+    <input class="k" placeholder="Label players see" value="${esc(s.label)}">
     <input class="p" type="number" min="0" value="${s.points}">
     <button class="btn ghost small" onclick="this.parentElement.remove()">✕</button></div>`;
 }
-function addSlot(){ $("#slots").insertAdjacentHTML("beforeend", adminSlotRow({key:"",label:"",points:2}, 99)); }
+function addSlot(){ $("#slots").insertAdjacentHTML("beforeend", adminSlotRow({key:"encore",label:"",points:2}, 99)); }
 async function saveConfig(){
   $("#cfg-err").textContent = "";
   const slots = [...document.querySelectorAll(".admin-slot")].map(r => {
-    const [k, l, p] = r.querySelectorAll("input");
-    return { key: k.value.trim().toLowerCase(), label: l.value.trim(), points: Number(p.value) };
+    const k = r.querySelector("select.k").value;
+    const [l, p] = r.querySelectorAll("input");
+    return { key: k, label: l.value.trim(), points: Number(p.value) };
   }).filter(s => s.key && s.label);
+  const keys = slots.map(s => s.key);
+  if (new Set(keys).size !== keys.length){
+    $("#cfg-err").textContent = "Each slot type can only be used once."; return;
+  }
   const data = {
     slots,
     flat_picks: Number($("#c-flat").value), flat_points: Number($("#c-flatpts").value),
@@ -539,6 +580,16 @@ async function saveCutoff(showId, btn){
     btn.textContent = "✔"; setTimeout(() => btn.textContent = "Set", 1500);
   }catch(e){ toast(e.message); }
 }
+async function finalizeShow(showId, btn){
+  if (!confirm("Run final scoring and mark this show complete? Picks and scores lock for good.")) return;
+  btn.disabled = true; btn.textContent = "…";
+  try{
+    await edgeFn("score").catch(() => {});
+    await rpc("admin_set_show_status", { p_name:session.name, p_pin:session.pin, p_show_id:showId, p_status:"final" });
+    toast("Show finalized 🏁", "score");
+    renderAdmin();
+  }catch(e){ toast(e.message); btn.disabled = false; btn.textContent = "Finalize"; }
+}
 async function runEdge(action, btn){
   btn.disabled = true; const old = btn.textContent; btn.textContent = "…";
   try{ const r = await edgeFn(action); toast(JSON.stringify(r).slice(0,120), "score"); if(action==="sync_songs") loadSongs(); }
@@ -547,15 +598,17 @@ async function runEdge(action, btn){
 }
 
 /* ---------------- realtime ---------------- */
+const myLastPts = {};
 function subscribeRealtime(){
   db.channel("live")
     .on("postgres_changes", { event:"INSERT", schema:"public", table:"setlist_songs" }, p => {
       const s = p.new;
-      toast(`🎵 ${s.songname}${s.is_encore ? " (encore)" : ""}`);
+      toast(`🎵 ${s.songname}${s.is_encore ? " (encore)" : ""}`, "", `song:${s.show_id}:${(s.songname||"").toLowerCase()}`);
       if (currentShow && tab !== "admin" && s.show_id === currentShow.id) openShow(currentShow.id);
     })
     .on("postgres_changes", { event:"*", schema:"public", table:"scores" }, p => {
-      if (p.new?.player_id === session?.id){
+      if (p.new?.player_id === session?.id && myLastPts[p.new.show_id] !== p.new.points){
+        myLastPts[p.new.show_id] = p.new.points;
         toast(`You're at ${p.new.points} pts for this show`, "score");
       }
       if (tab === "board") renderBoard();
