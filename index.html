@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Fantasy Tour — Eggy</title>
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#171233">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,400..900,0..100,0..1&family=Outfit:wght@300..800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -145,8 +150,8 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 
 <script>
 /* =================== CONFIG — EDIT THESE =================== */
-const SUPABASE_URL  = "https://zdfhglvjxquvkjyvophz.supabase.co";
-const SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
+const SUPABASE_URL  = "https://YOUR-PROJECT-REF.supabase.co";
+const SUPABASE_ANON = "YOUR-ANON-PUBLIC-KEY";
 /* =========================================================== */
 
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -247,7 +252,7 @@ async function authFlow(fn){
 
 /* ---------------- shows list ---------------- */
 async function renderShows(){
-  clearTimers(); tab = "shows"; markTab();
+  clearTimers(); tab = "shows"; currentShow = null; markTab();
   const todayStr = new Date().toLocaleDateString('sv');
   const graceStr = new Date(Date.now() - 2*864e5).toISOString().slice(0,10);
   const [{ data: up }, { data: past }] = await Promise.all([
@@ -467,6 +472,13 @@ async function renderAdmin(){
         <button onclick="saveCutoff(${s.id}, this)">Set</button>
       </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
     </div>
+    <div class="panel"><h2>Who's picked</h2>
+      <div class="field"><label>Show</label>
+        <select id="roster-show" onchange="loadRoster()">
+          ${(shows||[]).map(s => `<option value="${s.id}">${fmtDate(s.showdate)} — ${esc(s.venue||"TBA")}</option>`).join("")}
+        </select></div>
+      <div id="roster"><p class="muted">Pick a show.</p></div>
+    </div>
     <div class="panel"><h2>Data</h2>
       <div class="row">
         <button class="btn ghost small" onclick="runEdge('sync_shows', this)">Sync shows</button>
@@ -475,6 +487,23 @@ async function renderAdmin(){
       </div>
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
     </div>`;
+  if ((shows||[]).length) loadRoster();
+}
+async function loadRoster(){
+  const showId = Number($("#roster-show").value);
+  if (!showId) return;
+  try{
+    const rows = await rpc("admin_pick_status", { p_name:session.name, p_pin:session.pin, p_show_id:showId });
+    const total = rows.length, done = rows.filter(r => r.picks_count > 0).length;
+    $("#roster").innerHTML = `
+      <p class="muted" style="margin-bottom:6px"><b style="color:var(--mint)">${done}</b> of ${total} players have picks in</p>
+      ${rows.map(r => `<div class="pickres ${r.picks_count>0?"hit":"miss"}">
+        <span>${r.picks_count>0?"✔":"—"}</span><span>${esc(r.player_name)}</span>
+        <span class="pt">${r.picks_count>0
+          ? r.picks_count+" picks · saved "+new Date(r.last_saved).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+          : "no picks yet"}</span>
+      </div>`).join("")}`;
+  }catch(e){ $("#roster").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
 function adminSlotRow(s, i){
   return `<div class="admin-slot" data-i="${i}">
@@ -532,6 +561,15 @@ function subscribeRealtime(){
       if (tab === "board") renderBoard();
     })
     .subscribe();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && session) refreshCurrent();
+  });
+}
+function refreshCurrent(){
+  if (tab === "board") renderBoard();
+  else if (tab === "admin") renderAdmin();
+  else if (currentShow) openShow(currentShow.id);
+  else renderShows();
 }
 
 /* ---------------- tabs ---------------- */
