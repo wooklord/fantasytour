@@ -1,0 +1,29 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <path id="egg" d="M50,9 C69,9 81,34 81,57 C81,79 67,91 50,91 C33,91 19,79 19,57 C19,34 31,9 50,9 Z"/>
+    <clipPath id="eggclip"><use href="#egg"/></clipPath>
+    <radialGradient id="bgIndigo" cx="50%" cy="28%" r="90%">
+      <stop offset="0%" stop-color="#2E2566"/><stop offset="100%" stop-color="#171233"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFE08A"/><stop offset="45%" stop-color="#FFC53D"/><stop offset="100%" stop-color="#D89A16"/>
+    </linearGradient>
+    <linearGradient id="royal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4A3E96"/><stop offset="100%" stop-color="#2A2058"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#bgIndigo)"/>
+  <ellipse cx="50" cy="92" rx="16" ry="4" fill="url(#gold)"/>
+  <path d="M42,92 L46,84 L54,84 L58,92 Z" fill="url(#gold)"/>
+  <use href="#egg" transform="translate(0,-4)" fill="url(#royal)" stroke="url(#gold)" stroke-width="2.5"/>
+  <g clip-path="url(#eggclip)" transform="translate(0,-4)">
+    <path d="M50,9 C57,30 57,70 50,91" stroke="url(#gold)" stroke-width="2" fill="none"/>
+    <path d="M50,9 C40,30 40,70 50,91" stroke="url(#gold)" stroke-width="2" fill="none"/>
+    <path d="M50,9 C68,28 70,68 50,91" stroke="url(#gold)" stroke-width="1.4" fill="none" opacity=".8"/>
+    <path d="M50,9 C32,28 30,68 50,91" stroke="url(#gold)" stroke-width="1.4" fill="none" opacity=".8"/>
+    <path d="M20,50 Q50,40 80,50" stroke="url(#gold)" stroke-width="2.4" fill="none"/>
+    <path d="M20,60 Q50,50 80,60" stroke="url(#gold)" stroke-width="1.4" fill="none" opacity=".7"/>
+  </g>
+  <circle cx="50" cy="42" r="4.5" fill="#FFC53D"/><circle cx="50" cy="42" r="2" fill="#FFF3DC"/>
+  <circle cx="36" cy="52" r="2" fill="#FFE08A"/><circle cx="64" cy="52" r="2" fill="#FFE08A"/>
+</svg>
