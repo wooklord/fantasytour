@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Fantasy Tour — Eggy</title>
+<title>Fantasy Eggy</title>
 <link rel="icon" href="favicon.ico" sizes="48x48">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -136,7 +136,7 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 <body>
 
 <header><div class="bar">
-  <div class="logo">Fantasy Tour <span>egg division</span></div>
+  <div class="logo">Fantasy Eggy</div>
   <div class="who" id="whoami"></div>
 </div></header>
 
@@ -176,7 +176,7 @@ function toast(msg, cls="", key=null){
   setTimeout(() => t.remove(), 6000);
 }
 function fmtDate(d){ return new Date(d + "T12:00:00").toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}); }
-function fmtCutoff(ts){ return new Date(ts).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }
+function fmtCutoff(ts){ return new Date(ts).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}); }
 function countdown(ts){
   const ms = new Date(ts) - Date.now();
   if (ms <= 0) return null;
@@ -347,14 +347,14 @@ async function renderPickSheet(show){
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
       <button class="savebtn" id="save">Lock 'em in</button>
-      <div class="countbig">Picks lock <b id="cd">${fmtCutoff(show.cutoff_at)}</b></div>
+      <div class="countbig">Locks ${fmtCutoff(show.cutoff_at)} · <b id="cd"></b></div>
       <div class="err" id="p-err" style="text-align:center"></div>
     </div>`;
   document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
   $("#save").onclick = savePicks;
   timers.push(setInterval(() => {
     const cd = countdown(show.cutoff_at);
-    if (cd) $("#cd").textContent = cd + " from now";
+    if (cd) $("#cd").textContent = cd + " left";
     else { toast("Picks are locked — enjoy the show 🥚"); openShow(show.id); }
   }, 1000));
 }
@@ -470,7 +470,7 @@ async function renderAdmin(){
   await loadConfig();
   const b = cfg.bonuses || {};
   const slotRows = (cfg.slots||[]).map((s,i) => adminSlotRow(s,i)).join("");
-  const { data: shows } = await db.from("shows").select("*").gte("showdate", new Date(Date.now()-864e5).toISOString().slice(0,10)).order("showdate");
+  const { data: shows } = await db.from("shows").select("*").gte("showdate", new Date(Date.now()-7*864e5).toISOString().slice(0,10)).order("showdate");
   $("#main").innerHTML = `
     <div class="panel"><h2>Game rules</h2>
       <p class="muted">Slotted picks (position matters):</p>
@@ -492,6 +492,7 @@ async function renderAdmin(){
       <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments.</p>
     </div>
     <div class="panel"><h2>Shows & cutoffs</h2>
+      <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
       ${(shows||[]).map(s => `<div class="showrow">
         <div class="date">${fmtDate(s.showdate)}</div>
         <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
