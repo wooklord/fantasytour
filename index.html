@@ -10,6 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#171233">
+<meta name="color-scheme" content="dark light">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,400..900,0..100,0..1&family=Outfit:wght@300..800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -21,6 +22,7 @@
   --line:#2E2660; --line2:#3A3170; --dash:#322A63;
   --chrome:rgba(16,12,38,.88);
   --glow1:#2A2058; --glow2:rgba(255,107,94,.10);
+  color-scheme:dark;
   --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
 }
 html[data-theme="light"]{
@@ -30,6 +32,7 @@ html[data-theme="light"]{
   --line:#DDD0B2; --line2:#CBBC98; --dash:#D8CAA8;
   --chrome:rgba(244,236,217,.9);
   --glow1:#FFF7E2; --glow2:rgba(201,138,18,.08);
+  color-scheme:light;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:var(--pit)}
@@ -107,6 +110,7 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 
 /* ---------- setlist + results ---------- */
 .songrow{display:flex;gap:10px;padding:7px 2px;border-bottom:1px dashed var(--dash);align-items:baseline}
+.setbreak{font-family:var(--mono);font-size:.68rem;letter-spacing:2px;text-transform:uppercase;color:var(--yolk);border-bottom:1px solid var(--line);padding:12px 2px 4px;margin-top:4px}
 .songrow .pos{font-family:var(--mono);font-size:.72rem;color:var(--cream-dim);min-width:44px}
 .songrow.hitmine{background:linear-gradient(90deg,rgba(255,197,61,.14),transparent);border-radius:6px}
 .songrow.hitmine .name{color:var(--yolk);font-weight:700}
@@ -147,7 +151,7 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 <body>
 
 <header><div class="bar">
-  <div class="logo"><svg viewBox="0 0 100 100" style="width:28px;height:28px;flex:none"><path d="M0,0 C4.0,-4.3 10.5,-4.3 13.5,0 C10.5,4.3 4.0,4.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(53.9,82.8) rotate(-33)"/><path d="M0,0 C3.8,-4.1 9.9,-4.1 12.7,0 C9.9,4.1 3.8,4.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(53.9,82.8) rotate(19)"/><path d="M0,0 C3.8,-4.1 10.0,-4.1 12.8,0 C10.0,4.1 3.8,4.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(64.5,79.5) rotate(-53)"/><path d="M0,0 C3.6,-3.9 9.4,-3.9 12.1,0 C9.4,3.9 3.6,3.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(64.5,79.5) rotate(-1)"/><path d="M0,0 C3.6,-3.9 9.5,-3.9 12.2,0 C9.5,3.9 3.6,3.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(73.4,72.8) rotate(-73)"/><path d="M0,0 C3.4,-3.7 8.9,-3.7 11.4,0 C8.9,3.7 3.4,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(73.4,72.8) rotate(-21)"/><path d="M0,0 C3.4,-3.7 9.0,-3.7 11.5,0 C9.0,3.7 3.4,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(79.5,63.5) rotate(-93)"/><path d="M0,0 C3.2,-3.5 8.4,-3.5 10.8,0 C8.4,3.5 3.2,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(79.5,63.5) rotate(-41)"/><path d="M0,0 C3.2,-3.5 8.4,-3.5 10.8,0 C8.4,3.5 3.2,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(82.0,52.7) rotate(-113)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.2,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(82.0,52.7) rotate(-61)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.1,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(80.6,41.6) rotate(-133)"/><path d="M0,0 C2.9,-3.0 7.4,-3.0 9.5,0 C7.4,3.0 2.9,3.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(80.6,41.6) rotate(-81)"/><path d="M0,0 C2.8,-3.0 7.4,-3.0 9.4,0 C7.4,3.0 2.8,3.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(75.6,31.7) rotate(-153)"/><path d="M0,0 C2.7,-2.8 6.9,-2.8 8.9,0 C6.9,2.8 2.7,2.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(75.6,31.7) rotate(-101)"/><path d="M0,0 C2.6,-2.8 6.8,-2.8 8.8,0 C6.8,2.8 2.6,2.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(67.4,24.2) rotate(-173)"/><path d="M0,0 C2.5,-2.6 6.4,-2.6 8.2,0 C6.4,2.6 2.5,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(67.4,24.2) rotate(-121)"/><path d="M0,0 C4.0,-4.3 10.5,-4.3 13.5,0 C10.5,4.3 4.0,4.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(46.1,82.8) rotate(213)"/><path d="M0,0 C3.8,-4.1 9.9,-4.1 12.7,0 C9.9,4.1 3.8,4.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(46.1,82.8) rotate(161)"/><path d="M0,0 C3.8,-4.1 10.0,-4.1 12.8,0 C10.0,4.1 3.8,4.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(35.5,79.5) rotate(233)"/><path d="M0,0 C3.6,-3.9 9.4,-3.9 12.1,0 C9.4,3.9 3.6,3.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(35.5,79.5) rotate(181)"/><path d="M0,0 C3.6,-3.9 9.5,-3.9 12.2,0 C9.5,3.9 3.6,3.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(26.6,72.8) rotate(253)"/><path d="M0,0 C3.4,-3.7 8.9,-3.7 11.4,0 C8.9,3.7 3.4,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(26.6,72.8) rotate(201)"/><path d="M0,0 C3.4,-3.7 9.0,-3.7 11.5,0 C9.0,3.7 3.4,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(20.5,63.5) rotate(273)"/><path d="M0,0 C3.2,-3.5 8.4,-3.5 10.8,0 C8.4,3.5 3.2,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(20.5,63.5) rotate(221)"/><path d="M0,0 C3.2,-3.5 8.4,-3.5 10.8,0 C8.4,3.5 3.2,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(18.0,52.7) rotate(293)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.2,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(18.0,52.7) rotate(241)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.1,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(19.4,41.6) rotate(313)"/><path d="M0,0 C2.9,-3.0 7.4,-3.0 9.5,0 C7.4,3.0 2.9,3.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(19.4,41.6) rotate(261)"/><path d="M0,0 C2.8,-3.0 7.4,-3.0 9.4,0 C7.4,3.0 2.8,3.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(24.4,31.7) rotate(333)"/><path d="M0,0 C2.7,-2.8 6.9,-2.8 8.9,0 C6.9,2.8 2.7,2.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(24.4,31.7) rotate(281)"/><path d="M0,0 C2.6,-2.8 6.8,-2.8 8.8,0 C6.8,2.8 2.6,2.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(32.6,24.2) rotate(353)"/><path d="M0,0 C2.5,-2.6 6.4,-2.6 8.2,0 C6.4,2.6 2.5,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(32.6,24.2) rotate(301)"/></svg>Fantasy Eggy</div>
+  <div class="logo"><svg viewBox="0 0 100 100" style="width:40px;height:40px;flex:none"><path d="M0,0 C4.0,-4.3 10.5,-4.3 13.5,0 C10.5,4.3 4.0,4.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(53.9,82.8) rotate(-33)"/><path d="M0,0 C3.8,-4.1 9.9,-4.1 12.7,0 C9.9,4.1 3.8,4.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(53.9,82.8) rotate(19)"/><path d="M0,0 C3.8,-4.1 10.0,-4.1 12.8,0 C10.0,4.1 3.8,4.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(64.5,79.5) rotate(-53)"/><path d="M0,0 C3.6,-3.9 9.4,-3.9 12.1,0 C9.4,3.9 3.6,3.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(64.5,79.5) rotate(-1)"/><path d="M0,0 C3.6,-3.9 9.5,-3.9 12.2,0 C9.5,3.9 3.6,3.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(73.4,72.8) rotate(-73)"/><path d="M0,0 C3.4,-3.7 8.9,-3.7 11.4,0 C8.9,3.7 3.4,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(73.4,72.8) rotate(-21)"/><path d="M0,0 C3.4,-3.7 9.0,-3.7 11.5,0 C9.0,3.7 3.4,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(79.5,63.5) rotate(-93)"/><path d="M0,0 C3.2,-3.5 8.4,-3.5 10.8,0 C8.4,3.5 3.2,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(79.5,63.5) rotate(-41)"/><path d="M0,0 C3.2,-3.5 8.4,-3.5 10.8,0 C8.4,3.5 3.2,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(82.0,52.7) rotate(-113)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.2,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(82.0,52.7) rotate(-61)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.1,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(80.6,41.6) rotate(-133)"/><path d="M0,0 C2.9,-3.0 7.4,-3.0 9.5,0 C7.4,3.0 2.9,3.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(80.6,41.6) rotate(-81)"/><path d="M0,0 C2.8,-3.0 7.4,-3.0 9.4,0 C7.4,3.0 2.8,3.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(75.6,31.7) rotate(-153)"/><path d="M0,0 C2.7,-2.8 6.9,-2.8 8.9,0 C6.9,2.8 2.7,2.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(75.6,31.7) rotate(-101)"/><path d="M0,0 C2.6,-2.8 6.8,-2.8 8.8,0 C6.8,2.8 2.6,2.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(67.4,24.2) rotate(-173)"/><path d="M0,0 C2.5,-2.6 6.4,-2.6 8.2,0 C6.4,2.6 2.5,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(67.4,24.2) rotate(-121)"/><path d="M0,0 C4.0,-4.3 10.5,-4.3 13.5,0 C10.5,4.3 4.0,4.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(46.1,82.8) rotate(213)"/><path d="M0,0 C3.8,-4.1 9.9,-4.1 12.7,0 C9.9,4.1 3.8,4.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(46.1,82.8) rotate(161)"/><path d="M0,0 C3.8,-4.1 10.0,-4.1 12.8,0 C10.0,4.1 3.8,4.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(35.5,79.5) rotate(233)"/><path d="M0,0 C3.6,-3.9 9.4,-3.9 12.1,0 C9.4,3.9 3.6,3.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(35.5,79.5) rotate(181)"/><path d="M0,0 C3.6,-3.9 9.5,-3.9 12.2,0 C9.5,3.9 3.6,3.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(26.6,72.8) rotate(253)"/><path d="M0,0 C3.4,-3.7 8.9,-3.7 11.4,0 C8.9,3.7 3.4,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(26.6,72.8) rotate(201)"/><path d="M0,0 C3.4,-3.7 9.0,-3.7 11.5,0 C9.0,3.7 3.4,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(20.5,63.5) rotate(273)"/><path d="M0,0 C3.2,-3.5 8.4,-3.5 10.8,0 C8.4,3.5 3.2,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(20.5,63.5) rotate(221)"/><path d="M0,0 C3.2,-3.5 8.4,-3.5 10.8,0 C8.4,3.5 3.2,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(18.0,52.7) rotate(293)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.2,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(18.0,52.7) rotate(241)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.1,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(19.4,41.6) rotate(313)"/><path d="M0,0 C2.9,-3.0 7.4,-3.0 9.5,0 C7.4,3.0 2.9,3.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(19.4,41.6) rotate(261)"/><path d="M0,0 C2.8,-3.0 7.4,-3.0 9.4,0 C7.4,3.0 2.8,3.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(24.4,31.7) rotate(333)"/><path d="M0,0 C2.7,-2.8 6.9,-2.8 8.9,0 C6.9,2.8 2.7,2.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(24.4,31.7) rotate(281)"/><path d="M0,0 C2.6,-2.8 6.8,-2.8 8.8,0 C6.8,2.8 2.6,2.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(32.6,24.2) rotate(353)"/><path d="M0,0 C2.5,-2.6 6.4,-2.6 8.2,0 C6.4,2.6 2.5,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(32.6,24.2) rotate(301)"/></svg>Fantasy Eggy</div>
   <div class="who" id="whoami"></div>
   <button class="linkbtn" id="themeBtn" onclick="toggleTheme()" style="text-decoration:none;font-size:1.05rem" title="light/dark">☀️</button>
 </div></header>
@@ -163,8 +167,8 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 
 <script>
 /* =================== CONFIG — EDIT THESE =================== */
-const SUPABASE_URL  = "https://zdfhglvjxquvkjyvophz.supabase.co";
-const SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
+const SUPABASE_URL  = "https://YOUR-PROJECT-REF.supabase.co";
+const SUPABASE_ANON = "YOUR-ANON-PUBLIC-KEY";
 /* =========================================================== */
 
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -174,7 +178,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 
 // theme: 'auto' follows the phone live; 'light'/'dark' are manual overrides
 const sysLight = matchMedia("(prefers-color-scheme: light)");
-let themeMode = localStorage.getItem("ft_theme") || "auto";
+let themeMode = localStorage.getItem("ft_theme2") || "auto"; // key bump: old ft_theme values were auto-written and block auto mode
 function applyTheme(){
   const eff = themeMode === "auto" ? (sysLight.matches ? "light" : "dark") : themeMode;
   document.documentElement.dataset.theme = eff;
@@ -186,10 +190,11 @@ function applyTheme(){
 }
 function toggleTheme(){
   themeMode = { auto: "light", light: "dark", dark: "auto" }[themeMode] || "auto";
-  localStorage.setItem("ft_theme", themeMode);
+  localStorage.setItem("ft_theme2", themeMode);
   applyTheme();
 }
-sysLight.addEventListener("change", () => { if (themeMode === "auto") applyTheme(); });
+const onSysTheme = () => { if (themeMode === "auto") applyTheme(); };
+if (sysLight.addEventListener) sysLight.addEventListener("change", onSysTheme); else sysLight.addListener(onSysTheme);
 applyTheme();
 
 let session = JSON.parse(localStorage.getItem("ft_session") || "null");
@@ -208,7 +213,7 @@ function toast(msg, cls="", key=null){
   setTimeout(() => t.remove(), 6000);
 }
 function fmtDate(d){ return new Date(d + "T12:00:00").toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}); }
-function fmtCutoff(ts){ return new Date(ts).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}); }
+function fmtCutoff(ts){ if(!ts) return "TBD"; return new Date(ts).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}); }
 function countdown(ts){
   const ms = new Date(ts) - Date.now();
   if (ms <= 0) return null;
@@ -231,6 +236,9 @@ async function edgeFn(action){
 }
 function showState(s){
   if (s.status === "final") return "final";
+  const ov = (cfg && cfg.voting_override) || "auto";
+  if (ov === "locked") return "locked";
+  if (ov === "open" && s.showdate >= new Date().toLocaleDateString('sv')) return "open";
   if (!s.cutoff_at) return "no cutoff";
   if (new Date(s.cutoff_at) > new Date()) return "open";
   const twoDaysAgo = new Date(Date.now() - 2*864e5).toLocaleDateString('sv');
@@ -353,9 +361,10 @@ async function openShow(id){
   else renderShowDetail(show);
 }
 
-function slotDefs(){
-  const slots = (cfg.slots||[]).map(s => ({ key:s.key, label:s.label, pts:s.points }));
-  for (let i=1; i<=(cfg.flat_picks||0); i++) slots.push({ key:"flat"+i, label:"Pick "+i, pts:cfg.flat_points||1, flat:true });
+function slotDefs(format){
+  const sect = (format === "one_set" && cfg.oneset) ? cfg.oneset : cfg;
+  const slots = (sect.slots||[]).map(s => ({ key:s.key, label:s.label, pts:s.points }));
+  for (let i=1; i<=(sect.flat_picks||0); i++) slots.push({ key:"flat"+i, label:"Pick "+i, pts:sect.flat_points ?? cfg.flat_points ?? 1, flat:true });
   return slots;
 }
 
@@ -363,7 +372,7 @@ async function renderPickSheet(show){
   let mine = [];
   try{ mine = await rpc("get_my_picks", { p_name:session.name, p_pin:session.pin, p_show_id:show.id }); }catch(e){}
   const val = k => esc((mine.find(p => p.slot===k)||{}).songname || "");
-  const slots = slotDefs();
+  const slots = slotDefs(show.format);
   const slotHtml = s => `
     <div class="slotline autocomplete">
       <label>${esc(s.label)}</label>
@@ -371,35 +380,20 @@ async function renderPickSheet(show){
       <span class="pts">${s.pts} pt${s.pts===1?"":"s"}</span>
     </div>`;
   const structured = slots.filter(s=>!s.flat), flats = slots.filter(s=>s.flat);
-  // pre-scoring pick board: cutoff has passed, picks are public, but no scores yet
-  let pickBoard = "";
-  if (!(scores||[]).length && (picks||[]).length){
-    const slotOrder = slotDefs().map(sl => sl.key);
-    const slotLabel = Object.fromEntries(slotDefs().map(sl => [sl.key, sl.label]));
-    const byName = {};
-    for (const p of picks) (byName[p.player_name] ??= []).push(p);
-    pickBoard = `<h2 style="margin:18px 4px 4px">The picks are in</h2>` +
-      Object.entries(byName).sort((a,b) => a[0].localeCompare(b[0])).map(([name, pp]) => `
-        <div class="panel" style="padding:12px"><div class="row"><b>${esc(name)}</b></div>
-          ${pp.sort((a,b) => slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot)).map(p => `
-            <div class="pickres"><span class="sl">${esc(slotLabel[p.slot] || p.slot)}</span>
-              <span>${esc(p.songname)}</span></div>`).join("")}
-        </div>`).join("");
-  }
   $("#main").innerHTML = `
     <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button></p>
     <div class="sheet">
       <h2>${esc(show.venue||"TBA")}</h2>
-      <div class="sub">${fmtDate(show.showdate)} · ${esc(show.city||"")}${show.state?", "+esc(show.state):""}</div>
+      <div class="sub">${fmtDate(show.showdate)} · ${esc(show.city||"")}${show.state?", "+esc(show.state):""}${show.format==='one_set' ? " · FESTIVAL SET" : ""}</div>
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
       <button class="savebtn" id="save">Lock 'em in</button>
-      <div class="countbig">Locks ${fmtCutoff(show.cutoff_at)} · <b id="cd"></b></div>
+      <div class="countbig">${cfg.voting_override==='open' ? 'Admin override — voting open' : `Locks ${fmtCutoff(show.cutoff_at)} · <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
     </div>`;
   document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
   $("#save").onclick = savePicks;
-  timers.push(setInterval(() => {
+  if (cfg.voting_override !== 'open' && show.cutoff_at) timers.push(setInterval(() => {
     const cd = countdown(show.cutoff_at);
     if (cd) $("#cd").textContent = cd + " left";
     else { toast("Picks are locked — enjoy the show 🥚"); openShow(show.id); }
@@ -460,11 +454,17 @@ async function renderShowDetail(show){
   ]);
   const pname = Object.fromEntries((plist||[]).map(p => [p.id, p.name]));
   const mineHits = new Set((picks||[]).filter(p => p.player_id === session.id).map(p => p.songname.toLowerCase()));
-  const setHtml = (setlist||[]).map(s => `
+  let lastSet = null;
+  const setHtml = (setlist||[]).map(s => {
+    const label = s.is_encore ? "Encore" : "Set " + (s.setnumber || "1");
+    const brk = label !== lastSet ? `<div class="setbreak">${esc(label)}</div>` : "";
+    lastSet = label;
+    return brk + `
     <div class="songrow ${mineHits.has(s.songname.toLowerCase()) ? "hitmine" : ""}">
-      <span class="pos">${s.is_encore ? "E" : "S"+esc(s.setnumber)}·${s.position}</span>
+      <span class="pos">${s.position}</span>
       <span class="name">${esc(s.songname)}</span>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   const scoreHtml = (scores||[]).map(sc => `
     <div class="panel" style="padding:12px">
       <div class="row"><b>${esc(pname[sc.player_id] || "?")}</b>
@@ -478,8 +478,8 @@ async function renderShowDetail(show){
   // pre-scoring pick board: cutoff has passed, picks are public, but no scores yet
   let pickBoard = "";
   if (!(scores||[]).length && (picks||[]).length){
-    const slotOrder = slotDefs().map(sl => sl.key);
-    const slotLabel = Object.fromEntries(slotDefs().map(sl => [sl.key, sl.label]));
+    const slotOrder = slotDefs(show.format).map(sl => sl.key);
+    const slotLabel = Object.fromEntries(slotDefs(show.format).map(sl => [sl.key, sl.label]));
     const byName = {};
     for (const p of picks) (byName[p.player_name] ??= []).push(p);
     pickBoard = `<h2 style="margin:18px 4px 4px">The picks are in</h2>` +
@@ -532,13 +532,26 @@ async function renderAdmin(){
   clearTimers(); tab = "admin"; markTab();
   await loadConfig();
   const b = cfg.bonuses || {};
-  const slotRows = (cfg.slots||[]).map((s,i) => adminSlotRow(s,i)).join("");
+  const os = cfg.oneset || { slots:[
+      {key:"opener",label:"Opener",points:2},
+      {key:"closer",label:"Closer",points:2},
+      {key:"cover_call",label:"Cover Call",points:2}
+    ], flat_picks:3, flat_points:1 };
   const { data: shows } = await db.from("shows").select("*").gte("showdate", new Date(Date.now()-7*864e5).toISOString().slice(0,10)).order("showdate");
   $("#main").innerHTML = `
-    <div class="panel"><h2>Game rules</h2>
+    <div class="panel"><h2>Master switch</h2>
+      <div class="field"><label>Voting override</label>
+        <select id="c-override">
+          <option value="auto" ${(cfg.voting_override||"auto")==="auto"?"selected":""}>Auto — cutoffs decide</option>
+          <option value="locked" ${cfg.voting_override==="locked"?"selected":""}>Locked — nobody can vote</option>
+          <option value="open" ${cfg.voting_override==="open"?"selected":""}>Open — voting open for today + future shows</option>
+        </select></div>
+      <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.</p>
+    </div>
+    <div class="panel"><h2>Game rules — standard shows</h2>
       <p class="muted">Slotted picks (position matters):</p>
-      <div id="slots">${slotRows}</div>
-      <button class="btn ghost small" onclick="addSlot()">+ add slot</button>
+      <div id="slots">${(cfg.slots||[]).map(sl => adminSlotRow(sl)).join("")}</div>
+      <button class="btn ghost small" onclick="addSlot('slots')">+ add slot</button>
       <div class="grid2" style="margin-top:14px">
         <div class="field"><label>Flat picks (count)</label><input id="c-flat" type="number" min="0" value="${cfg.flat_picks}"></div>
         <div class="field"><label>Points per flat pick</label><input id="c-flatpts" type="number" min="0" value="${cfg.flat_points}"></div>
@@ -547,27 +560,38 @@ async function renderAdmin(){
         <div class="field"><label>Partial points</label><input id="c-partpts" type="number" min="0" value="${cfg.partial_points}"></div>
         <div class="field"><label>Bonus: cover</label><input id="c-bcover" type="number" min="0" value="${b.cover||0}"></div>
         <div class="field"><label>Bonus: debut</label><input id="c-bdebut" type="number" min="0" value="${b.debut||0}"></div>
+        <div class="field"><label>Bonus: perfect sheet (every pick hits)</label><input id="c-bperfect" type="number" min="0" value="${b.perfect||0}"></div>
         <div class="field"><label>Allow duplicate songs across picks</label>
           <select id="c-dupes"><option value="false" ${!cfg.allow_duplicates?"selected":""}>No</option><option value="true" ${cfg.allow_duplicates?"selected":""}>Yes</option></select></div>
       </div>
-      <button class="btn" onclick="saveConfig()">Save rules</button>
+    </div>
+    <div class="panel"><h2>Game rules — one-set shows</h2>
+      <p class="muted">Used for shows toggled to "1 set" below. Festival-tagged shows sync in as 1 set automatically.</p>
+      <div id="slots1">${(os.slots||[]).map(sl => adminSlotRow(sl)).join("")}</div>
+      <button class="btn ghost small" onclick="addSlot('slots1')">+ add slot</button>
+      <div class="grid2" style="margin-top:14px">
+        <div class="field"><label>Flat picks (count)</label><input id="c1-flat" type="number" min="0" value="${os.flat_picks}"></div>
+        <div class="field"><label>Points per flat pick</label><input id="c1-flatpts" type="number" min="0" value="${os.flat_points}"></div>
+      </div>
+      <button class="btn" onclick="saveConfig()">Save all rules</button>
       <div class="err" id="cfg-err"></div>
       <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments.</p>
     </div>
     <div class="panel"><h2>Shows & cutoffs</h2>
       <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
-      ${(shows||[]).map(s => `<div class="showrow">
-        <div class="date">${fmtDate(s.showdate)}</div>
-        <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
-          <div class="loc"><input type="datetime-local" data-show="${s.id}" value="${s.cutoff_at ? new Date(new Date(s.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16) : ""}" style="background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.8rem"></div></div>
-        <button onclick="saveCutoff(${s.id}, this)">Set</button>
-        ${s.status!=='final' && s.cutoff_at && new Date(s.cutoff_at) < new Date() ? '<button onclick="finalizeShow('+s.id+', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ''}
+      ${(shows||[]).map(sh => `<div class="showrow">
+        <div class="date">${fmtDate(sh.showdate)}</div>
+        <div class="v"><div class="venue">${esc(sh.venue||"TBA")}</div>
+          <div class="loc"><input type="datetime-local" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16) : ""}" style="background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.8rem"></div></div>
+        <button onclick="toggleFormat(${sh.id}, '${sh.format==='one_set'?'standard':'one_set'}')" title="pick sheet format">${sh.format==='one_set'?'1 set':'2 set'}</button>
+        <button onclick="saveCutoff(${sh.id}, this)">Set</button>
+        ${sh.status!=='final' && sh.cutoff_at && new Date(sh.cutoff_at) < new Date() ? '<button onclick="finalizeShow('+sh.id+', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ''}
       </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
     </div>
     <div class="panel"><h2>Who's picked</h2>
       <div class="field"><label>Show</label>
         <select id="roster-show" onchange="loadRoster()">
-          ${(shows||[]).map(s => `<option value="${s.id}">${fmtDate(s.showdate)} — ${esc(s.venue||"TBA")}</option>`).join("")}
+          ${(shows||[]).map(sh => `<option value="${sh.id}">${fmtDate(sh.showdate)} — ${esc(sh.venue||"TBA")}</option>`).join("")}
         </select></div>
       <div id="roster"><p class="muted">Pick a show.</p></div>
     </div>
@@ -580,6 +604,13 @@ async function renderAdmin(){
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
     </div>`;
   if ((shows||[]).length) loadRoster();
+}
+async function toggleFormat(showId, next){
+  try{
+    await rpc("admin_set_show_format", { p_name:session.name, p_pin:session.pin, p_show_id:showId, p_format:next });
+    toast("Format: " + (next === "one_set" ? "1 set" : "2 set"), "score");
+    renderAdmin();
+  }catch(e){ toast(e.message); }
 }
 async function loadRoster(){
   const showId = Number($("#roster-show").value);
@@ -604,34 +635,44 @@ const SLOT_TYPES = {
   closer: "Closer — last pre-encore song",
   encore: "Encore — any encore song",
   show_closer: "Show closer — final song of the night",
+  second_song: "2nd song of the show",
+  cover_call: "Cover call — any cover played",
+  debut_call: "Debut call — any debut played",
 };
-function adminSlotRow(s, i){
+function adminSlotRow(sl){
   const opts = Object.entries(SLOT_TYPES).map(([k,d]) =>
-    `<option value="${k}" ${k===s.key?"selected":""}>${d}</option>`).join("");
-  return `<div class="admin-slot" data-i="${i}">
+    `<option value="${k}" ${k===sl.key?"selected":""}>${d}</option>`).join("");
+  return `<div class="admin-slot">
     <select class="k" title="which position this slot scores against">${opts}</select>
-    <input class="k" placeholder="Label players see" value="${esc(s.label)}">
-    <input class="p" type="number" min="0" value="${s.points}">
+    <input class="k" placeholder="Label players see" value="${esc(sl.label)}">
+    <input class="p" type="number" min="0" value="${sl.points}">
     <button class="btn ghost small" onclick="this.parentElement.remove()">✕</button></div>`;
 }
-function addSlot(){ $("#slots").insertAdjacentHTML("beforeend", adminSlotRow({key:"encore",label:"",points:2}, 99)); }
-async function saveConfig(){
-  $("#cfg-err").textContent = "";
-  const slots = [...document.querySelectorAll(".admin-slot")].map(r => {
+function addSlot(target){ $("#"+target).insertAdjacentHTML("beforeend", adminSlotRow({key:"encore",label:"",points:2})); }
+function readSlots(containerId){
+  return [...document.querySelectorAll('#'+containerId+' .admin-slot')].map(r => {
     const k = r.querySelector("select.k").value;
     const [l, p] = r.querySelectorAll("input");
     return { key: k, label: l.value.trim(), points: Number(p.value) };
-  }).filter(s => s.key && s.label);
-  const keys = slots.map(s => s.key);
-  if (new Set(keys).size !== keys.length){
-    $("#cfg-err").textContent = "Each slot type can only be used once."; return;
+  }).filter(sl => sl.key && sl.label);
+}
+async function saveConfig(){
+  $("#cfg-err").textContent = "";
+  const slots = readSlots('slots'), slots1 = readSlots('slots1');
+  for (const arr of [slots, slots1]){
+    const keys = arr.map(sl => sl.key);
+    if (new Set(keys).size !== keys.length){
+      $("#cfg-err").textContent = "Each slot type can only be used once per section."; return;
+    }
   }
   const data = {
     slots,
     flat_picks: Number($("#c-flat").value), flat_points: Number($("#c-flatpts").value),
     partial_credit: $("#c-partial").value === "true", partial_points: Number($("#c-partpts").value),
     allow_duplicates: $("#c-dupes").value === "true",
-    bonuses: { cover: Number($("#c-bcover").value), debut: Number($("#c-bdebut").value), jamchart: 0 },
+    voting_override: $("#c-override").value,
+    bonuses: { cover: Number($("#c-bcover").value), debut: Number($("#c-bdebut").value), perfect: Number($("#c-bperfect").value), jamchart: 0 },
+    oneset: { slots: slots1, flat_picks: Number($("#c1-flat").value), flat_points: Number($("#c1-flatpts").value) },
   };
   try{
     await rpc("admin_update_config", { p_name:session.name, p_pin:session.pin, p_data:data });
