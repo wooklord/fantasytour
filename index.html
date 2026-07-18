@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -167,7 +166,7 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 
 <script>
 /* =================== CONFIG — EDIT THESE =================== */
-const SUPABASE_URL  = "https://zdfhglvjxquvkjyvophz.supabase.co";
+const SUPABASE_URL  = "zdfhglvjxquvkjyvophz.supabase.co";
 const SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
 /* =========================================================== */
 
@@ -201,6 +200,8 @@ let session = JSON.parse(localStorage.getItem("ft_session") || "null");
 let tab = "shows", currentShow = null, songList = [], cfg = null, timers = [];
 
 /* ---------------- utilities ---------------- */
+const WIN_SVG = '<svg viewBox="0 0 100 100" style="width:__S__px;height:__S__px;vertical-align:-.32em"><ellipse cx="50" cy="83" rx="36" ry="9.5" fill="#000" opacity=".13"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(64.9,76.7) rotate(328) scale(1,0.5)"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(29.9,77.1) rotate(353) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.7,-3.6 11.2,0 C8.7,3.6 3.4,3.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(35.3,77.2) rotate(26) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(52.1,77.3) rotate(280) scale(1,0.5)"/><path d="M0,0 C3.0,-3.3 7.9,-3.3 10.2,0 C7.9,3.3 3.0,3.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(61.7,78.2) rotate(31) scale(1,0.5)"/><path d="M0,0 C3.5,-3.7 9.1,-3.7 11.7,0 C9.1,3.7 3.5,3.7 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(70.0,79.7) rotate(347) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(79.3,80.2) rotate(42) scale(1,0.5)"/><path d="M0,0 C2.8,-2.9 7.2,-2.9 9.2,0 C7.2,2.9 2.8,2.9 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(47.7,80.6) rotate(36) scale(1,0.5)"/><path d="M0,0 C2.9,-3.1 7.5,-3.1 9.6,0 C7.5,3.1 2.9,3.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(82.2,81.2) rotate(287) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.2,-3.4 10.6,0 C8.2,3.4 3.2,3.4 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(23.8,81.3) rotate(201) scale(1,0.5)"/><path d="M0,0 C3.5,-3.7 9.0,-3.7 11.6,0 C9.0,3.7 3.5,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(42.1,81.7) rotate(69) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.3,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(24.7,81.7) rotate(47) scale(1,0.5)"/><path d="M0,0 C3.1,-3.4 8.2,-3.4 10.5,0 C8.2,3.4 3.1,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(82.9,81.9) rotate(42) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(23.1,82.0) rotate(77) scale(1,0.5)"/><path d="M0,0 C3.5,-3.8 9.2,-3.8 11.8,0 C9.2,3.8 3.5,3.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(65.1,82.0) rotate(350) scale(1,0.5)"/><path d="M0,0 C3.6,-3.9 9.4,-3.9 12.1,0 C9.4,3.9 3.6,3.9 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(52.2,82.8) rotate(109) scale(1,0.5)"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(72.1,83.0) rotate(76) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.2,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(33.2,83.0) rotate(308) scale(1,0.5)"/><path d="M0,0 C3.7,-4.0 9.7,-4.0 12.5,0 C9.7,4.0 3.7,4.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(26.4,83.7) rotate(36) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(47.9,83.9) rotate(77) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.2,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(65.1,84.3) rotate(278) scale(1,0.5)"/><path d="M0,0 C2.8,-3.0 7.2,-3.0 9.3,0 C7.2,3.0 2.8,3.0 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(21.8,84.5) rotate(107) scale(1,0.5)"/><path d="M0,0 C3.3,-3.5 8.6,-3.5 11.0,0 C8.6,3.5 3.3,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(43.7,85.3) rotate(32) scale(1,0.5)"/><path d="M0,0 C3.3,-3.6 8.7,-3.6 11.1,0 C8.7,3.6 3.3,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(56.0,85.4) rotate(87) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(75.0,85.6) rotate(134) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.7,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(59.4,86.9) rotate(345) scale(1,0.5)"/><ellipse cx="50" cy="80" rx="14" ry="3.4" fill="#000" opacity=".22"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" transform="translate(41,80.5) rotate(24) scale(1,.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" transform="translate(50,82.5) rotate(160) scale(1,.5)"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(-33) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(19) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-53) scale(1,1.0)"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-1) scale(1,1.0)"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-73) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-21) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-93) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-41) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-113) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-61) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-133) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-81) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-153) scale(1,1.0)"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-101) scale(1,1.0)"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-173) scale(1,1.0)"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-121) scale(1,1.0)"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(213) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(161) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(233) scale(1,1.0)"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(181) scale(1,1.0)"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(253) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(201) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(273) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(221) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(293) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(241) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(313) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(261) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(333) scale(1,1.0)"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(281) scale(1,1.0)"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(353) scale(1,1.0)"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(301) scale(1,1.0)"/><g fill="#F5B93B" stroke="none"><path d="M20,30 l1.6,3 3,1.6 -3,1.6 -1.6,3 -1.6,-3 -3,-1.6 3,-1.6 Z"/><path d="M79,44 l1.2,2.3 2.3,1.2 -2.3,1.2 -1.2,2.3 -1.2,-2.3 -2.3,-1.2 2.3,-1.2 Z"/><circle cx="72" cy="20" r="1.6"/></g></svg>';
+const winBadge = px => WIN_SVG.replace(/__S__/g, px);
 const seenToasts = new Set();
 function toast(msg, cls="", key=null){
   if (key){ if (seenToasts.has(key)) return; seenToasts.add(key); }
@@ -342,7 +343,7 @@ async function renderShows(){
     const cd = st === "open" ? countdown(s.cutoff_at) : null;
     const txt = st === "final" ? "complete" : (st === "open" && cd ? "locks in " + cd : st);
     const win = st === "final" && winners[s.id]
-      ? ` <span style="color:var(--yolk);font-size:.82rem">👑 ${esc(winners[s.id].name)} · ${winners[s.id].points}</span>` : "";
+      ? ` <span style="color:var(--yolk);font-size:.82rem">${winBadge(18)} ${esc(winners[s.id].name)} · ${winners[s.id].points}</span>` : "";
     return `<div class="showrow">
       <div class="date">${fmtDate(s.showdate)}</div>
       <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
@@ -507,7 +508,7 @@ async function renderShowDetail(show){
     <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button>
       <span class="pill ${showState(show)==='live'?'live':'final'}">${showState(show)==='final'?'complete':showState(show)}</span></p>
     ${show.status==='final' && (scores||[]).length ? `<div class="panel" style="border-color:var(--yolk)">
-      <h2>👑 ${esc(pname[scores[0].player_id]||"?")} takes it</h2>
+      <h2>${winBadge(30)} ${esc(pname[scores[0].player_id]||"?")} takes it</h2>
       <p class="muted">${scores[0].points} points</p></div>` : ""}
     <div class="panel"><h2>${esc(show.venue||"")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>
@@ -517,27 +518,76 @@ async function renderShowDetail(show){
 }
 
 /* ---------------- leaderboard ---------------- */
+let boardSeason = null; // null = auto-pick current season
 async function renderBoard(){
   clearTimers(); tab = "board"; markTab();
-  const [{ data }, { data: plist }] = await Promise.all([
-    db.from("scores").select("points, player_id"),
+  const [{ data: sc }, { data: plist }, { data: allShows }, { data: seasons }] = await Promise.all([
+    db.from("scores").select("points, player_id, show_id"),
     db.from("players_public").select("id,name"),
+    db.from("shows").select("id,showdate,venue,status"),
+    db.from("seasons").select("*").order("start_date"),
   ]);
   const pname = Object.fromEntries((plist||[]).map(p => [p.id, p.name]));
-  const totals = {};
-  (data||[]).forEach(s => {
-    const k = s.player_id;
-    totals[k] ??= { name: pname[k] || "?", pts: 0, shows: 0 };
-    totals[k].pts += s.points; totals[k].shows++;
-  });
-  const rows = Object.entries(totals).sort((a,b) => b[1].pts - a[1].pts);
+  const showById = Object.fromEntries((allShows||[]).map(sh => [sh.id, sh]));
+  const today = new Date().toLocaleDateString('sv');
+  if (boardSeason === null){
+    const cur = (seasons||[]).find(se => se.start_date <= today && today <= se.end_date)
+      || (seasons||[]).slice(-1)[0];
+    boardSeason = cur ? String(cur.id) : "all";
+  }
+  const season = (seasons||[]).find(se => String(se.id) === boardSeason);
+  const inScope = row => {
+    if (!season) return true;
+    const sh = showById[row.show_id]; if (!sh) return false;
+    return sh.showdate >= season.start_date && sh.showdate <= season.end_date;
+  };
+  const T = {};
+  for (const row of (sc||[])){
+    const t = (T[row.player_id] ??= { career:0, scoped:0, shows:0, high:0, highShow:null, wins:0 });
+    t.career += row.points;
+    if (inScope(row)){
+      t.scoped += row.points; t.shows++;
+      if (row.points > t.high){ t.high = row.points; t.highShow = showById[row.show_id]; }
+    }
+  }
+  // wins: every top scorer of each finalized show in scope
+  const byShow = {};
+  for (const row of (sc||[])) if (inScope(row) && showById[row.show_id]?.status === "final")
+    (byShow[row.show_id] ??= []).push(row);
+  for (const arr of Object.values(byShow)){
+    const mx = Math.max(...arr.map(x => x.points));
+    if (mx > 0) for (const x of arr) if (x.points === mx) T[x.player_id].wins++;
+  }
+  const rows = Object.entries(T).sort((a,b) => b[1].scoped - a[1].scoped || b[1].career - a[1].career);
+  const opts = [...(seasons||[]).map(se =>
+      `<option value="${se.id}" ${boardSeason===String(se.id)?"selected":""}>${esc(se.name)}</option>`),
+    `<option value="all" ${boardSeason==="all"?"selected":""}>All time</option>`].join("");
+  const scopeName = season ? esc(season.name) : "All time";
+  const statRows = rows.filter(([,r]) => r.shows > 0)
+    .sort((a,b) => b[1].scoped/b[1].shows - a[1].scoped/a[1].shows);
   $("#main").innerHTML = `
-    <div class="panel"><h2>Tour standings</h2>
-    <table class="lb"><tr><th></th><th>Player</th><th>Shows</th><th style="text-align:right">Pts</th></tr>
-    ${rows.map(([id,r],i) => `<tr class="${id===session.id?"me":""}">
-      <td class="rank">${i+1}</td><td>${esc(r.name)}</td><td class="muted">${r.shows}</td><td class="pts">${r.pts}</td></tr>`).join("")
-      || '<tr><td colspan="4" class="muted">No scores yet — pick some songs.</td></tr>'}
-    </table></div>`;
+    <div class="panel">
+      <div class="row"><h2 style="margin:0">Standings</h2>
+        <select onchange="boardSeason=this.value; renderBoard();"
+          style="margin-left:auto;background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.82rem">${opts}</select></div>
+      <table class="lb"><tr><th></th><th>Player</th>${season?`<th style="text-align:right">${scopeName}</th>`:""}<th style="text-align:right">Career</th></tr>
+      ${rows.map(([id,r],i) => `<tr class="${id===session.id?"me":""}">
+        <td class="rank">${i+1}</td><td>${esc(pname[id]||"?")}</td>
+        ${season?`<td class="pts">${r.scoped}</td>`:""}<td class="pts">${r.career}</td></tr>`).join("")
+        || '<tr><td colspan="4" class="muted">No scores yet — pick some songs.</td></tr>'}
+      </table>
+    </div>
+    <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">· ${scopeName}</span></h2>
+      <table class="lb"><tr><th>Player</th><th style="text-align:right">Shows</th><th style="text-align:right">Avg</th><th style="text-align:right">High</th><th style="text-align:right">${winBadge(15)}</th></tr>
+      ${statRows.map(([id,r]) => `<tr class="${id===session.id?"me":""}">
+        <td>${esc(pname[id]||"?")}</td><td class="pts">${r.shows}</td>
+        <td class="pts">${(r.scoped/r.shows).toFixed(1)}</td>
+        <td class="pts" title="${esc(r.highShow?.venue||"")}">${r.high}</td>
+        <td class="pts">${r.wins||0}</td></tr>`).join("")
+        || '<tr><td colspan="5" class="muted">Stats appear once shows score.</td></tr>'}
+      </table>
+      <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played · High = best single show (venue on hover) · wreath = shows won</p>
+    </div>`;
 }
 
 /* ---------------- admin ---------------- */
@@ -551,7 +601,17 @@ async function renderAdmin(){
       {key:"cover_call",label:"Cover Call",points:2}
     ], flat_picks:3, flat_points:1 };
   const { data: shows } = await db.from("shows").select("*").gte("showdate", new Date(Date.now()-7*864e5).toISOString().slice(0,10)).order("showdate");
+  const { data: seasonsA } = await db.from("seasons").select("*").order("start_date");
+  const todayA = new Date().toLocaleDateString('sv');
+  const nextShow = (shows||[]).find(sh => sh.showdate >= todayA) || (shows||[])[(shows||[]).length-1];
   $("#main").innerHTML = `
+    <div class="panel"><h2>Who's picked</h2>
+      <div class="field"><label>Show</label>
+        <select id="roster-show" onchange="loadRoster()">
+          ${(shows||[]).map(sh => `<option value="${sh.id}" ${nextShow && sh.id===nextShow.id ? "selected" : ""}>${fmtDate(sh.showdate)} — ${esc(sh.venue||"TBA")}</option>`).join("")}
+        </select></div>
+      <div id="roster"><p class="muted">Pick a show.</p></div>
+    </div>
     <div class="panel"><h2>Master switch</h2>
       <div class="field"><label>Voting override</label>
         <select id="c-override">
@@ -560,6 +620,11 @@ async function renderAdmin(){
           <option value="open" ${cfg.voting_override==="open"?"selected":""}>Open — voting open for today + future shows</option>
         </select></div>
       <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.</p>
+    </div>
+    <div class="panel"><h2>Seasons</h2>
+      <p class="muted">Named date ranges — shows sort themselves in by date.</p>
+      <div id="seasonrows">${(seasonsA||[]).map(seasonRow).join("")}</div>
+      <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
     </div>
     <div class="panel"><h2>Game rules — standard shows</h2>
       <p class="muted">Slotted picks (position matters):</p>
@@ -601,12 +666,10 @@ async function renderAdmin(){
         ${sh.status!=='final' && sh.cutoff_at && new Date(sh.cutoff_at) < new Date() ? '<button onclick="finalizeShow('+sh.id+', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ''}
       </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
     </div>
-    <div class="panel"><h2>Who's picked</h2>
-      <div class="field"><label>Show</label>
-        <select id="roster-show" onchange="loadRoster()">
-          ${(shows||[]).map(sh => `<option value="${sh.id}">${fmtDate(sh.showdate)} — ${esc(sh.venue||"TBA")}</option>`).join("")}
-        </select></div>
-      <div id="roster"><p class="muted">Pick a show.</p></div>
+    <div class="panel"><h2>Players</h2>
+      <div id="playerlist"><p class="muted">Loading…</p></div>
+      <button class="linkbtn" id="banToggle" onclick="toggleBans()" style="margin-top:8px">show ban list</button>
+      <div id="banlist" class="hidden" style="margin-top:6px"></div>
     </div>
     <div class="panel"><h2>Data</h2>
       <div class="row">
@@ -617,6 +680,76 @@ async function renderAdmin(){
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
     </div>`;
   if ((shows||[]).length) loadRoster();
+  loadPlayers();
+}
+async function loadPlayers(){
+  const { data: pl } = await db.from("players_public").select("*").order("created_at");
+  $("#playerlist").innerHTML = (pl||[]).map(p => `
+    <div class="pickres hit"><span>${p.is_admin ? "★" : "·"}</span>
+      <span>${esc(p.name)}</span>
+      <span class="pt">${p.id===session.id ? '<small class="muted">you</small>'
+        : p.is_admin ? '<small class="muted">admin</small>'
+        : '<button class="btn ghost small" onclick="bootPlayer(\''+p.id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')" style="border-color:var(--coral);color:var(--coral)">Boot</button>'}</span>
+    </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
+}
+function seasonRow(se){
+  const v = se || { id:"", name:"", start_date:"", end_date:"" };
+  return `<div class="admin-slot" data-season="${v.id}">
+    <input class="k" placeholder="Name (e.g. Summer Tour 2026)" value="${esc(v.name)}">
+    <input type="date" value="${v.start_date}" style="width:130px">
+    <input type="date" value="${v.end_date}" style="width:130px">
+    <button class="btn ghost small" onclick="saveSeason(this.parentElement)">Save</button>
+    ${v.id ? `<button class="btn ghost small" onclick="deleteSeason(${v.id})" style="border-color:var(--coral);color:var(--coral)">✕</button>` : ""}
+  </div>`;
+}
+function addSeasonRow(){ $("#seasonrows").insertAdjacentHTML("beforeend", seasonRow(null)); }
+async function saveSeason(row){
+  const [name, start, end] = [...row.querySelectorAll("input")].map(i => i.value);
+  const id = row.dataset.season ? Number(row.dataset.season) : null;
+  try{
+    await rpc("admin_save_season", { p_name:session.name, p_pin:session.pin, p_id:id, p_sname:name, p_start:start||null, p_end:end||null });
+    toast("Season saved ✔", "score"); boardSeason = null; renderAdmin();
+  }catch(e){ toast(e.message); }
+}
+async function deleteSeason(id){
+  if (!confirm("Delete this season? Scores are untouched — only the grouping goes away.")) return;
+  try{
+    await rpc("admin_delete_season", { p_name:session.name, p_pin:session.pin, p_id:id });
+    toast("Season deleted", "score"); boardSeason = null; renderAdmin();
+  }catch(e){ toast(e.message); }
+}
+let bansOpen = false;
+async function toggleBans(){
+  bansOpen = !bansOpen;
+  $("#banToggle").textContent = bansOpen ? "hide ban list" : "show ban list";
+  $("#banlist").classList.toggle("hidden", !bansOpen);
+  if (!bansOpen) return;
+  $("#banlist").innerHTML = '<p class="muted">Loading…</p>';
+  try{
+    const rows = await rpc("admin_list_bans", { p_name:session.name, p_pin:session.pin });
+    $("#banlist").innerHTML = (rows||[]).map(r => `
+      <div class="pickres miss"><span>⛔</span><span>${esc(r.name)}</span>
+        <span class="pt"><small class="muted">${new Date(r.banned_at).toLocaleDateString()}</small>
+          <button class="btn ghost small" onclick="unban('${esc(r.name).replace(/'/g,"\\'")}')">Unban</button></span>
+      </div>`).join("") || '<p class="muted">Nobody is banned. A peaceful kingdom.</p>';
+  }catch(e){ $("#banlist").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+async function unban(name){
+  if (!confirm(`Unban "${name}"? The name becomes registerable again.`)) return;
+  try{
+    await rpc("admin_unban", { p_name:session.name, p_pin:session.pin, p_banned:name });
+    toast(`${name} unbanned`, "score");
+    bansOpen = false; toggleBans();
+  }catch(e){ toast(e.message); }
+}
+async function bootPlayer(id, name){
+  if (!confirm(`Remove ${name}? Their picks and scores are deleted permanently — including any shows they won.`)) return;
+  const ban = confirm(`Also block the name "${name}" from re-registering?\n\nOK = boot + ban · Cancel = boot only`);
+  try{
+    await rpc("admin_boot_player", { p_name:session.name, p_pin:session.pin, p_player_id:id, p_ban:ban });
+    toast(`${name} booted${ban ? " and banned" : ""}`, "score");
+    loadPlayers(); loadRoster();
+  }catch(e){ toast(e.message); }
 }
 async function toggleFormat(showId, next){
   try{
