@@ -328,10 +328,12 @@ async function renderShows(){
   clearTimers(); tab = "shows"; currentShow = null; markTab();
   const todayStr = new Date().toLocaleDateString('sv');
   const graceStr = new Date(Date.now() - 2*864e5).toISOString().slice(0,10);
-  const [{ data: up }, { data: past }] = await Promise.all([
+  const [{ data: up }, { data: past }, { data: seas }] = await Promise.all([
     db.from("shows").select("*").gte("showdate", graceStr).order("showdate"),
     db.from("shows").select("*").lt("showdate", graceStr).order("showdate",{ascending:false}).limit(12),
+    db.from("seasons").select("*").order("start_date"),
   ]);
+  const seasonOf = d => (seas||[]).find(se => se.start_date <= d && d <= se.end_date);
   const isRecent = s => s.showdate < todayStr || s.status === "final";
   const upcoming = (up||[]).filter(s => !isRecent(s));
   const justPlayed = (up||[]).filter(isRecent);
@@ -363,10 +365,20 @@ async function renderShows(){
       <button onclick="openShow(${s.id})">${st==='open'?'Pick':'View'}</button>
     </div>`;
   };
+  const withSeasons = list => {
+    let last;
+    return list.map(sh => {
+      const se = seasonOf(sh.showdate);
+      const label = se ? se.name : "Between tours";
+      const brk = label !== last ? `<div class="setbreak">${esc(label)}</div>` : "";
+      last = label;
+      return brk + row(sh);
+    }).join("");
+  };
   $("#main").innerHTML = `
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(row).join("")}</div>` : ""}
-    <div class="panel"><h2>Upcoming</h2>${upcoming.map(row).join("") || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
-    <div class="panel"><h2>Recent</h2>${(past||[]).map(row).join("") || '<p class="muted">Nothing yet.</p>'}</div>`;
+    <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
+    <div class="panel"><h2>Recent</h2>${withSeasons(past||[]) || '<p class="muted">Nothing yet.</p>'}</div>`;
   timers.push(setInterval(() => {
     document.querySelectorAll("[data-cd]").forEach(el => {
       if (!el.dataset.cd) return;
