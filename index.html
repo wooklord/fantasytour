@@ -157,6 +157,17 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 
 <div id="toasts"></div>
 <main class="wrap" id="main"></main>
+<script>
+/* last-resort trap: catches even syntax errors in the main script below */
+window.addEventListener("error", function(e){
+  var m = document.getElementById("main");
+  if (m && !m.childElementCount) m.innerHTML =
+    '<div style="max-width:640px;margin:40px auto;padding:16px;border:2px solid #FF6B5E;border-radius:12px;font-family:monospace;font-size:13px;word-break:break-word">' +
+    '<b>Script failed to load:</b><br>' + (e.message || "unknown error") +
+    (e.lineno ? " (line " + e.lineno + ")" : "") +
+    '<br><br>Most common cause: smart/curly quotes in the SUPABASE constants. They must be straight " quotes.</div>';
+});
+</script>
 
 <nav class="tabs" id="tabs" style="display:none">
   <button data-tab="shows" class="on">Shows</button>
@@ -166,7 +177,7 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 
 <script>
 /* =================== CONFIG — EDIT THESE =================== */
-const SUPABASE_URL  = "zdfhglvjxquvkjyvophz.supabase.co";
+const SUPABASE_URL  = "https://zdfhglvjxquvkjyvophz.supabase.co";
 const SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
 /* =========================================================== */
 
