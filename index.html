@@ -167,8 +167,8 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 
 <script>
 /* =================== CONFIG — EDIT THESE =================== */
-const SUPABASE_URL  = "https://YOUR-PROJECT-REF.supabase.co";
-const SUPABASE_ANON = "YOUR-ANON-PUBLIC-KEY";
+const SUPABASE_URL  = "https://zdfhglvjxquvkjyvophz.supabase.co";
+const SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
 /* =========================================================== */
 
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -248,11 +248,13 @@ function showState(s){
 
 /* ---------------- boot ---------------- */
 async function loadConfig(){
-  const { data } = await db.from("game_config").select("data").eq("id",1).single();
+  const { data, error } = await db.from("game_config").select("data").eq("id",1).single();
+  if (error) throw new Error("Couldn't load game config: " + error.message);
   cfg = data.data;
 }
 async function loadSongs(){
-  const { data } = await db.from("songs_cache").select("*").order("times_played",{ascending:false});
+  const { data, error } = await db.from("songs_cache").select("*").order("times_played",{ascending:false});
+  if (error) throw new Error("Couldn't load song catalog: " + error.message);
   songList = data || [];
 }
 function renderWho(){
