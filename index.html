@@ -13,7 +13,7 @@
 <meta name="color-scheme" content="dark light">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,400..900,0..100,0..1&family=Outfit:wght@300..800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   --indigo:#171233; --pit:#100C26; --panel:#1F1941; --panel2:#28214F;
@@ -266,9 +266,20 @@ async function boot(){
   if (!session){ renderAuth(); return; }
   $("#tabs").style.display = "flex";
   if (session.is_admin) $("#admintab").style.display = "";
-  await Promise.all([loadConfig(), loadSongs()]);
-  subscribeRealtime();
-  renderShows();
+  try{
+    await Promise.all([loadConfig(), loadSongs()]);
+    subscribeRealtime();
+    await renderShows();
+  }catch(e){
+    console.error(e);
+    $("#main").innerHTML = `<div class="panel" style="margin-top:30px;border-color:var(--coral)">
+      <h2>Something broke loading the app</h2>
+      <p class="muted" style="word-break:break-word">${esc(e.message || String(e))}</p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="location.reload()">Reload</button>
+        <button class="btn ghost" onclick="logout()">Log out</button>
+      </div></div>`;
+  }
 }
 
 /* ---------------- auth ---------------- */
