@@ -364,9 +364,14 @@ async function renderShows(){
       db.from("players_public").select("id,name"),
     ]);
     const pn = Object.fromEntries((pl||[]).map(p => [p.id, p.name]));
+    const best = {};
     for (const s of sc||[]){
-      if (!winners[s.show_id] || s.points > winners[s.show_id].points)
-        winners[s.show_id] = { points: s.points, name: pn[s.player_id] || "?" };
+      if (s.points <= 0) continue;
+      if (!best[s.show_id] || s.points > best[s.show_id]) best[s.show_id] = s.points;
+    }
+    for (const s of sc||[]){
+      if (s.points > 0 && s.points === best[s.show_id])
+        (winners[s.show_id] ??= { points: s.points, names: [] }).names.push(pn[s.player_id] || "?");
     }
   }
   const row = s => {
@@ -375,7 +380,7 @@ async function renderShows(){
     const cd = st === "open" ? countdown(s.cutoff_at) : null;
     const txt = st === "final" ? "complete" : (st === "open" && cd ? "locks in " + cd : st);
     const win = st === "final" && winners[s.id]
-      ? ` <span style="color:var(--yolk);font-size:.82rem">${winBadge(36)} ${esc(winners[s.id].name)} · ${winners[s.id].points}</span>` : "";
+      ? ` <span style="color:var(--yolk);font-size:.82rem">${winBadge(36)} ${winners[s.id].names.map(esc).join(" & ")} · ${winners[s.id].points}</span>` : "";
     return `<div class="showrow">
       <div class="date">${fmtDate(s.showdate)}</div>
       <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
@@ -562,9 +567,15 @@ async function renderShowDetail(show){
   $("#main").innerHTML = `
     <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button>
       <span class="pill ${showState(show)==='live'?'live':'final'}">${showState(show)==='final'?'complete':showState(show)}</span></p>
-    ${show.status==='final' && (scores||[]).length ? `<div class="panel" style="border-color:var(--yolk)">
-      <h2>${winBadge(64)} ${esc(pname[scores[0].player_id]||"?")} takes it</h2>
-      <p class="muted">${scores[0].points} points</p></div>` : ""}
+    ${(() => {
+      if (show.status!=='final' || !(scores||[]).length) return "";
+      const top = scores[0].points;
+      if (top <= 0) return `<div class="panel"><h2>No winner</h2><p class="muted">Nobody scored on this one.</p></div>`;
+      const champs = scores.filter(x => x.points === top).map(x => esc(pname[x.player_id]||"?"));
+      return `<div class="panel" style="border-color:var(--yolk)">
+        <h2>${winBadge(64)} ${champs.join(" & ")} ${champs.length>1?"tie for it":"takes it"}</h2>
+        <p class="muted">${top} points${champs.length>1?" apiece":""}</p></div>`;
+    })()}
     <div class="panel"><h2>${esc(show.venue||"")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>
     ${pickBoard}
