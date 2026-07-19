@@ -48,6 +48,14 @@ a{color:var(--yolk)}
 button{font-family:inherit;cursor:pointer}
 input,select{font-family:inherit;font-size:16px}
 .wrap{max-width:680px;margin:0 auto;padding:0 16px 96px}
+.cols{max-width:1400px;margin:0 auto;padding:16px 24px 60px;display:grid;gap:20px;align-items:start}
+.coltitle{font-family:'Fraunces',serif;font-size:.9rem;color:var(--cream-dim);text-transform:uppercase;letter-spacing:2px;padding:2px 4px 6px;border-bottom:1px solid var(--line);margin-bottom:2px}
+@media (max-width:900px){ .cols{display:none!important} }
+@media (min-width:901px){
+  #main{display:none}
+  nav.tabs{display:none!important}
+  body{padding-bottom:0}
+}
 
 /* ---------- top bar ---------- */
 header{position:sticky;top:0;z-index:50;background:var(--chrome);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
@@ -163,6 +171,11 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 
 <div id="toasts"></div>
 <main class="wrap" id="main"></main>
+<div class="cols" id="cols" style="display:none">
+  <div class="col" id="col-board"><div class="coltitle">Standings</div><div class="colbody" id="main-board"></div></div>
+  <div class="col" id="col-shows"><div class="coltitle">Shows</div><div class="colbody" id="main-shows"></div></div>
+  <div class="col" id="col-admin" style="display:none"><div class="coltitle">Admin</div><div class="colbody" id="main-admin"></div></div>
+</div>
 <script>
 /* last-resort trap: catches even syntax errors in the main script below */
 window.addEventListener("error", function(e){
@@ -189,7 +202,12 @@ const SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
 
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 const FN_URL = SUPABASE_URL + "/functions/v1/carton-sync";
-const $ = (s, el=document) => el.querySelector(s);
+const isDesktop = () => window.matchMedia("(min-width:901px)").matches;
+const colMap = { shows: "#main-shows", board: "#main-board", admin: "#main-admin" };
+const $ = (sel, el=document) => {
+  if (sel === "#main" && isDesktop() && el === document) return document.querySelector(colMap[tab] || "#main-shows");
+  return el.querySelector(sel);
+};
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 // theme: 'auto' follows the phone live; 'light'/'dark' are manual overrides
@@ -252,6 +270,8 @@ function countdown(ts){
   return h > 0 ? `${h}h ${m}m` : `${m}m ${String(s).padStart(2,"0")}s`;
 }
 function clearTimers(){ timers.forEach(clearInterval); timers = []; }
+// desktop: only the shows column owns countdown timers; guard so board/admin re-renders don't kill them
+function clearTimersFor(which){ if (isDesktop() && which !== "shows") return; clearTimers(); }
 async function rpc(fn, args){
   const { data, error } = await db.rpc(fn, args);
   if (error) throw new Error(error.message.replace(/^.*?: /,""));
@@ -302,7 +322,7 @@ async function boot(){
   try{
     await Promise.all([loadConfig(), loadSongs()]);
     subscribeRealtime();
-    await renderShows();
+    await renderAll();
   }catch(e){
     console.error(e);
     $("#main").innerHTML = `<div class="panel" style="margin-top:30px;border-color:var(--coral)">
@@ -344,7 +364,7 @@ async function authFlow(fn){
 
 /* ---------------- shows list ---------------- */
 async function renderShows(){
-  clearTimers(); tab = "shows"; currentShow = null; markTab();
+  clearTimersFor("shows"); tab = "shows"; currentShow = null; markTab();
   const todayStr = new Date().toLocaleDateString('sv');
   const graceStr = new Date(Date.now() - 2*864e5).toISOString().slice(0,10);
   const [{ data: up }, { data: past }, { data: seas }] = await Promise.all([
@@ -414,7 +434,8 @@ async function renderShows(){
 
 /* ---------------- pick sheet / show detail ---------------- */
 async function openShow(id){
-  clearTimers();
+  if (isDesktop()) tab = "shows";
+  clearTimersFor("shows");
   const { data: show } = await db.from("shows").select("*").eq("id", id).single();
   currentShow = show;
   const st = showState(show);
@@ -586,7 +607,7 @@ async function renderShowDetail(show){
 /* ---------------- leaderboard ---------------- */
 let boardSeason = null; // null = auto-pick current season
 async function renderBoard(){
-  clearTimers(); tab = "board"; markTab();
+  clearTimersFor("board"); tab = "board"; markTab();
   const [{ data: sc }, { data: plist }, { data: allShows }, { data: seasons }] = await Promise.all([
     db.from("scores").select("points, player_id, show_id"),
     db.from("players_public").select("id,name"),
@@ -665,7 +686,7 @@ async function renderBoard(){
 
 /* ---------------- admin ---------------- */
 async function renderAdmin(){
-  clearTimers(); tab = "admin"; markTab();
+  clearTimersFor("admin"); tab = "admin"; markTab();
   await loadConfig();
   const b = cfg.bonuses || {};
   const os = cfg.oneset || { slots:[
@@ -983,18 +1004,45 @@ function subscribeRealtime(){
 }
 function refreshCurrent(){
   if (tab === "shows" && currentShow && showState(currentShow) === "open") return; // never wipe an in-progress pick sheet
+  if (isDesktop()){ renderAll(); return; }
   if (tab === "board") renderBoard();
   else if (tab === "admin") renderAdmin();
   else if (currentShow) openShow(currentShow.id);
   else renderShows();
 }
 
-/* ---------------- tabs ---------------- */
+/* ---------------- tabs / layout ---------------- */
 function markTab(){
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
 }
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
   ({ shows: renderShows, board: renderBoard, admin: renderAdmin })[b.dataset.tab]();
+});
+
+// desktop: paint every column; keep `tab` pointed so each render targets its own container
+async function renderAll(){
+  if (!isDesktop()){ await renderShows(); return; }
+  applyLayout();
+  const savedShow = currentShow;
+  await renderBoard();
+  await renderShows();
+  if (session.is_admin) await renderAdmin();
+  currentShow = savedShow;
+}
+function applyLayout(){
+  const desk = isDesktop();
+  $("#cols") && ($("#cols").style.display = desk ? "grid" : "none");
+  const c = document.getElementById("cols");
+  if (c){
+    const admin = !!(session && session.is_admin);
+    document.getElementById("col-admin").style.display = admin && desk ? "" : "none";
+    c.style.gridTemplateColumns = admin ? "1fr 1.15fr 1fr" : "1fr 1.2fr";
+  }
+}
+let _lastDesk = isDesktop();
+window.addEventListener("resize", () => {
+  const now = isDesktop();
+  if (now !== _lastDesk){ _lastDesk = now; if (session) renderAll(); }
 });
 
 boot();
