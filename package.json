@@ -1,0 +1,13 @@
+{
+  "name": "fantasy-eggy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test/compare.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "jsdom": "^29.1.1"
+  }
+}

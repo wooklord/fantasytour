@@ -1,0 +1,1015 @@
+(() => {
+  // src/core/state.js
+  var state = {
+    session: JSON.parse(localStorage.getItem("ft_session") || "null"),
+    tab: "shows",
+    currentShow: null,
+    songList: [],
+    cfg: null,
+    timers: [],
+    boardSeason: null
+    // null = auto-pick current season
+  };
+
+  // src/core/dom.js
+  var isDesktop = () => window.matchMedia("(min-width:901px)").matches;
+  var colMap = { shows: "#main-shows", board: "#main-board", admin: "#main-admin" };
+  var $ = (sel, el = document) => {
+    if (sel === "#main" && isDesktop() && el === document) return document.querySelector(colMap[state.tab] || "#main-shows");
+    return el.querySelector(sel);
+  };
+  var esc = (s) => String(s != null ? s : "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+  // src/core/theme.js
+  var sysLight = matchMedia("(prefers-color-scheme: light)");
+  var themeMode = localStorage.getItem("ft_theme2") || "auto";
+  function applyTheme() {
+    const eff = themeMode === "auto" ? sysLight.matches ? "light" : "dark" : themeMode;
+    document.documentElement.dataset.theme = eff;
+    const b = $("#themeBtn");
+    if (b) b.textContent = themeMode === "auto" ? "\u{1F317}" : themeMode === "light" ? "\u2600\uFE0F" : "\u{1F319}";
+    if (b) b.title = "theme: " + themeMode + (themeMode === "auto" ? " (follows your phone)" : "");
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.content = eff === "light" ? "#F4ECD9" : "#171233";
+  }
+  function toggleTheme() {
+    themeMode = { auto: "light", light: "dark", dark: "auto" }[themeMode] || "auto";
+    localStorage.setItem("ft_theme2", themeMode);
+    applyTheme();
+  }
+  var onSysTheme = () => {
+    if (themeMode === "auto") applyTheme();
+  };
+  if (sysLight.addEventListener) sysLight.addEventListener("change", onSysTheme);
+  else sysLight.addListener(onSysTheme);
+  applyTheme();
+
+  // src/core/config.js
+  var SUPABASE_URL = "https://zdfhglvjxquvkjyvophz.supabase.co";
+  var SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
+
+  // src/core/supabaseClient.js
+  var db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  var FN_URL = SUPABASE_URL + "/functions/v1/carton-sync";
+  async function rpc(fn, args) {
+    const { data, error } = await db.rpc(fn, args);
+    if (error) throw new Error(error.message.replace(/^.*?: /, ""));
+    return data;
+  }
+  async function edgeFn(action) {
+    const r = await fetch(FN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_ANON, "apikey": SUPABASE_ANON },
+      body: JSON.stringify({ action })
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "edge function failed");
+    return j;
+  }
+
+  // src/features/auth.js
+  function renderAuth() {
+    $("#main").innerHTML = `
+    <div class="panel" style="margin-top:38px">
+      <h2 class="display">Who's picking?</h2>
+      <p class="muted">Name + PIN. That's the whole account.</p>
+      <div class="field"><label>Name</label><input id="a-name" autocomplete="username" placeholder="Wooklord"></div>
+      <div class="field"><label>PIN (4\u20138 digits)</label><input id="a-pin" inputmode="numeric" autocomplete="current-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
+      <div class="row">
+        <button class="btn" onclick="doLogin()">Log in</button>
+        <button class="btn ghost" onclick="doRegister()">New player</button>
+      </div>
+      <div class="err" id="a-err"></div>
+    </div>`;
+  }
+  async function doLogin() {
+    authFlow("login");
+  }
+  async function doRegister() {
+    authFlow("register_player");
+  }
+  async function authFlow(fn) {
+    $("#a-err").textContent = "";
+    try {
+      const d = await rpc(fn, { p_name: $("#a-name").value, p_pin: $("#a-pin").value });
+      state.session = { ...d, pin: $("#a-pin").value };
+      localStorage.setItem("ft_session", JSON.stringify(state.session));
+      location.reload();
+    } catch (e) {
+      $("#a-err").textContent = e.message;
+    }
+  }
+
+  // src/core/toast.js
+  var seenToasts = /* @__PURE__ */ new Set();
+  function toast(msg, cls = "", key = null) {
+    if (key) {
+      if (seenToasts.has(key)) return;
+      seenToasts.add(key);
+    }
+    const box = $("#toasts");
+    while (box.children.length >= 4) box.firstChild.remove();
+    const t = document.createElement("div");
+    t.className = "toast " + cls;
+    t.innerHTML = msg;
+    t.onclick = () => t.remove();
+    box.appendChild(t);
+    setTimeout(() => t.remove(), 6e3);
+  }
+
+  // src/core/format.js
+  function fmtDate(d) {
+    return (/* @__PURE__ */ new Date(d + "T12:00:00")).toLocaleDateString(void 0, { weekday: "short", month: "short", day: "numeric" });
+  }
+  function fmtCutoff(ts) {
+    if (!ts) return "TBD";
+    return new Date(ts).toLocaleString(void 0, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+  }
+  function countdown(ts) {
+    const ms = new Date(ts) - Date.now();
+    if (ms <= 0) return null;
+    const h = Math.floor(ms / 36e5), m = Math.floor(ms % 36e5 / 6e4), s = Math.floor(ms % 6e4 / 1e3);
+    return h > 0 ? `${h}h ${m}m` : `${m}m ${String(s).padStart(2, "0")}s`;
+  }
+  function clearTimers() {
+    state.timers.forEach(clearInterval);
+    state.timers = [];
+  }
+  function clearTimersFor(which) {
+    if (isDesktop() && which !== "shows") return;
+    clearTimers();
+  }
+  function showState(s) {
+    if (s.status === "final") return "final";
+    const ov = state.cfg && state.cfg.voting_override || "auto";
+    if (ov === "locked") return "locked";
+    if (ov === "open" && s.showdate >= (/* @__PURE__ */ new Date()).toLocaleDateString("sv")) return "open";
+    if (!s.cutoff_at) return "no cutoff";
+    if (new Date(s.cutoff_at) > /* @__PURE__ */ new Date()) return "open";
+    const twoDaysAgo = new Date(Date.now() - 2 * 864e5).toLocaleDateString("sv");
+    if (s.showdate < twoDaysAgo) return "played";
+    return s.status === "live" ? "live" : "locked";
+  }
+
+  // src/core/trophy.js
+  var WIN_SVG = '<svg viewBox="0 0 100 100" style="width:__S__px;height:__S__px;vertical-align:-.32em"><ellipse cx="50" cy="83" rx="36" ry="9.5" fill="#000" opacity=".13"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(64.9,76.7) rotate(328) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(64.9,76.7) rotate(328) scale(1,0.5)"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(29.9,77.1) rotate(353) scale(1,0.5)" class="h"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(29.9,77.1) rotate(353) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.7,-3.6 11.2,0 C8.7,3.6 3.4,3.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(35.3,77.2) rotate(26) scale(1,0.5)" class="h"/><path d="M0,0 C3.4,-3.6 8.7,-3.6 11.2,0 C8.7,3.6 3.4,3.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(35.3,77.2) rotate(26) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(52.1,77.3) rotate(280) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(52.1,77.3) rotate(280) scale(1,0.5)"/><path d="M0,0 C3.0,-3.3 7.9,-3.3 10.2,0 C7.9,3.3 3.0,3.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(61.7,78.2) rotate(31) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.3 7.9,-3.3 10.2,0 C7.9,3.3 3.0,3.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(61.7,78.2) rotate(31) scale(1,0.5)"/><path d="M0,0 C3.5,-3.7 9.1,-3.7 11.7,0 C9.1,3.7 3.5,3.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(70.0,79.7) rotate(347) scale(1,0.5)" class="h"/><path d="M0,0 C3.5,-3.7 9.1,-3.7 11.7,0 C9.1,3.7 3.5,3.7 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(70.0,79.7) rotate(347) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(79.3,80.2) rotate(42) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(79.3,80.2) rotate(42) scale(1,0.5)"/><path d="M0,0 C2.8,-2.9 7.2,-2.9 9.2,0 C7.2,2.9 2.8,2.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(47.7,80.6) rotate(36) scale(1,0.5)" class="h"/><path d="M0,0 C2.8,-2.9 7.2,-2.9 9.2,0 C7.2,2.9 2.8,2.9 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(47.7,80.6) rotate(36) scale(1,0.5)"/><path d="M0,0 C2.9,-3.1 7.5,-3.1 9.6,0 C7.5,3.1 2.9,3.1 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(82.2,81.2) rotate(287) scale(1,0.5)" class="h"/><path d="M0,0 C2.9,-3.1 7.5,-3.1 9.6,0 C7.5,3.1 2.9,3.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(82.2,81.2) rotate(287) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.2,-3.4 10.6,0 C8.2,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(23.8,81.3) rotate(201) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.2,-3.4 10.6,0 C8.2,3.4 3.2,3.4 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(23.8,81.3) rotate(201) scale(1,0.5)"/><path d="M0,0 C3.5,-3.7 9.0,-3.7 11.6,0 C9.0,3.7 3.5,3.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(42.1,81.7) rotate(69) scale(1,0.5)" class="h"/><path d="M0,0 C3.5,-3.7 9.0,-3.7 11.6,0 C9.0,3.7 3.5,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(42.1,81.7) rotate(69) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.3,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(24.7,81.7) rotate(47) scale(1,0.5)" class="h"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.3,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(24.7,81.7) rotate(47) scale(1,0.5)"/><path d="M0,0 C3.1,-3.4 8.2,-3.4 10.5,0 C8.2,3.4 3.1,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(82.9,81.9) rotate(42) scale(1,0.5)" class="h"/><path d="M0,0 C3.1,-3.4 8.2,-3.4 10.5,0 C8.2,3.4 3.1,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(82.9,81.9) rotate(42) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(23.1,82.0) rotate(77) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(23.1,82.0) rotate(77) scale(1,0.5)"/><path d="M0,0 C3.5,-3.8 9.2,-3.8 11.8,0 C9.2,3.8 3.5,3.8 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(65.1,82.0) rotate(350) scale(1,0.5)" class="h"/><path d="M0,0 C3.5,-3.8 9.2,-3.8 11.8,0 C9.2,3.8 3.5,3.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(65.1,82.0) rotate(350) scale(1,0.5)"/><path d="M0,0 C3.6,-3.9 9.4,-3.9 12.1,0 C9.4,3.9 3.6,3.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(52.2,82.8) rotate(109) scale(1,0.5)" class="h"/><path d="M0,0 C3.6,-3.9 9.4,-3.9 12.1,0 C9.4,3.9 3.6,3.9 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(52.2,82.8) rotate(109) scale(1,0.5)"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(72.1,83.0) rotate(76) scale(1,0.5)" class="h"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(72.1,83.0) rotate(76) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.2,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(33.2,83.0) rotate(308) scale(1,0.5)" class="h"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.2,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(33.2,83.0) rotate(308) scale(1,0.5)"/><path d="M0,0 C3.7,-4.0 9.7,-4.0 12.5,0 C9.7,4.0 3.7,4.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(26.4,83.7) rotate(36) scale(1,0.5)" class="h"/><path d="M0,0 C3.7,-4.0 9.7,-4.0 12.5,0 C9.7,4.0 3.7,4.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(26.4,83.7) rotate(36) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(47.9,83.9) rotate(77) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(47.9,83.9) rotate(77) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.2,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(65.1,84.3) rotate(278) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.2,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(65.1,84.3) rotate(278) scale(1,0.5)"/><path d="M0,0 C2.8,-3.0 7.2,-3.0 9.3,0 C7.2,3.0 2.8,3.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(21.8,84.5) rotate(107) scale(1,0.5)" class="h"/><path d="M0,0 C2.8,-3.0 7.2,-3.0 9.3,0 C7.2,3.0 2.8,3.0 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(21.8,84.5) rotate(107) scale(1,0.5)"/><path d="M0,0 C3.3,-3.5 8.6,-3.5 11.0,0 C8.6,3.5 3.3,3.5 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(43.7,85.3) rotate(32) scale(1,0.5)" class="h"/><path d="M0,0 C3.3,-3.5 8.6,-3.5 11.0,0 C8.6,3.5 3.3,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(43.7,85.3) rotate(32) scale(1,0.5)"/><path d="M0,0 C3.3,-3.6 8.7,-3.6 11.1,0 C8.7,3.6 3.3,3.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(56.0,85.4) rotate(87) scale(1,0.5)" class="h"/><path d="M0,0 C3.3,-3.6 8.7,-3.6 11.1,0 C8.7,3.6 3.3,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(56.0,85.4) rotate(87) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(75.0,85.6) rotate(134) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(75.0,85.6) rotate(134) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.7,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(59.4,86.9) rotate(345) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.7,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(59.4,86.9) rotate(345) scale(1,0.5)"/><ellipse cx="50" cy="80" rx="14" ry="3.4" fill="#000" opacity=".22"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(41.0,80.5) rotate(24) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(41.0,80.5) rotate(24) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(50.0,82.5) rotate(160) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(50.0,82.5) rotate(160) scale(1,0.5)"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(-33) scale(1,1.0)" class="h"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(-33) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(19) scale(1,1.0)" class="h"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(19) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-53) scale(1,1.0)" class="h"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-53) scale(1,1.0)"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-1) scale(1,1.0)" class="h"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-1) scale(1,1.0)"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-73) scale(1,1.0)" class="h"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-73) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-21) scale(1,1.0)" class="h"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-21) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-93) scale(1,1.0)" class="h"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-93) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-41) scale(1,1.0)" class="h"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-41) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-113) scale(1,1.0)" class="h"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-113) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-61) scale(1,1.0)" class="h"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-61) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-133) scale(1,1.0)" class="h"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-133) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-81) scale(1,1.0)" class="h"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-81) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-153) scale(1,1.0)" class="h"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-153) scale(1,1.0)"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-101) scale(1,1.0)" class="h"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-101) scale(1,1.0)"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-173) scale(1,1.0)" class="h"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-173) scale(1,1.0)"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-121) scale(1,1.0)" class="h"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-121) scale(1,1.0)"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(213) scale(1,1.0)" class="h"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(213) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(161) scale(1,1.0)" class="h"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(161) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(233) scale(1,1.0)" class="h"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(233) scale(1,1.0)"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(181) scale(1,1.0)" class="h"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(181) scale(1,1.0)"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(253) scale(1,1.0)" class="h"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(253) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(201) scale(1,1.0)" class="h"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(201) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(273) scale(1,1.0)" class="h"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(273) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(221) scale(1,1.0)" class="h"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(221) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(293) scale(1,1.0)" class="h"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(293) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(241) scale(1,1.0)" class="h"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(241) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(313) scale(1,1.0)" class="h"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(313) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(261) scale(1,1.0)" class="h"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(261) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(333) scale(1,1.0)" class="h"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(333) scale(1,1.0)"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(281) scale(1,1.0)" class="h"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(281) scale(1,1.0)"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(353) scale(1,1.0)" class="h"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(353) scale(1,1.0)"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(301) scale(1,1.0)" class="h"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(301) scale(1,1.0)"/><g fill="#F5B93B" stroke="none"><path d="M20,30 l1.6,3 3,1.6 -3,1.6 -1.6,3 -1.6,-3 -3,-1.6 3,-1.6 Z"/><path d="M79,44 l1.2,2.3 2.3,1.2 -2.3,1.2 -1.2,2.3 -1.2,-2.3 -2.3,-1.2 2.3,-1.2 Z"/><circle cx="72" cy="20" r="1.6"/></g></svg>';
+  var winBadge = (px) => WIN_SVG.replace(/__S__/g, px);
+  var TROPHY_SVG = '<svg viewBox="0 0 100 100" style="width:__S__px;height:__S__px"><ellipse cx="50" cy="83" rx="36" ry="9.5" fill="#000" opacity=".13"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(64.9,76.7) rotate(328) scale(1,0.5)"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(29.9,77.1) rotate(353) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.7,-3.6 11.2,0 C8.7,3.6 3.4,3.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(35.3,77.2) rotate(26) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(52.1,77.3) rotate(280) scale(1,0.5)"/><path d="M0,0 C3.0,-3.3 7.9,-3.3 10.2,0 C7.9,3.3 3.0,3.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(61.7,78.2) rotate(31) scale(1,0.5)"/><path d="M0,0 C3.5,-3.7 9.1,-3.7 11.7,0 C9.1,3.7 3.5,3.7 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(70.0,79.7) rotate(347) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(79.3,80.2) rotate(42) scale(1,0.5)"/><path d="M0,0 C2.8,-2.9 7.2,-2.9 9.2,0 C7.2,2.9 2.8,2.9 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(47.7,80.6) rotate(36) scale(1,0.5)"/><path d="M0,0 C2.9,-3.1 7.5,-3.1 9.6,0 C7.5,3.1 2.9,3.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(82.2,81.2) rotate(287) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.2,-3.4 10.6,0 C8.2,3.4 3.2,3.4 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(23.8,81.3) rotate(201) scale(1,0.5)"/><path d="M0,0 C3.5,-3.7 9.0,-3.7 11.6,0 C9.0,3.7 3.5,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(42.1,81.7) rotate(69) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.3,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(24.7,81.7) rotate(47) scale(1,0.5)"/><path d="M0,0 C3.1,-3.4 8.2,-3.4 10.5,0 C8.2,3.4 3.1,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(82.9,81.9) rotate(42) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(23.1,82.0) rotate(77) scale(1,0.5)"/><path d="M0,0 C3.5,-3.8 9.2,-3.8 11.8,0 C9.2,3.8 3.5,3.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(65.1,82.0) rotate(350) scale(1,0.5)"/><path d="M0,0 C3.6,-3.9 9.4,-3.9 12.1,0 C9.4,3.9 3.6,3.9 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(52.2,82.8) rotate(109) scale(1,0.5)"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(72.1,83.0) rotate(76) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.2,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(33.2,83.0) rotate(308) scale(1,0.5)"/><path d="M0,0 C3.7,-4.0 9.7,-4.0 12.5,0 C9.7,4.0 3.7,4.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(26.4,83.7) rotate(36) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(47.9,83.9) rotate(77) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.2,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(65.1,84.3) rotate(278) scale(1,0.5)"/><path d="M0,0 C2.8,-3.0 7.2,-3.0 9.3,0 C7.2,3.0 2.8,3.0 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(21.8,84.5) rotate(107) scale(1,0.5)"/><path d="M0,0 C3.3,-3.5 8.6,-3.5 11.0,0 C8.6,3.5 3.3,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(43.7,85.3) rotate(32) scale(1,0.5)"/><path d="M0,0 C3.3,-3.6 8.7,-3.6 11.1,0 C8.7,3.6 3.3,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(56.0,85.4) rotate(87) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(75.0,85.6) rotate(134) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.7,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(59.4,86.9) rotate(345) scale(1,0.5)"/><ellipse cx="50" cy="80" rx="14" ry="3.4" fill="#000" opacity=".22"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(41.0,80.5) rotate(24) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(50.0,82.5) rotate(160) scale(1,0.5)"/>__MEDAL__<path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(-33) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(19) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-53) scale(1,1.0)"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-1) scale(1,1.0)"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-73) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-21) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-93) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-41) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-113) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-61) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-133) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-81) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-153) scale(1,1.0)"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-101) scale(1,1.0)"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-173) scale(1,1.0)"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-121) scale(1,1.0)"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(213) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(161) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(233) scale(1,1.0)"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(181) scale(1,1.0)"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(253) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(201) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(273) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(221) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(293) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(241) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(313) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(261) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(333) scale(1,1.0)"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(281) scale(1,1.0)"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(353) scale(1,1.0)"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(301) scale(1,1.0)"/><g fill="#F5B93B" stroke="none"><path d="M20,30 l1.6,3 3,1.6 -3,1.6 -1.6,3 -1.6,-3 -3,-1.6 3,-1.6 Z"/><path d="M79,44 l1.2,2.3 2.3,1.2 -2.3,1.2 -1.2,2.3 -1.2,-2.3 -2.3,-1.2 2.3,-1.2 Z"/><circle cx="72" cy="20" r="1.6"/></g></svg>';
+  var MEDALS = {
+    gold: ["#F5B93B", "#8F6209"],
+    silver: ["#D7DBE2", "#6E7684"],
+    bronze: ["#D08A4C", "#7A4A1E"]
+  };
+  function medalEgg(kind) {
+    const [fill, edge] = MEDALS[kind] || [];
+    if (!fill) return "";
+    return `<g transform="translate(50,39)"><path d="M0,-11 C5.4,-11 8.6,-4.4 8.6,2.2 C8.6,8.2 4.8,11 0,11 C-4.8,11 -8.6,8.2 -8.6,2.2 C-8.6,-4.4 -5.4,-11 0,-11 Z" fill="${fill}" stroke="${edge}" stroke-width="1.6"/><ellipse cx="-2.8" cy="-3.6" rx="2" ry="3.4" fill="#FFFFFF" opacity=".8" transform="rotate(-14 -2.8 -3.6)"/></g>`;
+  }
+  var trophy = (px, medal) => TROPHY_SVG.replace(/__S__/g, px).replace("__MEDAL__", medalEgg(medal));
+
+  // src/features/shows.js
+  async function renderShows() {
+    var _a, _b;
+    clearTimersFor("shows");
+    state.tab = "shows";
+    state.currentShow = null;
+    markTab();
+    const todayStr = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
+    const graceStr = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
+    const [{ data: up }, { data: past }, { data: seas }] = await Promise.all([
+      db.from("shows").select("*").gte("showdate", graceStr).order("showdate"),
+      db.from("shows").select("*").lt("showdate", graceStr).order("showdate", { ascending: false }).limit(12),
+      db.from("seasons").select("*").order("start_date")
+    ]);
+    const seasonOf = (d) => (seas || []).find((se) => se.start_date <= d && d <= se.end_date);
+    const isRecent = (s) => s.showdate < todayStr || s.status === "final";
+    const upcoming = (up || []).filter((s) => !isRecent(s));
+    const justPlayed = (up || []).filter(isRecent);
+    const finals = [...up || [], ...past || []].filter((s) => s.status === "final").map((s) => s.id);
+    const winners = {};
+    if (finals.length) {
+      const [{ data: sc }, { data: pl }] = await Promise.all([
+        db.from("scores").select("show_id,player_id,points").in("show_id", finals),
+        db.from("players_public").select("id,name")
+      ]);
+      const pn = Object.fromEntries((pl || []).map((p) => [p.id, p.name]));
+      const best = {};
+      for (const s of sc || []) {
+        if (s.points <= 0) continue;
+        if (!best[s.show_id] || s.points > best[s.show_id]) best[s.show_id] = s.points;
+      }
+      for (const s of sc || []) {
+        if (s.points > 0 && s.points === best[s.show_id])
+          ((_b = winners[_a = s.show_id]) != null ? _b : winners[_a] = { points: s.points, names: [] }).names.push(pn[s.player_id] || "?");
+      }
+    }
+    const row = (s) => {
+      const st = showState(s);
+      const cls = { open: "open", live: "live", locked: "locked", final: "final", played: "final" }[st] || "";
+      const cd = st === "open" ? countdown(s.cutoff_at) : null;
+      const txt = st === "final" ? "complete" : st === "open" && cd ? "locks in " + cd : st;
+      const win = st === "final" && winners[s.id] ? ` <span style="color:var(--yolk);font-size:.82rem">${winBadge(36)} ${winners[s.id].names.map(esc).join(" & ")} \xB7 ${winners[s.id].points}</span>` : "";
+      return `<div class="showrow">
+      <div class="date">${fmtDate(s.showdate)}</div>
+      <div class="v"><div class="venue">${esc(s.venue || "TBA")}</div>
+        <div class="loc">${esc(s.city || "")}${s.state ? ", " + esc(s.state) : ""}
+          <span class="pill ${cls}" data-cd="${st === "open" ? s.cutoff_at : ""}">${txt}</span>${win}</div></div>
+      <button onclick="openShow(${s.id})">${st === "open" ? "Pick" : "View"}</button>
+    </div>`;
+    };
+    const withSeasons = (list) => {
+      let last;
+      return list.map((sh) => {
+        const se = seasonOf(sh.showdate);
+        const label = se ? se.name : "Between tours";
+        const brk = label !== last ? `<div class="setbreak">${esc(label)}</div>` : "";
+        last = label;
+        return brk + row(sh);
+      }).join("");
+    };
+    $("#main").innerHTML = `
+    ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(row).join("")}</div>` : ""}
+    <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet \u2014 admin can sync from The Carton.</p>'}</div>
+    <div class="panel"><h2>Recent</h2>${withSeasons(past || []) || '<p class="muted">Nothing yet.</p>'}</div>`;
+    state.timers.push(setInterval(() => {
+      document.querySelectorAll("[data-cd]").forEach((el) => {
+        if (!el.dataset.cd) return;
+        const cd = countdown(el.dataset.cd);
+        el.textContent = cd ? "locks in " + cd : "locked";
+      });
+    }, 1e3));
+  }
+
+  // src/features/standings.js
+  function setBoardSeason(v) {
+    state.boardSeason = v;
+    renderBoard();
+  }
+  async function renderBoard() {
+    var _a, _b, _c, _d, _e;
+    clearTimersFor("board");
+    state.tab = "board";
+    markTab();
+    const [{ data: sc }, { data: plist }, { data: allShows }, { data: seasons }] = await Promise.all([
+      db.from("scores").select("points, player_id, show_id"),
+      db.from("players_public").select("id,name"),
+      db.from("shows").select("id,showdate,venue,status"),
+      db.from("seasons").select("*").order("start_date")
+    ]);
+    const pname = Object.fromEntries((plist || []).map((p) => [p.id, p.name]));
+    const showById = Object.fromEntries((allShows || []).map((sh) => [sh.id, sh]));
+    const today = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
+    if (state.boardSeason === null) {
+      const cur = (seasons || []).find((se) => se.start_date <= today && today <= se.end_date) || (seasons || []).slice(-1)[0];
+      state.boardSeason = cur ? String(cur.id) : "all";
+    }
+    const season = (seasons || []).find((se) => String(se.id) === state.boardSeason);
+    const inScope = (row) => {
+      if (!season) return true;
+      const sh = showById[row.show_id];
+      if (!sh) return false;
+      return sh.showdate >= season.start_date && sh.showdate <= season.end_date;
+    };
+    const T = {};
+    for (const row of sc || []) {
+      const t = (_b = T[_a = row.player_id]) != null ? _b : T[_a] = { career: 0, scoped: 0, shows: 0, high: 0, highShow: null, wins: 0 };
+      t.career += row.points;
+      if (inScope(row)) {
+        t.scoped += row.points;
+        t.shows++;
+        if (row.points > t.high) {
+          t.high = row.points;
+          t.highShow = showById[row.show_id];
+        }
+      }
+    }
+    const byShow = {};
+    for (const row of sc || []) if (inScope(row) && ((_c = showById[row.show_id]) == null ? void 0 : _c.status) === "final")
+      ((_e = byShow[_d = row.show_id]) != null ? _e : byShow[_d] = []).push(row);
+    for (const arr of Object.values(byShow)) {
+      const mx = Math.max(...arr.map((x) => x.points));
+      if (mx > 0) {
+        for (const x of arr) if (x.points === mx) T[x.player_id].wins++;
+      }
+    }
+    const rows = Object.entries(T).sort((a, b) => b[1].scoped - a[1].scoped || b[1].career - a[1].career);
+    const opts = [
+      ...(seasons || []).map((se) => `<option value="${se.id}" ${state.boardSeason === String(se.id) ? "selected" : ""}>${esc(se.name)}</option>`),
+      `<option value="all" ${state.boardSeason === "all" ? "selected" : ""}>All time</option>`
+    ].join("");
+    const scopeName = season ? esc(season.name) : "All time";
+    const podOrder = [1, 0, 2].filter((i) => rows[i]);
+    const podium = rows.length ? `<div class="podium">${podOrder.map((i) => {
+      const [pid, r] = rows[i];
+      return `<div class="pod ${i === 0 ? "first" : ""}">${trophy(i === 0 ? 118 : 82, ["gold", "silver", "bronze"][i])}
+      <b>${esc(pname[pid] || "?")}</b><span class="podpts">${r.scoped} pts</span></div>`;
+    }).join("")}</div>` : "";
+    const statRows = rows.filter(([, r]) => r.shows > 0).sort((a, b) => b[1].scoped / b[1].shows - a[1].scoped / a[1].shows);
+    $("#main").innerHTML = `
+    <div class="panel">
+      <div class="row"><h2 style="margin:0">Standings</h2>
+        <select onchange="setBoardSeason(this.value)"
+          style="margin-left:auto;background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.82rem">${opts}</select></div>
+      ${podium}
+      <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
+      ${rows.map(([id, r], i) => `<tr class="${id === state.session.id ? "me" : ""}">
+        <td class="rank">${i + 1}</td><td>${esc(pname[id] || "?")}</td>
+        <td class="pts">${season ? r.scoped : r.career}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">No scores yet \u2014 pick some songs.</td></tr>'}
+      </table></div>
+    </div>
+    <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">\xB7 ${scopeName}</span></h2>
+      <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th><th style="text-align:right">Shows</th><th style="text-align:right">Avg</th><th style="text-align:right">High</th><th style="text-align:right">${winBadge(18)}</th></tr>
+      ${statRows.map(([id, r]) => {
+      var _a2;
+      return `<tr class="${id === state.session.id ? "me" : ""}">
+        <td>${esc(pname[id] || "?")}</td><td class="pts">${r.shows}</td>
+        <td class="pts">${(r.scoped / r.shows).toFixed(1)}</td>
+        <td class="pts" title="${esc(((_a2 = r.highShow) == null ? void 0 : _a2.venue) || "")}">${r.high}</td>
+        <td class="pts">${r.wins || 0}</td></tr>`;
+    }).join("") || '<tr><td colspan="5" class="muted">Stats appear once shows score.</td></tr>'}
+      </table></div>
+      <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played \xB7 High = best single show (venue on hover) \xB7 wreath = shows won</p>
+    </div>`;
+  }
+
+  // src/features/admin.js
+  async function renderAdmin() {
+    var _a, _b, _c, _d;
+    clearTimersFor("admin");
+    state.tab = "admin";
+    markTab();
+    await loadConfig();
+    const cfg = state.cfg;
+    const b = cfg.bonuses || {};
+    const os = cfg.oneset || { slots: [
+      { key: "opener", type: "opener", label: "Opener", points: 2 },
+      { key: "closer", type: "closer", label: "Closer", points: 2 },
+      { key: "cover1", type: "cover_pick", label: "Cover Pick", points: 2 }
+    ], flat_picks: 3, flat_points: 1 };
+    const { data: shows } = await db.from("shows").select("*").gte("showdate", new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10)).order("showdate");
+    const { data: seasonsA } = await db.from("seasons").select("*").order("start_date");
+    const todayA = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
+    const nextShow = (shows || []).find((sh) => sh.showdate >= todayA) || (shows || [])[(shows || []).length - 1];
+    $("#main").innerHTML = `
+    <div class="panel"><h2>Who's picked</h2>
+      <div class="field"><label>Show</label>
+        <select id="roster-show" onchange="loadRoster()">
+          ${(shows || []).map((sh) => `<option value="${sh.id}" ${nextShow && sh.id === nextShow.id ? "selected" : ""}>${fmtDate(sh.showdate)} \u2014 ${esc(sh.venue || "TBA")}</option>`).join("")}
+        </select></div>
+      <div id="roster"><p class="muted">Pick a show.</p></div>
+    </div>
+    <div class="panel"><h2>Master switch</h2>
+      <div class="field"><label>Voting override</label>
+        <select id="c-override">
+          <option value="auto" ${(cfg.voting_override || "auto") === "auto" ? "selected" : ""}>Auto \u2014 cutoffs decide</option>
+          <option value="locked" ${cfg.voting_override === "locked" ? "selected" : ""}>Locked \u2014 nobody can vote</option>
+          <option value="open" ${cfg.voting_override === "open" ? "selected" : ""}>Open \u2014 voting open for today + future shows</option>
+        </select></div>
+      <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.</p>
+    </div>
+    <div class="panel"><h2>Seasons</h2>
+      <p class="muted">Named date ranges \u2014 shows sort themselves in by date.</p>
+      <div id="seasonrows">${(seasonsA || []).map(seasonRow).join("")}</div>
+      <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
+    </div>
+    <div class="panel"><h2>Game rules \u2014 standard shows</h2>
+      <p class="muted">Slotted picks (position matters):</p>
+      <div id="slots">${(cfg.slots || []).map((sl) => adminSlotRow(sl)).join("")}</div>
+      <button class="btn ghost small" onclick="addSlot('slots')">+ add slot</button>
+      <div class="grid2" style="margin-top:14px">
+        <div class="field"><label>Flat picks (count)</label><input id="c-flat" type="number" min="0" value="${cfg.flat_picks}"></div>
+        <div class="field"><label>Points per flat pick</label><input id="c-flatpts" type="number" min="0" value="${cfg.flat_points}"></div>
+        <div class="field"><label>Partial credit (slot song played elsewhere)</label>
+          <select id="c-partial"><option value="true" ${cfg.partial_credit ? "selected" : ""}>On</option><option value="false" ${!cfg.partial_credit ? "selected" : ""}>Off</option></select></div>
+        <div class="field"><label>Partial points</label><input id="c-partpts" type="number" min="0" value="${cfg.partial_points}"></div>
+        <div class="field"><label>Bonus: cover</label><input id="c-bcover" type="number" min="0" value="${b.cover || 0}"></div>
+        <div class="field"><label>Bonus: debut</label><input id="c-bdebut" type="number" min="0" value="${b.debut || 0}"></div>
+        <div class="field"><label>Bonus: perfect sheet (every pick hits)</label><input id="c-bperfect" type="number" min="0" value="${b.perfect || 0}"></div>
+        <div class="field"><label>Allow duplicate songs across picks</label>
+          <select id="c-dupes"><option value="false" ${!cfg.allow_duplicates ? "selected" : ""}>No</option><option value="true" ${cfg.allow_duplicates ? "selected" : ""}>Yes</option></select></div>
+        <div class="field"><label>Wildcard: "Any Debut" (hits if any debut is played)</label>
+          <select id="c-wcdebut"><option value="true" ${((_b = (_a = cfg.wildcards) == null ? void 0 : _a.debut) != null ? _b : true) ? "selected" : ""}>Players may pick it</option><option value="false" ${((_d = (_c = cfg.wildcards) == null ? void 0 : _c.debut) != null ? _d : true) ? "" : "selected"}>Off</option></select></div>
+      </div>
+    </div>
+    <div class="panel"><h2>Game rules \u2014 one-set shows</h2>
+      <p class="muted">Used for shows toggled to "1 set" below. Festival-tagged shows sync in as 1 set automatically.</p>
+      <div id="slots1">${(os.slots || []).map((sl) => adminSlotRow(sl)).join("")}</div>
+      <button class="btn ghost small" onclick="addSlot('slots1')">+ add slot</button>
+      <div class="grid2" style="margin-top:14px">
+        <div class="field"><label>Flat picks (count)</label><input id="c1-flat" type="number" min="0" value="${os.flat_picks}"></div>
+        <div class="field"><label>Points per flat pick</label><input id="c1-flatpts" type="number" min="0" value="${os.flat_points}"></div>
+      </div>
+      <button class="btn" onclick="saveConfig()">Save all rules</button>
+      <div class="err" id="cfg-err"></div>
+      <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments.</p>
+    </div>
+    <div class="panel"><h2>Shows & cutoffs</h2>
+      <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
+      ${(shows || []).map((sh) => `<div class="showrow">
+        <div class="date">${fmtDate(sh.showdate)}</div>
+        <div class="v"><div class="venue">${esc(sh.venue || "TBA")}</div>
+          <div class="loc"><input type="datetime-local" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : ""}" style="background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.8rem"></div></div>
+        <button onclick="toggleFormat(${sh.id}, '${sh.format === "one_set" ? "standard" : "one_set"}')" title="pick sheet format">${sh.format === "one_set" ? "1 set" : "2 set"}</button>
+        <button onclick="saveCutoff(${sh.id}, this)">Set</button>
+        ${sh.status !== "final" && sh.cutoff_at && new Date(sh.cutoff_at) < /* @__PURE__ */ new Date() ? '<button onclick="finalizeShow(' + sh.id + ', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ""}
+      </div>`).join("") || '<p class="muted">No shows \u2014 sync first.</p>'}
+    </div>
+    <div class="panel"><h2>Players</h2>
+      <div id="playerlist"><p class="muted">Loading\u2026</p></div>
+      <button class="linkbtn" id="banToggle" onclick="toggleBans()" style="margin-top:8px">show ban list</button>
+      <div id="banlist" class="hidden" style="margin-top:6px"></div>
+    </div>
+    <div class="panel"><h2>Data</h2>
+      <div class="row">
+        <button class="btn ghost small" onclick="runEdge('sync_shows', this)">Sync shows</button>
+        <button class="btn ghost small" onclick="runEdge('sync_songs', this)">Sync song catalog</button>
+        <button class="btn ghost small" onclick="runEdge('score', this)">Run scoring now</button>
+      </div>
+      <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
+    </div>`;
+    if ((shows || []).length) loadRoster();
+    loadPlayers();
+  }
+  async function loadPlayers() {
+    const { data: pl } = await db.from("players_public").select("*").order("created_at");
+    $("#playerlist").innerHTML = (pl || []).map((p) => `
+    <div class="pickres hit"><span>${p.is_admin ? "\u2605" : "\xB7"}</span>
+      <span>${esc(p.name)}</span>
+      <span class="pt">${p.id === state.session.id ? '<small class="muted">you</small>' : p.is_admin ? '<small class="muted">admin</small>' : `<button class="btn ghost small" onclick="bootPlayer('` + p.id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')" style="border-color:var(--coral);color:var(--coral)">Boot</button>`}</span>
+    </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
+  }
+  function seasonRow(se) {
+    const v = se || { id: "", name: "", start_date: "", end_date: "" };
+    return `<div class="admin-slot" data-season="${v.id}">
+    <input class="k" placeholder="Name (e.g. Summer Tour 2026)" value="${esc(v.name)}">
+    <input type="date" value="${v.start_date}" style="width:130px">
+    <input type="date" value="${v.end_date}" style="width:130px">
+    <button class="btn ghost small" onclick="saveSeason(this.parentElement)">Save</button>
+    ${v.id ? `<button class="btn ghost small" onclick="deleteSeason(${v.id})" style="border-color:var(--coral);color:var(--coral)">\u2715</button>` : ""}
+  </div>`;
+  }
+  function addSeasonRow() {
+    $("#seasonrows").insertAdjacentHTML("beforeend", seasonRow(null));
+  }
+  async function saveSeason(row) {
+    const [name, start, end] = [...row.querySelectorAll("input")].map((i) => i.value);
+    const id = row.dataset.season ? Number(row.dataset.season) : null;
+    try {
+      await rpc("admin_save_season", { p_name: state.session.name, p_pin: state.session.pin, p_id: id, p_sname: name, p_start: start || null, p_end: end || null });
+      toast("Season saved \u2714", "score");
+      state.boardSeason = null;
+      renderAdmin();
+    } catch (e) {
+      toast(esc(e.message));
+    }
+  }
+  async function deleteSeason(id) {
+    if (!confirm("Delete this season? Scores are untouched \u2014 only the grouping goes away.")) return;
+    try {
+      await rpc("admin_delete_season", { p_name: state.session.name, p_pin: state.session.pin, p_id: id });
+      toast("Season deleted", "score");
+      state.boardSeason = null;
+      renderAdmin();
+    } catch (e) {
+      toast(esc(e.message));
+    }
+  }
+  var bansOpen = false;
+  async function toggleBans() {
+    bansOpen = !bansOpen;
+    $("#banToggle").textContent = bansOpen ? "hide ban list" : "show ban list";
+    $("#banlist").classList.toggle("hidden", !bansOpen);
+    if (!bansOpen) return;
+    $("#banlist").innerHTML = '<p class="muted">Loading\u2026</p>';
+    try {
+      const rows = await rpc("admin_list_bans", { p_name: state.session.name, p_pin: state.session.pin });
+      $("#banlist").innerHTML = (rows || []).map((r) => `
+      <div class="pickres miss"><span>\u26D4</span><span>${esc(r.name)}</span>
+        <span class="pt"><small class="muted">${new Date(r.banned_at).toLocaleDateString()}</small>
+          <button class="btn ghost small" onclick="unban('${esc(r.name).replace(/'/g, "\\'")}')">Unban</button></span>
+      </div>`).join("") || '<p class="muted">Nobody is banned. A peaceful kingdom.</p>';
+    } catch (e) {
+      $("#banlist").innerHTML = `<p class="err">${esc(e.message)}</p>`;
+    }
+  }
+  async function unban(name) {
+    if (!confirm(`Unban "${name}"? The name becomes registerable again.`)) return;
+    try {
+      await rpc("admin_unban", { p_name: state.session.name, p_pin: state.session.pin, p_banned: name });
+      toast(`${name} unbanned`, "score");
+      bansOpen = false;
+      toggleBans();
+    } catch (e) {
+      toast(esc(e.message));
+    }
+  }
+  async function bootPlayer(id, name) {
+    if (!confirm(`Remove ${name}? Their picks and scores are deleted permanently \u2014 including any shows they won.`)) return;
+    const ban = confirm(`Also block the name "${name}" from re-registering?
+
+OK = boot + ban \xB7 Cancel = boot only`);
+    try {
+      await rpc("admin_boot_player", { p_name: state.session.name, p_pin: state.session.pin, p_player_id: id, p_ban: ban });
+      toast(`${name} booted${ban ? " and banned" : ""}`, "score");
+      loadPlayers();
+      loadRoster();
+    } catch (e) {
+      toast(esc(e.message));
+    }
+  }
+  async function toggleFormat(showId, next) {
+    try {
+      await rpc("admin_set_show_format", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: showId, p_format: next });
+      toast("Format: " + (next === "one_set" ? "1 set" : "2 set"), "score");
+      renderAdmin();
+    } catch (e) {
+      toast(esc(e.message));
+    }
+  }
+  async function loadRoster() {
+    const showId = Number($("#roster-show").value);
+    if (!showId) return;
+    try {
+      const rows = await rpc("admin_pick_status", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: showId });
+      const total = rows.length, done = rows.filter((r) => r.picks_count > 0).length;
+      $("#roster").innerHTML = `
+      <p class="muted" style="margin-bottom:6px"><b style="color:var(--mint)">${done}</b> of ${total} players have picks in</p>
+      ${rows.map((r) => `<div class="pickres ${r.picks_count > 0 ? "hit" : "miss"}">
+        <span>${r.picks_count > 0 ? "\u2714" : "\u2014"}</span><span>${esc(r.player_name)}</span>
+        <span class="pt">${r.picks_count > 0 ? r.picks_count + " picks \xB7 saved " + new Date(r.last_saved).toLocaleString(void 0, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "no picks yet"}</span>
+      </div>`).join("")}`;
+    } catch (e) {
+      $("#roster").innerHTML = `<p class="err">${esc(e.message)}</p>`;
+    }
+  }
+  var SLOT_TYPES = {
+    opener: "Opener \u2014 first song of the show",
+    set1_closer: "Set 1 closer",
+    set2_opener: "Set 2 opener",
+    closer: "Closer \u2014 last pre-encore song",
+    encore: "Encore \u2014 any encore song",
+    show_closer: "Show closer \u2014 final song of the night",
+    second_song: "2nd song of the show",
+    cover_pick: "Cover pick \u2014 name a cover, scores if played (repeatable)"
+  };
+  function adminSlotRow(sl) {
+    const t = sl.type || sl.key;
+    let opts = Object.entries(SLOT_TYPES).map(([k, d]) => `<option value="${k}" ${k === t ? "selected" : ""}>${d}</option>`).join("");
+    if (t && !(t in SLOT_TYPES)) opts += `<option value="${esc(t)}" selected>${esc(t)} (legacy)</option>`;
+    return `<div class="admin-slot">
+    <select class="k" title="which position this slot scores against">${opts}</select>
+    <input class="k" placeholder="Label players see" value="${esc(sl.label)}">
+    <input class="p" type="number" min="0" value="${sl.points}">
+    <button class="btn ghost small" onclick="this.parentElement.remove()">\u2715</button></div>`;
+  }
+  function addSlot(target) {
+    $("#" + target).insertAdjacentHTML("beforeend", adminSlotRow({ key: "encore", label: "", points: 2 }));
+  }
+  function readSlots(containerId) {
+    let coverN = 0;
+    return [...document.querySelectorAll("#" + containerId + " .admin-slot")].map((r) => {
+      const type = r.querySelector("select.k").value;
+      const [l, p] = r.querySelectorAll("input");
+      const key = type === "cover_pick" ? "cover" + ++coverN : type;
+      return { key, type, label: l.value.trim(), points: Number(p.value) };
+    }).filter((sl) => sl.type && sl.label);
+  }
+  async function saveConfig() {
+    $("#cfg-err").textContent = "";
+    const slots = readSlots("slots"), slots1 = readSlots("slots1");
+    for (const arr of [slots, slots1]) {
+      const types = arr.filter((sl) => sl.type !== "cover_pick").map((sl) => sl.type);
+      if (new Set(types).size !== types.length) {
+        $("#cfg-err").textContent = "Each slot type (except Cover pick) can only be used once per section.";
+        return;
+      }
+    }
+    const data = {
+      slots,
+      flat_picks: Number($("#c-flat").value),
+      flat_points: Number($("#c-flatpts").value),
+      partial_credit: $("#c-partial").value === "true",
+      partial_points: Number($("#c-partpts").value),
+      allow_duplicates: $("#c-dupes").value === "true",
+      voting_override: $("#c-override").value,
+      bonuses: { cover: Number($("#c-bcover").value), debut: Number($("#c-bdebut").value), perfect: Number($("#c-bperfect").value), jamchart: 0 },
+      wildcards: { debut: $("#c-wcdebut").value === "true" },
+      oneset: { slots: slots1, flat_picks: Number($("#c1-flat").value), flat_points: Number($("#c1-flatpts").value) }
+    };
+    try {
+      await rpc("admin_update_config", { p_name: state.session.name, p_pin: state.session.pin, p_data: data });
+      state.cfg = data;
+      toast("Rules saved \u2714", "score");
+    } catch (e) {
+      $("#cfg-err").textContent = e.message;
+    }
+  }
+  async function saveCutoff(showId, btn) {
+    const input = document.querySelector(`input[data-show="${showId}"]`);
+    if (!input.value) return;
+    try {
+      await rpc("admin_set_cutoff", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: showId, p_cutoff: new Date(input.value).toISOString() });
+      btn.textContent = "\u2714";
+      setTimeout(() => btn.textContent = "Set", 1500);
+    } catch (e) {
+      toast(esc(e.message));
+    }
+  }
+  async function finalizeShow(showId, btn) {
+    if (!confirm("Run final scoring and mark this show complete? Picks and scores lock for good.")) return;
+    btn.disabled = true;
+    btn.textContent = "\u2026";
+    try {
+      await edgeFn("score").catch(() => {
+      });
+      await rpc("admin_set_show_status", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: showId, p_status: "final" });
+      toast("Show finalized \u{1F3C1}", "score");
+      renderAdmin();
+    } catch (e) {
+      toast(esc(e.message));
+      btn.disabled = false;
+      btn.textContent = "Finalize";
+    }
+  }
+  async function runEdge(action, btn) {
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = "\u2026";
+    try {
+      const r = await edgeFn(action);
+      toast(esc(JSON.stringify(r).slice(0, 120)), "score");
+      if (action === "sync_songs") loadSongs();
+    } catch (e) {
+      toast(esc(e.message));
+    }
+    btn.disabled = false;
+    btn.textContent = old;
+  }
+
+  // src/core/layout.js
+  function markTab() {
+    document.querySelectorAll("nav.tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === state.tab));
+  }
+  document.querySelectorAll("nav.tabs button").forEach((b) => b.onclick = () => {
+    ({ shows: renderShows, board: renderBoard, admin: renderAdmin })[b.dataset.tab]();
+  });
+  async function renderAll() {
+    if (!isDesktop()) {
+      await renderShows();
+      return;
+    }
+    applyLayout();
+    const savedShow = state.currentShow;
+    await renderBoard();
+    await renderShows();
+    if (state.session.is_admin) await renderAdmin();
+    state.currentShow = savedShow;
+  }
+  function applyLayout() {
+    const desk = isDesktop();
+    $("#cols") && ($("#cols").style.display = desk ? "grid" : "none");
+    const c = document.getElementById("cols");
+    if (c) {
+      const admin = !!(state.session && state.session.is_admin);
+      document.getElementById("col-admin").style.display = admin && desk ? "" : "none";
+      c.style.gridTemplateColumns = admin ? "1fr 1.15fr 1fr" : "1fr 1.2fr";
+    }
+  }
+  var _lastDesk = isDesktop();
+  window.addEventListener("resize", () => {
+    const now = isDesktop();
+    if (now !== _lastDesk) {
+      _lastDesk = now;
+      if (state.session) renderAll();
+    }
+  });
+
+  // src/features/picks.js
+  var isWildcard = (v) => (v || "").trim().toLowerCase() === "any debut";
+  async function openShow(id) {
+    if (isDesktop()) state.tab = "shows";
+    clearTimersFor("shows");
+    const { data: show } = await db.from("shows").select("*").eq("id", id).single();
+    state.currentShow = show;
+    const st = showState(show);
+    if (st === "open") renderPickSheet(show);
+    else renderShowDetail(show);
+  }
+  function slotDefs(format) {
+    var _a, _b;
+    const sect = format === "one_set" && state.cfg.oneset ? state.cfg.oneset : state.cfg;
+    const slots = (sect.slots || []).map((s) => ({ key: s.key, label: s.label, pts: s.points, type: s.type || s.key }));
+    for (let i = 1; i <= (sect.flat_picks || 0); i++) slots.push({ key: "flat" + i, label: "Pick " + i, pts: (_b = (_a = sect.flat_points) != null ? _a : state.cfg.flat_points) != null ? _b : 1, flat: true });
+    return slots;
+  }
+  async function renderPickSheet(show) {
+    let mine = [];
+    try {
+      mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: show.id });
+    } catch (e) {
+    }
+    const draftKey = `ft_draft_${state.session.id}_${show.id}`;
+    const draft = JSON.parse(localStorage.getItem(draftKey) || "null");
+    const val = (k) => esc((draft && draft[k] != null ? draft[k] : (mine.find((p) => p.slot === k) || {}).songname) || "");
+    const slots = slotDefs(show.format);
+    const slotHtml = (s) => `
+    <div class="slotline autocomplete">
+      <label>${esc(s.label)}</label>
+      <input data-slot="${s.key}" data-type="${s.type || s.key}" value="${val(s.key)}" placeholder="${(s.type || s.key) === "cover_pick" ? "a cover\u2026" : "song\u2026"}" autocomplete="off" spellcheck="false">
+      <span class="pts">${s.pts} pt${s.pts === 1 ? "" : "s"}</span>
+    </div>`;
+    const structured = slots.filter((s) => !s.flat), flats = slots.filter((s) => s.flat);
+    $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button></p>
+    <div class="sheet">
+      <h2>${esc(show.venue || "TBA")}</h2>
+      <div class="sub">${fmtDate(show.showdate)} \xB7 ${esc(show.city || "")}${show.state ? ", " + esc(show.state) : ""}${show.format === "one_set" ? " \xB7 FESTIVAL SET" : ""}</div>
+      ${structured.map(slotHtml).join("")}
+      ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
+      <button class="savebtn" id="save">Lock 'em in</button>
+      <div class="countbig">${state.cfg.voting_override === "open" ? "Admin override \u2014 voting open" : `Locks ${fmtCutoff(show.cutoff_at)} \xB7 <b id="cd"></b>`}</div>
+      <div class="err" id="p-err" style="text-align:center"></div>
+    </div>`;
+    document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
+    document.querySelectorAll(".slotline input").forEach((inp) => inp.addEventListener("input", () => {
+      const d = {};
+      document.querySelectorAll(".slotline input").forEach((i) => {
+        if (i.value.trim()) d[i.dataset.slot] = i.value;
+      });
+      localStorage.setItem(draftKey, JSON.stringify(d));
+    }));
+    $("#save").onclick = savePicks;
+    if (state.cfg.voting_override !== "open" && show.cutoff_at) state.timers.push(setInterval(() => {
+      const cd = countdown(show.cutoff_at);
+      if (cd) $("#cd").textContent = cd + " left";
+      else {
+        toast("Picks are locked \u2014 enjoy the show \u{1F95A}");
+        openShow(show.id);
+      }
+    }, 1e3));
+  }
+  function attachAutocomplete(input) {
+    let list = null, sel = -1;
+    const close = () => {
+      list == null ? void 0 : list.remove();
+      list = null;
+      sel = -1;
+    };
+    input.addEventListener("input", () => {
+      var _a, _b;
+      close();
+      const q = input.value.trim().toLowerCase();
+      if (q.length < 1) return;
+      const coverOnly = input.dataset.type === "cover_pick";
+      const pool = coverOnly ? state.songList.filter((s) => s.is_original === false) : state.songList;
+      const wc = [];
+      if (!coverOnly && ((_b = (_a = state.cfg.wildcards) == null ? void 0 : _a.debut) != null ? _b : true) && ("any debut".includes(q) || "debut".includes(q)))
+        wc.push({ songname: "Any Debut", times_played: "\u2605" });
+      const hits = [...wc, ...pool.filter((s) => s.songname.toLowerCase().includes(q))].slice(0, 8);
+      if (!hits.length) return;
+      list = document.createElement("div");
+      list.className = "acc-list";
+      hits.forEach((h) => {
+        var _a2;
+        const d = document.createElement("div");
+        d.innerHTML = `${esc(h.songname)} <small>${(_a2 = h.times_played) != null ? _a2 : "\u2013"}\xD7</small>`;
+        d.onmousedown = (e) => {
+          e.preventDefault();
+          input.value = h.songname;
+          input.dispatchEvent(new Event("input"));
+          close();
+        };
+        list.appendChild(d);
+      });
+      input.parentElement.appendChild(list);
+    });
+    input.addEventListener("keydown", (e) => {
+      if (!list) return;
+      const items = [...list.children];
+      if (e.key === "ArrowDown") {
+        sel = Math.min(sel + 1, items.length - 1);
+      } else if (e.key === "ArrowUp") {
+        sel = Math.max(sel - 1, 0);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (sel >= 0) {
+          input.value = items[sel].textContent.replace(/\s*\S*×$/, "").trim();
+          input.dispatchEvent(new Event("input"));
+        }
+        close();
+        return;
+      } else return;
+      items.forEach((it, i) => it.classList.toggle("sel", i === sel));
+    });
+    input.addEventListener("blur", () => setTimeout(close, 150));
+  }
+  async function savePicks() {
+    $("#p-err").textContent = "";
+    const picks = [...document.querySelectorAll(".slotline input")].map((i) => ({ slot: i.dataset.slot, songname: i.value.trim() })).filter((p) => p.songname);
+    const unknown = picks.filter((p) => !isWildcard(p.songname) && !state.songList.some((s) => s.songname.toLowerCase() === p.songname.toLowerCase()));
+    if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):
+${unknown.map((u) => u.songname).join("\n")}
+
+Save anyway?`)) return;
+    try {
+      await rpc("submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: state.currentShow.id, p_picks: picks });
+      localStorage.removeItem(`ft_draft_${state.session.id}_${state.currentShow.id}`);
+      toast("Picks saved \u2714", "score");
+    } catch (e) {
+      $("#p-err").textContent = e.message;
+    }
+  }
+  async function renderShowDetail(show) {
+    var _a, _b;
+    clearTimers();
+    const [{ data: setlist }, picks, { data: scores }, { data: plist }] = await Promise.all([
+      db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
+      rpc("get_show_picks", { p_show_id: show.id }).catch(() => []),
+      db.from("scores").select("*").eq("show_id", show.id).order("points", { ascending: false }),
+      db.from("players_public").select("id,name")
+    ]);
+    const pname = Object.fromEntries((plist || []).map((p) => [p.id, p.name]));
+    const mineHits = new Set((picks || []).filter((p) => p.player_id === state.session.id).map((p) => p.songname.toLowerCase()));
+    let lastSet = null;
+    const setHtml = (setlist || []).map((s) => {
+      const label = s.is_encore ? "Encore" : "Set " + (s.setnumber || "1");
+      const brk = label !== lastSet ? `<div class="setbreak">${esc(label)}</div>` : "";
+      lastSet = label;
+      return brk + `
+    <div class="songrow ${mineHits.has(s.songname.toLowerCase()) ? "hitmine" : ""}">
+      <span class="pos">${s.position}</span>
+      <span class="name">${esc(s.songname)}</span>
+    </div>`;
+    }).join("");
+    const scoreHtml = (scores || []).map((sc) => `
+    <div class="panel" style="padding:12px">
+      <div class="row"><b>${esc(pname[sc.player_id] || "?")}</b>
+        <span class="pts" style="margin-left:auto;font-family:var(--mono);color:var(--yolk)">${sc.points} pts</span></div>
+      ${(sc.breakdown || []).map((b) => `
+        <div class="pickres ${b.points > 0 ? "hit" : b.hit ? "" : "miss"}">
+          <span class="sl">${esc(b.slot)}</span><span>${esc(b.songname)}</span>
+          <span class="pt">${b.points > 0 ? "+" + b.points : "\xB7"} <small class="muted">${esc(b.reason)}</small></span>
+        </div>`).join("")}
+    </div>`).join("");
+    let pickBoard = "";
+    if (!(scores || []).length && (picks || []).length) {
+      const slotOrder = slotDefs(show.format).map((sl) => sl.key);
+      const slotLabel = Object.fromEntries(slotDefs(show.format).map((sl) => [sl.key, sl.label]));
+      const byName = {};
+      for (const p of picks) ((_b = byName[_a = p.player_name]) != null ? _b : byName[_a] = []).push(p);
+      pickBoard = `<h2 style="margin:18px 4px 4px">The picks are in</h2>` + Object.entries(byName).sort((a, b) => a[0].localeCompare(b[0])).map(([name, pp]) => `
+        <div class="panel" style="padding:12px"><div class="row"><b>${esc(name)}</b></div>
+          ${pp.sort((a, b) => slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot)).map((p) => `
+            <div class="pickres"><span class="sl">${esc(slotLabel[p.slot] || p.slot)}</span>
+              <span>${esc(p.songname)}</span></div>`).join("")}
+        </div>`).join("");
+    }
+    $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button>
+      <span class="pill ${showState(show) === "live" ? "live" : "final"}">${showState(show) === "final" ? "complete" : showState(show)}</span></p>
+    ${(() => {
+      if (show.status !== "final" || !(scores || []).length) return "";
+      const top = scores[0].points;
+      if (top <= 0) return `<div class="panel"><h2>No winner</h2><p class="muted">Nobody scored on this one.</p></div>`;
+      const champs = scores.filter((x) => x.points === top).map((x) => esc(pname[x.player_id] || "?"));
+      return `<div class="panel" style="border-color:var(--yolk)">
+        <h2>${winBadge(64)} ${champs.join(" & ")} ${champs.length > 1 ? "tie for it" : "takes it"}</h2>
+        <p class="muted">${top} points${champs.length > 1 ? " apiece" : ""}</p></div>`;
+    })()}
+    <div class="panel"><h2>${esc(show.venue || "")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
+      ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>
+    ${pickBoard}
+    <h2 style="margin:18px 4px 4px">Scores</h2>
+    ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet \u2014 they appear with the first song.</p>'}`;
+  }
+
+  // src/core/realtime.js
+  var myLastPts = {};
+  function subscribeRealtime() {
+    db.channel("live").on("postgres_changes", { event: "INSERT", schema: "public", table: "setlist_songs" }, (p) => {
+      const s = p.new;
+      toast(`\u{1F3B5} ${esc(s.songname)}${s.is_encore ? " (encore)" : ""}`, "", `song:${s.show_id}:${(s.songname || "").toLowerCase()}`);
+      if (state.currentShow && state.tab !== "admin" && s.show_id === state.currentShow.id) openShow(state.currentShow.id);
+    }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "shows" }, async (p) => {
+      const sh = p.new;
+      const fresh = (ts) => ts && Date.now() - new Date(ts).getTime() < 3 * 6e4;
+      if (fresh(sh.remind_sent)) {
+        let mine = [];
+        try {
+          mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: sh.id });
+        } catch (e) {
+        }
+        toast(mine.length ? `\u23F0 1 hour to lock \u2014 ${esc(sh.venue || sh.showdate)}. Your picks are in \u2714` : `\u23F0 1 hour to lock \u2014 ${esc(sh.venue || sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
+      }
+      if (fresh(sh.lock_sent))
+        toast(`\u{1F512} Picks locked \u2014 ${esc(sh.venue || sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);
+      if (fresh(sh.winner_sent)) {
+        try {
+          const [{ data: sc }, { data: pl }] = await Promise.all([
+            db.from("scores").select("player_id,points").eq("show_id", sh.id).order("points", { ascending: false }).limit(2),
+            db.from("players_public").select("id,name")
+          ]);
+          if (sc == null ? void 0 : sc.length) {
+            const pn = Object.fromEntries((pl || []).map((x) => [x.id, x.name]));
+            toast(`\u{1F3C6} ${esc(pn[sc[0].player_id] || "?")} takes ${esc(sh.venue || sh.showdate)} with ${sc[0].points} pts`, "score", `win:${sh.id}`);
+          }
+        } catch (e) {
+        }
+      }
+    }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "seasons" }, (p) => {
+      const se = p.new;
+      if (se.winner_sent && Date.now() - new Date(se.winner_sent).getTime() < 3 * 6e4)
+        toast(`\u{1F451} ${esc(se.name)} is in the books \u2014 check Standings for the podium`, "score", `season:${se.id}`);
+    }).on("postgres_changes", { event: "*", schema: "public", table: "scores" }, (p) => {
+      var _a, _b;
+      if (((_a = p.new) == null ? void 0 : _a.player_id) === ((_b = state.session) == null ? void 0 : _b.id) && myLastPts[p.new.show_id] !== p.new.points) {
+        myLastPts[p.new.show_id] = p.new.points;
+        toast(`You're at ${p.new.points} pts for this show`, "score");
+      }
+      if (state.tab === "board") renderBoard();
+    }).subscribe();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && state.session) refreshCurrent();
+    });
+  }
+  function refreshCurrent() {
+    if (state.tab === "shows" && state.currentShow && showState(state.currentShow) === "open") return;
+    if (isDesktop()) {
+      renderAll();
+      return;
+    }
+    if (state.tab === "board") renderBoard();
+    else if (state.tab === "admin") renderAdmin();
+    else if (state.currentShow) openShow(state.currentShow.id);
+    else renderShows();
+  }
+
+  // src/core/session.js
+  async function loadConfig() {
+    const { data, error } = await db.from("game_config").select("data").eq("id", 1).single();
+    if (error) throw new Error("Couldn't load game config: " + error.message);
+    state.cfg = data.data;
+  }
+  async function loadSongs() {
+    const { data, error } = await db.from("songs_cache").select("*").order("times_played", { ascending: false });
+    if (error) throw new Error("Couldn't load song catalog: " + error.message);
+    state.songList = data || [];
+  }
+  function renderWho() {
+    $("#whoami").innerHTML = state.session ? `<b>${esc(state.session.name)}</b> <button class="linkbtn" onclick="logout()">log out</button>` : "";
+  }
+  function logout() {
+    state.session = null;
+    localStorage.removeItem("ft_session");
+    location.reload();
+  }
+  async function boot() {
+    renderWho();
+    if (!state.session) {
+      renderAuth();
+      return;
+    }
+    $("#tabs").style.display = "flex";
+    if (state.session.is_admin) $("#admintab").style.display = "";
+    try {
+      await Promise.all([loadConfig(), loadSongs()]);
+      subscribeRealtime();
+      await renderAll();
+    } catch (e) {
+      console.error(e);
+      $("#main").innerHTML = `<div class="panel" style="margin-top:30px;border-color:var(--coral)">
+      <h2>Something broke loading the app</h2>
+      <p class="muted" style="word-break:break-word">${esc(e.message || String(e))}</p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="location.reload()">Reload</button>
+        <button class="btn ghost" onclick="logout()">Log out</button>
+      </div></div>`;
+    }
+  }
+
+  // src/main.js
+  Object.assign(window, {
+    toggleTheme,
+    logout,
+    doLogin,
+    doRegister,
+    openShow,
+    renderShows,
+    setBoardSeason,
+    loadRoster,
+    addSeasonRow,
+    saveSeason,
+    deleteSeason,
+    addSlot,
+    saveConfig,
+    toggleFormat,
+    saveCutoff,
+    finalizeShow,
+    toggleBans,
+    unban,
+    runEdge,
+    bootPlayer
+  });
+  boot();
+})();
+//# sourceMappingURL=app.js.map
