@@ -218,6 +218,10 @@ block at the bottom. RUN IT in a quiet window, snapshot first, then check the co
 - **Cutoff-changed notification** — when a league admin changes a show's cutoff, post
   to that league's Discord channel. Per-league (reads `league_shows`); build as part
   of the broader broadcast/per-league notification rework, not before.
+- **`sync_shows` must map `permalink`** from the `/shows.json` response into the
+  `shows.permalink` column, and the upsert must UPDATE existing rows, not
+  insert-and-ignore-on-conflict — the slug embeds the venue name, so a corrected
+  venue name regenerates the slug and a stale permalink would 404.
 
 ### Stage C design notes (frontend)
 

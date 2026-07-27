@@ -1,4 +1,4 @@
-import { $, esc } from "../core/dom.js";
+import { $, esc, footerHtml } from "../core/dom.js";
 import { db } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
 import { clearTimersFor } from "../core/format.js";
@@ -85,5 +85,6 @@ export async function renderBoard(){
         || '<tr><td colspan="5" class="muted">Stats appear once shows score.</td></tr>'}
       </table></div>
       <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played · High = best single show (venue on hover) · wreath = shows won</p>
-    </div>`;
+    </div>
+    ${footerHtml()}`;
 }

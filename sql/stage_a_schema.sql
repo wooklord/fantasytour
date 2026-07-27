@@ -66,6 +66,9 @@ create table if not exists league_members (
 -- them into the overlay (done in the migration section). Here we just make
 -- sure the overlay table exists.
 
+-- permalink: Carton site slug for this show's page (populated by sync, Stage B).
+alter table shows add column if not exists permalink text;
+
 create table if not exists league_shows (
   league_id   bigint not null references leagues(id) on delete cascade,
   show_id     bigint not null references shows(id) on delete cascade,

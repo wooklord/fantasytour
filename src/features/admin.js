@@ -1,4 +1,4 @@
-import { $, esc } from "../core/dom.js";
+import { $, esc, footerHtml } from "../core/dom.js";
 import { db, rpc, edgeFn } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
 import { fmtDate, clearTimersFor } from "../core/format.js";
@@ -96,7 +96,8 @@ export async function renderAdmin(){
         <button class="btn ghost small" onclick="runEdge('score', this)">Run scoring now</button>
       </div>
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
-    </div>`;
+    </div>
+    ${footerHtml()}`;
   if ((shows||[]).length) loadRoster();
   loadPlayers();
 }

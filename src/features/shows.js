@@ -1,4 +1,4 @@
-import { $, esc } from "../core/dom.js";
+import { $, esc, footerHtml } from "../core/dom.js";
 import { db } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
 import { fmtDate, countdown, clearTimersFor, showState } from "../core/format.js";
@@ -64,7 +64,8 @@ export async function renderShows(){
   $("#main").innerHTML = `
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(row).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
-    <div class="panel"><h2>Recent</h2>${withSeasons(past||[]) || '<p class="muted">Nothing yet.</p>'}</div>`;
+    <div class="panel"><h2>Recent</h2>${withSeasons(past||[]) || '<p class="muted">Nothing yet.</p>'}</div>
+    ${footerHtml()}`;
   state.timers.push(setInterval(() => {
     document.querySelectorAll("[data-cd]").forEach(el => {
       if (!el.dataset.cd) return;

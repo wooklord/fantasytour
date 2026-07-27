@@ -38,11 +38,20 @@ const session = { id: "p1", name: "Wooklord", pin: "1234", is_admin: true };
 // pick-sheet order. The old monolith is a frozen historical reference and
 // is not being patched to match, so mask the `<span class="sl">` text (the
 // only place this shows up) rather than the whole comparison.
+//
+// A third and fourth intentional, post-split addition: a small "Created by
+// Kyle McKinley" footer on every screen, and a "Setlist data from The
+// Carton" attribution line under the show-detail setlist panel (linked when
+// the show has a permalink, plain text otherwise). Neither exists in the old
+// monolith at all, so strip them from the new build's HTML rather than the
+// whole comparison.
 function normalize(html){
   return html
     .replace(/boardSeason=this\.value; renderBoard\(\);/g, "SEASON_SELECT")
     .replace(/setBoardSeason\(this\.value\)/g, "SEASON_SELECT")
-    .replace(/<span class="sl">[^<]*<\/span>/g, '<span class="sl">SLOT_LABEL</span>');
+    .replace(/<span class="sl">[^<]*<\/span>/g, '<span class="sl">SLOT_LABEL</span>')
+    .replace(/\n\s*<footer class="muted" style="text-align:center;padding:20px 0 4px">Created by Kyle McKinley<\/footer>/g, "")
+    .replace(/<p class="muted" style="text-align:center">Setlist data from (?:The Carton|<a href="[^"]*" target="_blank" rel="noopener">The Carton<\/a>)\.<\/p>/g, "");
 }
 
 function diffLog(oldLog, newLog){

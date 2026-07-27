@@ -19,6 +19,7 @@
     return el.querySelector(sel);
   };
   var esc = (s) => String(s != null ? s : "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  var footerHtml = () => `<footer class="muted" style="text-align:center;padding:20px 0 4px">Created by Kyle McKinley</footer>`;
 
   // src/core/config.js
   var SUPABASE_URL = "https://zdfhglvjxquvkjyvophz.supabase.co";
@@ -26,6 +27,7 @@
   var APP_NAME = "Fantasy Eggy";
   var THEME_COLOR_LIGHT = "#F4ECD9";
   var THEME_COLOR_DARK = "#171233";
+  var CARTON_SITE_BASE = "https://thecarton.net/setlists";
 
   // src/core/theme.js
   var sysLight = matchMedia("(prefers-color-scheme: light)");
@@ -83,7 +85,8 @@
         <button class="btn ghost" onclick="doRegister()">New player</button>
       </div>
       <div class="err" id="a-err"></div>
-    </div>`;
+    </div>
+    ${footerHtml()}`;
   }
   async function doLogin() {
     authFlow("login");
@@ -233,7 +236,8 @@
     $("#main").innerHTML = `
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(row).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet \u2014 admin can sync from The Carton.</p>'}</div>
-    <div class="panel"><h2>Recent</h2>${withSeasons(past || []) || '<p class="muted">Nothing yet.</p>'}</div>`;
+    <div class="panel"><h2>Recent</h2>${withSeasons(past || []) || '<p class="muted">Nothing yet.</p>'}</div>
+    ${footerHtml()}`;
     state.timers.push(setInterval(() => {
       document.querySelectorAll("[data-cd]").forEach((el) => {
         if (!el.dataset.cd) return;
@@ -332,7 +336,8 @@
     }).join("") || '<tr><td colspan="5" class="muted">Stats appear once shows score.</td></tr>'}
       </table></div>
       <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played \xB7 High = best single show (venue on hover) \xB7 wreath = shows won</p>
-    </div>`;
+    </div>
+    ${footerHtml()}`;
   }
 
   // src/features/admin.js
@@ -429,7 +434,8 @@
         <button class="btn ghost small" onclick="runEdge('score', this)">Run scoring now</button>
       </div>
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
-    </div>`;
+    </div>
+    ${footerHtml()}`;
     if ((shows || []).length) loadRoster();
     loadPlayers();
   }
@@ -759,7 +765,8 @@ OK = boot + ban \xB7 Cancel = boot only`);
       <button class="savebtn" id="save">Lock 'em in</button>
       <div class="countbig">${state.cfg.voting_override === "open" ? "Admin override \u2014 voting open" : `Locks ${fmtCutoff(show.cutoff_at)} \xB7 <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
-    </div>`;
+    </div>
+    ${footerHtml()}`;
     document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
     document.querySelectorAll(".slotline input").forEach((inp) => inp.addEventListener("input", () => {
       const d = {};
@@ -871,6 +878,7 @@ Save anyway?`)) return;
       <span class="name">${esc(s.songname)}</span>
     </div>`;
     }).join("");
+    const attribution = (setlist || []).length ? `<p class="muted" style="text-align:center">Setlist data from ${show.permalink ? `<a href="${CARTON_SITE_BASE}/${esc(show.permalink)}" target="_blank" rel="noopener">The Carton</a>` : "The Carton"}.</p>` : "";
     const { order: brkOrder, label: brkLabel } = breakdownSlotInfo(show.format);
     const scoreHtml = (scores || []).map((sc) => `
     <div class="panel" style="padding:12px">
@@ -908,10 +916,11 @@ Save anyway?`)) return;
         <p class="muted">${top} points${champs.length > 1 ? " apiece" : ""}</p></div>`;
     })()}
     <div class="panel"><h2>${esc(show.venue || "")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
-      ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>
+      ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
     ${pickBoard}
     <h2 style="margin:18px 4px 4px">Scores</h2>
-    ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet \u2014 they appear with the first song.</p>'}`;
+    ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet \u2014 they appear with the first song.</p>'}
+    ${footerHtml()}`;
   }
 
   // src/core/realtime.js

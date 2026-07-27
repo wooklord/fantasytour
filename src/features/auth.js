@@ -1,4 +1,4 @@
-import { $ } from "../core/dom.js";
+import { $, footerHtml } from "../core/dom.js";
 import { rpc } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
 
@@ -14,7 +14,8 @@ export function renderAuth(){
         <button class="btn ghost" onclick="doRegister()">New player</button>
       </div>
       <div class="err" id="a-err"></div>
-    </div>`;
+    </div>
+    ${footerHtml()}`;
 }
 export async function doLogin(){ authFlow("login"); }
 export async function doRegister(){ authFlow("register_player"); }

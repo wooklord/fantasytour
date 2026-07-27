@@ -1,6 +1,7 @@
-import { $, esc, isDesktop } from "../core/dom.js";
+import { $, esc, isDesktop, footerHtml } from "../core/dom.js";
 import { db, rpc } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
+import { CARTON_SITE_BASE } from "../core/config.js";
 import { fmtDate, fmtCutoff, countdown, clearTimers, clearTimersFor, showState } from "../core/format.js";
 import { winBadge } from "../core/trophy.js";
 import { toast } from "../core/toast.js";
@@ -88,7 +89,8 @@ export async function renderPickSheet(show){
       <button class="savebtn" id="save">Lock 'em in</button>
       <div class="countbig">${state.cfg.voting_override==='open' ? 'Admin override — voting open' : `Locks ${fmtCutoff(show.cutoff_at)} · <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
-    </div>`;
+    </div>
+    ${footerHtml()}`;
   document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
   document.querySelectorAll(".slotline input").forEach(inp => inp.addEventListener("input", () => {
     const d = {};
@@ -174,6 +176,9 @@ export async function renderShowDetail(show){
       <span class="name">${esc(s.songname)}</span>
     </div>`;
   }).join("");
+  const attribution = (setlist||[]).length ? `<p class="muted" style="text-align:center">Setlist data from ${
+    show.permalink ? `<a href="${CARTON_SITE_BASE}/${esc(show.permalink)}" target="_blank" rel="noopener">The Carton</a>` : "The Carton"
+  }.</p>` : "";
   const { order: brkOrder, label: brkLabel } = breakdownSlotInfo(show.format);
   const scoreHtml = (scores||[]).map(sc => `
     <div class="panel" style="padding:12px">
@@ -213,8 +218,9 @@ export async function renderShowDetail(show){
         <p class="muted">${top} points${champs.length>1?" apiece":""}</p></div>`;
     })()}
     <div class="panel"><h2>${esc(show.venue||"")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
-      ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>
+      ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
     ${pickBoard}
     <h2 style="margin:18px 4px 4px">Scores</h2>
-    ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet — they appear with the first song.</p>'}`;
+    ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet — they appear with the first song.</p>'}
+    ${footerHtml()}`;
 }
