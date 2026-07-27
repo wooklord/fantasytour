@@ -40,6 +40,10 @@ create table if not exists brackets (
 -- preserving the old is_admin values into it, then drop is_admin.
 alter table players add column if not exists is_global_admin boolean not null default false;
 
+-- players_public depends on is_admin; drop it so the column drop below can run,
+-- then recreate it without that column.
+drop view if exists players_public;
+
 do $$
 begin
   if exists (select 1 from information_schema.columns
@@ -48,6 +52,11 @@ begin
     alter table players drop column is_admin;
   end if;
 end $$;
+
+-- security_invoker so the view runs as the querying role (RLS-scoped), not the
+-- view owner — also resolves the Supabase security-advisor SECURITY DEFINER warning.
+create view players_public with (security_invoker = true) as
+  select id, name, created_at from players;
 
 create table if not exists league_members (
   league_id       bigint not null references leagues(id) on delete cascade,

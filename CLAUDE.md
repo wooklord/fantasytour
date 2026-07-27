@@ -262,6 +262,11 @@ block at the bottom. RUN IT in a quiet window, snapshot first, then check the co
   leaves stale finished boards showing indefinitely between tours — this replaces
   that. In 2.0 this rule generalizes for free: Casual has no seasons, so it always
   lands on All time, which is correct since Casual is a perpetual tally.
+- **`players_public` no longer carries admin status** (Stage A drops `is_admin` and
+  recreates the view without it). The current `loadPlayers()` reads `p.is_admin` from
+  this view to show the ★ marker; in 2.0 that has to come from
+  `league_members.is_league_admin` (and `players.is_global_admin` for Global), scoped
+  per league.
 
 ---
 
