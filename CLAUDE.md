@@ -246,18 +246,7 @@ block at the bottom. RUN IT in a quiet window, snapshot first, then check the co
 
 ---
 
-## Repo layout (target — Claude Code should establish this)
-
-```
-/                      index.html (+ split modules after Stage 1), manifest, assets
-/sql/                  stage_a_schema.sql (the live one) + /archive for old files
-/supabase/functions/carton-sync/   index.ts (edge function)
-/docs/                 MULTITENANT_SPEC.md, this playbook's companions
-/assets/ or /icons/    icon.svg, favicon.ico, icon-192/512.png, apple-touch-icon.png,
-                       discord-icon.png
-CLAUDE.md              this file
-README.md              human-facing overview + deploy steps
-```
+## Conventions
 
 Instance-specific values (name, branding, default slots, data source) live in
 named constants (`src/core/config.js` for frontend; a top-of-file constant in
