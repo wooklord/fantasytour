@@ -94,7 +94,12 @@ create table if not exists league_shows (
 -- SECTION 3 — SEASONS (per Official bracket) + FROZEN ROSTERS
 -- ============================================================
 
-create table if not exists seasons (
+-- seasons already exists (from add_seasons.sql, flat/global) and is gaining a
+-- required bracket_id, so `if not exists` would silently skip the old table
+-- and never add it. Since seasons is being WIPED at launch, drop and recreate
+-- rather than migrate rows, same as picks/scores below.
+drop table if exists seasons cascade;
+create table seasons (
   id         bigint generated always as identity primary key,
   bracket_id bigint not null references brackets(id) on delete cascade,
   name       text not null,

@@ -192,6 +192,15 @@ preserving wipe, and seeds the "Ambassadors" league with Casual + Official brack
 moving all current players in (grandfathered opt_in=true). Has a verification query
 block at the bottom. RUN IT in a quiet window, snapshot first, then check the counts.
 
+**Stage A has been run.** Verification initially showed `seasons = 1` instead of 0:
+Section 3's `create table if not exists seasons` silently no-op'd because `seasons`
+already existed pre-2.0 (from `add_seasons.sql`), so `bracket_id`/`roster_locked_at`
+never got added and the old beta season row survived. Corrected with the one-shot
+`sql/stage_a_fix_seasons.sql` (adds the missing columns, wipes `seasons` +
+`season_rosters`, sets `bracket_id not null`) — already run against the live
+database, don't run it again. `stage_a_schema.sql` itself is fixed for any future
+run (drop-and-recreate `seasons`, matching picks/scores).
+
 **Build sequence from here:**
 1. (Claude Code first jobs, BEFORE 2.0) Reorganize repo; split `index.html` into
    modules WITH a build step; verify GitHub Pages deploy still works; recreate the
