@@ -209,6 +209,12 @@ begin
     select amb_id, s.id, s.cutoff_at, coalesce(s.format,'standard'), coalesce(s.status,'upcoming')
     from shows s
     on conflict (league_id, show_id) do nothing;
+
+  -- 5.4b backfill announcement flags for historical shows, so the new
+  -- notification logic doesn't fire Discord announcements for them on its
+  -- first run.
+  update league_shows ls set remind_sent = now(), lock_sent = now(), winner_sent = now()
+    where exists (select 1 from shows s where s.id = ls.show_id and s.showdate < current_date);
 end $$;
 
 -- 5.5 Now that per-show cutoff/status/format live on league_shows, drop them
