@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+# build output (once a build step exists)
+dist/
+build/
+# supabase local
+.branches/
+.temp/
+supabase/.temp/
+# secrets — NEVER commit these
+.env
+.env.local
+*.secret
+service_role*.txt
+# os / editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+# logs
+*.log
+npm-debug.log*
