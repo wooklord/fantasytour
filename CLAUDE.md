@@ -70,6 +70,21 @@ directly (lower risk), keep these habits:
    score update → standings; etc.). A valid-syntax, wrong-scope bug won't be caught
    by a syntax check — only by tracing.
 
+**Known limitation of `test/compare.mjs`:** it compares rendered DOM structure and
+text between `legacy-index.html` and the current build — nothing else. It is blind
+to CSS (including computed styles, cascade interactions between dead and live
+selectors), external resource loading (fonts, the Supabase CDN script), and anything
+in `<head>` that isn't reflected in DOM text. One real bug has already slipped past
+it this way: a dormant `.logo span` CSS rule (never matched anything pre-split,
+since `.logo` had no `<span>`) went live and broke the header title's font styling
+when a `<span>` was added to that element for the `APP_NAME` work — a PASS the
+whole time, because the DOM text was unchanged. Don't treat a harness PASS as proof
+a frontend change is visually correct — it only proves the DOM/JS behavior didn't
+change. (A full line-by-line diff of `styles.css` against the original inline
+`<style>` block, done after finding that bug, confirmed no other CSS content —
+gradients, box-shadows, transforms, keyframes, media queries, custom properties —
+was lost in the split.)
+
 ## Postgres / Supabase gotchas learned the hard way
 
 - **pgcrypto lives in the `extensions` schema** on Supabase. Every `SECURITY DEFINER`
