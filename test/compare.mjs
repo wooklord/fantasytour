@@ -15,8 +15,8 @@ function inlineScripts(html){
   return out;
 }
 
-const oldHtml = readFileSync(join(root, "index.html"), "utf8");
-const newHtml = readFileSync(join(root, "index.new.html"), "utf8");
+const oldHtml = readFileSync(join(root, "legacy-index.html"), "utf8");
+const newHtml = readFileSync(join(root, "index.html"), "utf8");
 const appJs = readFileSync(join(root, "app.js"), "utf8");
 
 const oldScripts = inlineScripts(oldHtml); // [errorTrap, bigAppScript]
