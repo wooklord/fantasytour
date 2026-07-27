@@ -259,6 +259,10 @@ CLAUDE.md              this file
 README.md              human-facing overview + deploy steps
 ```
 
+Instance-specific values (name, branding, default slots, data source) live in
+named constants (`src/core/config.js` for frontend; a top-of-file constant in
+the edge function/SQL seed) rather than hardcoded inline.
+
 ## Deploy model
 
 - Frontend: commit + push → GitHub Pages serves it. (After the monolith split, a build

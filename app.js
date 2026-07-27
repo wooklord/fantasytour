@@ -20,6 +20,13 @@
   };
   var esc = (s) => String(s != null ? s : "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
+  // src/core/config.js
+  var SUPABASE_URL = "https://zdfhglvjxquvkjyvophz.supabase.co";
+  var SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
+  var APP_NAME = "Fantasy Eggy";
+  var THEME_COLOR_LIGHT = "#F4ECD9";
+  var THEME_COLOR_DARK = "#171233";
+
   // src/core/theme.js
   var sysLight = matchMedia("(prefers-color-scheme: light)");
   var themeMode = localStorage.getItem("ft_theme2") || "auto";
@@ -30,7 +37,7 @@
     if (b) b.textContent = themeMode === "auto" ? "\u{1F317}" : themeMode === "light" ? "\u2600\uFE0F" : "\u{1F319}";
     if (b) b.title = "theme: " + themeMode + (themeMode === "auto" ? " (follows your phone)" : "");
     const m = document.querySelector('meta[name="theme-color"]');
-    if (m) m.content = eff === "light" ? "#F4ECD9" : "#171233";
+    if (m) m.content = eff === "light" ? THEME_COLOR_LIGHT : THEME_COLOR_DARK;
   }
   function toggleTheme() {
     themeMode = { auto: "light", light: "dark", dark: "auto" }[themeMode] || "auto";
@@ -43,10 +50,6 @@
   if (sysLight.addEventListener) sysLight.addEventListener("change", onSysTheme);
   else sysLight.addListener(onSysTheme);
   applyTheme();
-
-  // src/core/config.js
-  var SUPABASE_URL = "https://zdfhglvjxquvkjyvophz.supabase.co";
-  var SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
 
   // src/core/supabaseClient.js
   var db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -992,6 +995,9 @@ Save anyway?`)) return;
     location.reload();
   }
   async function boot() {
+    document.title = APP_NAME;
+    const nameEl = document.getElementById("appName");
+    if (nameEl) nameEl.textContent = APP_NAME;
     renderWho();
     if (!state.session) {
       renderAuth();

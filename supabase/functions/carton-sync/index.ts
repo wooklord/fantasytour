@@ -11,6 +11,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// Instance constant: setlist data source.
 const CARTON = "https://thecarton.net/api/v2";
 const BURST_POLLS = 3;
 const BURST_GAP_MS = 18_000;

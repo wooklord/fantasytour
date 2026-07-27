@@ -158,6 +158,7 @@ declare
   amb_id  bigint;
   off_id  bigint;
   cas_id  bigint;
+  -- Instance constant: default slot config seeded for new brackets.
   def_cfg jsonb := '{
     "slots": [
       {"key":"opener","type":"opener","label":"Opener","points":2},

@@ -4,6 +4,7 @@ import { state } from "./state.js";
 import { renderAuth } from "../features/auth.js";
 import { subscribeRealtime } from "./realtime.js";
 import { renderAll } from "./layout.js";
+import { APP_NAME } from "./config.js";
 
 export async function loadConfig(){
   const { data, error } = await db.from("game_config").select("data").eq("id",1).single();
@@ -22,6 +23,9 @@ export function renderWho(){
 export function logout(){ state.session = null; localStorage.removeItem("ft_session"); location.reload(); }
 
 export async function boot(){
+  document.title = APP_NAME;
+  const nameEl = document.getElementById("appName");
+  if (nameEl) nameEl.textContent = APP_NAME;
   renderWho();
   if (!state.session){ renderAuth(); return; }
   $("#tabs").style.display = "flex";
