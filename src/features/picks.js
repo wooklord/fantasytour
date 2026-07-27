@@ -17,6 +17,46 @@ export async function openShow(id){
   else renderShowDetail(show);
 }
 
+function prettifySlotKey(key){
+  return key
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-zA-Z])(\d)/g, "$1 $2")
+    .trim()
+    .split(/\s+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+// Canonical pick-sheet order + display label for every slot in a show's config,
+// for rendering a frozen breakdown consistently regardless of DB row order.
+// `order`: configured slots in configured order, then flat picks numerically.
+// Any breakdown slot key missing from `order` (legacy/removed slot) sorts last
+// and falls back to a prettified key rather than the raw key.
+function breakdownSlotInfo(format){
+  const sect = (format === "one_set" && state.cfg.oneset) ? state.cfg.oneset : state.cfg;
+  const slots = sect.slots || [];
+  const coverKeys = slots.filter(s => (s.type||s.key) === "cover_pick").map(s => s.key);
+  const order = [], label = {};
+  slots.forEach(s => {
+    order.push(s.key);
+    label[s.key] = (coverKeys.length > 1 && coverKeys.includes(s.key))
+      ? `${s.label} ${coverKeys.indexOf(s.key)+1}`
+      : s.label;
+  });
+  for (let i=1; i<=(sect.flat_picks||0); i++){ order.push("flat"+i); label["flat"+i] = "Pick "+i; }
+  return { order, label };
+}
+
+function sortBySlotOrder(items, order){
+  return [...items].sort((a,b) => {
+    const ia = order.indexOf(a.slot), ib = order.indexOf(b.slot);
+    if (ia === -1 && ib === -1) return 0;
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+}
+
 export function slotDefs(format){
   const sect = (format === "one_set" && state.cfg.oneset) ? state.cfg.oneset : state.cfg;
   const slots = (sect.slots||[]).map(s => ({ key:s.key, label:s.label, pts:s.points, type:s.type||s.key }));
@@ -134,13 +174,14 @@ export async function renderShowDetail(show){
       <span class="name">${esc(s.songname)}</span>
     </div>`;
   }).join("");
+  const { order: brkOrder, label: brkLabel } = breakdownSlotInfo(show.format);
   const scoreHtml = (scores||[]).map(sc => `
     <div class="panel" style="padding:12px">
       <div class="row"><b>${esc(pname[sc.player_id] || "?")}</b>
         <span class="pts" style="margin-left:auto;font-family:var(--mono);color:var(--yolk)">${sc.points} pts</span></div>
-      ${(sc.breakdown||[]).map(b => `
+      ${sortBySlotOrder(sc.breakdown||[], brkOrder).map(b => `
         <div class="pickres ${b.points>0?"hit":b.hit?"":"miss"}">
-          <span class="sl">${esc(b.slot)}</span><span>${esc(b.songname)}</span>
+          <span class="sl">${esc(brkLabel[b.slot] || prettifySlotKey(b.slot))}</span><span>${esc(b.songname)}</span>
           <span class="pt">${b.points>0?"+"+b.points:"·"} <small class="muted">${esc(b.reason)}</small></span>
         </div>`).join("")}
     </div>`).join("");

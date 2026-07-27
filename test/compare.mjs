@@ -31,10 +31,18 @@ const session = { id: "p1", name: "Wooklord", pin: "1234", is_admin: true };
 // the same `state.boardSeason = v; renderBoard();`. Normalize both variants
 // to the same placeholder so this known, behaviorally-identical rename
 // doesn't mask any *other* unintended difference in the diff below.
+//
+// A second intentional, post-split change: the show-detail score breakdown
+// used to print the raw slot key (`opener`); it now looks up the slot's
+// configured display label (`Opener`) and sorts rows into canonical
+// pick-sheet order. The old monolith is a frozen historical reference and
+// is not being patched to match, so mask the `<span class="sl">` text (the
+// only place this shows up) rather than the whole comparison.
 function normalize(html){
   return html
     .replace(/boardSeason=this\.value; renderBoard\(\);/g, "SEASON_SELECT")
-    .replace(/setBoardSeason\(this\.value\)/g, "SEASON_SELECT");
+    .replace(/setBoardSeason\(this\.value\)/g, "SEASON_SELECT")
+    .replace(/<span class="sl">[^<]*<\/span>/g, '<span class="sl">SLOT_LABEL</span>');
 }
 
 function diffLog(oldLog, newLog){
