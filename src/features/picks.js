@@ -1,6 +1,7 @@
 import { $, esc, isDesktop, footerHtml } from "../core/dom.js";
 import { db, rpc } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
+import { fetchShow } from "../core/leagueShows.js";
 import { CARTON_SITE_BASE } from "../core/config.js";
 import { fmtDate, fmtCutoff, countdown, clearTimers, clearTimersFor, showState } from "../core/format.js";
 import { winBadge } from "../core/trophy.js";
@@ -8,14 +9,39 @@ import { toast } from "../core/toast.js";
 
 export const isWildcard = v => (v||"").trim().toLowerCase() === "any debut";
 
+function draftKey(showId){ return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`; }
+
 export async function openShow(id){
   if (isDesktop()) state.tab = "shows";
   clearTimersFor("shows");
-  const { data: show } = await db.from("shows").select("*").eq("id", id).single();
+  const show = await fetchShow(id);
   state.currentShow = show;
   const st = showState(show);
-  if (st === "open") renderPickSheet(show);
-  else renderShowDetail(show);
+  if (st !== "open"){ renderShowDetail(show); return; }
+  // Official gating is authoritative server-side (submit_picks calls the
+  // same _official_gate helper) — this call is purely so a player isn't
+  // shown a form they can't submit. Casual never gates (RPC short-circuits
+  // ok=true), so this always resolves fast for the common case.
+  let gate = { ok: true, reason: null };
+  try{
+    const [row] = await rpc("can_submit_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:show.id });
+    if (row) gate = row;
+  }catch(e){ /* fail open to the sheet — submit_picks itself still enforces this */ }
+  if (gate.ok) renderPickSheet(show);
+  else renderIneligible(show, gate.reason);
+}
+
+function renderIneligible(show, reason){
+  const casual = state.leagues.find(l => l.league_id === state.currentLeagueId && l.bracket_kind === "casual");
+  $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button></p>
+    <div class="sheet">
+      <h2>${esc(show.venue||"TBA")}</h2>
+      <div class="sub">${fmtDate(show.showdate)}</div>
+      <p class="muted" style="margin-top:14px">${esc(reason || "Picks aren't open for this bracket.")}</p>
+      ${casual ? `<button class="btn ghost small" onclick="switchToBracket(${casual.bracket_id})">Switch to Casual</button>` : ""}
+    </div>
+    ${footerHtml()}`;
 }
 
 function prettifySlotKey(key){
@@ -67,9 +93,9 @@ export function slotDefs(format){
 
 export async function renderPickSheet(show){
   let mine = [];
-  try{ mine = await rpc("get_my_picks", { p_name:state.session.name, p_pin:state.session.pin, p_show_id:show.id }); }catch(e){}
-  const draftKey = `ft_draft_${state.session.id}_${show.id}`;
-  const draft = JSON.parse(localStorage.getItem(draftKey) || "null");
+  try{ mine = await rpc("get_my_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:show.id }); }catch(e){}
+  const dKey = draftKey(show.id);
+  const draft = JSON.parse(localStorage.getItem(dKey) || "null");
   const val = k => esc((draft && draft[k] != null ? draft[k] : (mine.find(p => p.slot===k)||{}).songname) || "");
   const slots = slotDefs(show.format);
   const slotHtml = s => `
@@ -95,7 +121,7 @@ export async function renderPickSheet(show){
   document.querySelectorAll(".slotline input").forEach(inp => inp.addEventListener("input", () => {
     const d = {};
     document.querySelectorAll(".slotline input").forEach(i => { if (i.value.trim()) d[i.dataset.slot] = i.value; });
-    localStorage.setItem(draftKey, JSON.stringify(d));
+    localStorage.setItem(dKey, JSON.stringify(d));
   }));
   $("#save").onclick = savePicks;
   if (state.cfg.voting_override !== 'open' && show.cutoff_at) state.timers.push(setInterval(() => {
@@ -149,21 +175,21 @@ export async function savePicks(){
   const unknown = picks.filter(p => !isWildcard(p.songname) && !state.songList.some(s => s.songname.toLowerCase() === p.songname.toLowerCase()));
   if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):\n${unknown.map(u=>u.songname).join("\n")}\n\nSave anyway?`)) return;
   try{
-    await rpc("submit_picks", { p_name:state.session.name, p_pin:state.session.pin, p_show_id:state.currentShow.id, p_picks:picks });
-    localStorage.removeItem(`ft_draft_${state.session.id}_${state.currentShow.id}`);
+    await rpc("submit_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:state.currentShow.id, p_picks:picks });
+    localStorage.removeItem(draftKey(state.currentShow.id));
     toast("Picks saved ✔", "score");
   }catch(e){ $("#p-err").textContent = e.message; }
 }
 
 export async function renderShowDetail(show){
   clearTimers();
-  const [{ data: setlist }, picks, { data: scores }, { data: plist }] = await Promise.all([
+  const [{ data: setlist }, picks, scores] = await Promise.all([
     db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
-    rpc("get_show_picks", { p_show_id: show.id }).catch(() => []),
-    db.from("scores").select("*").eq("show_id", show.id).order("points",{ascending:false}),
-    db.from("players_public").select("id,name"),
+    rpc("get_show_picks", { p_bracket_id: state.currentBracketId, p_show_id: show.id }).catch(() => []),
+    rpc("get_bracket_scores", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id: show.id })
+      .then(rows => (rows||[]).sort((a,b) => b.points - a.points)),
   ]);
-  const pname = Object.fromEntries((plist||[]).map(p => [p.id, p.name]));
+  const pname = Object.fromEntries((scores||[]).map(s => [s.player_id, s.player_name]));
   const mineHits = new Set((picks||[]).filter(p => p.player_id === state.session.id).map(p => p.songname.toLowerCase()));
   let lastSet = null;
   const setHtml = (setlist||[]).map(s => {

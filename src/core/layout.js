@@ -1,5 +1,6 @@
 import { $, isDesktop } from "./dom.js";
 import { state } from "./state.js";
+import { isCurrentLeagueAdmin } from "./switcher.js";
 import { renderShows } from "../features/shows.js";
 import { renderBoard } from "../features/standings.js";
 import { renderAdmin } from "../features/admin.js";
@@ -18,7 +19,7 @@ export async function renderAll(){
   const savedShow = state.currentShow;
   await renderBoard();
   await renderShows();
-  if (state.session.is_admin) await renderAdmin();
+  if (isCurrentLeagueAdmin()) await renderAdmin();
   state.currentShow = savedShow;
 }
 export function applyLayout(){
@@ -26,7 +27,7 @@ export function applyLayout(){
   $("#cols") && ($("#cols").style.display = desk ? "grid" : "none");
   const c = document.getElementById("cols");
   if (c){
-    const admin = !!(state.session && state.session.is_admin);
+    const admin = !!(state.session && isCurrentLeagueAdmin());
     document.getElementById("col-admin").style.display = admin && desk ? "" : "none";
     c.style.gridTemplateColumns = admin ? "1fr 1.15fr 1fr" : "1fr 1.2fr";
   }

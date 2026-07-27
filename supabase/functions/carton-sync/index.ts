@@ -1,15 +1,41 @@
 // ============================================================
-// FANTASY TOUR — carton-sync edge function (Deno / Supabase)
-// v3: six slot types (opener, set1_closer, set2_opener, closer,
-//     encore, show_closer) · diff-only setlist/score writes so
-//     realtime events fire once per actual change (toast fix) ·
-//     default cutoff 6 PM ET on new shows · burst polling ·
-//     Discord webhook announcements.
-// Actions (POST JSON body {action: ...}):
+// FANTASY EGGY — carton-sync edge function (Deno / Supabase)
+// v7 (Stage B, multi-tenant): global show/song sync now also creates and
+//     refreshes a per-league league_shows overlay (auto-defaulted 6 PM
+//     venue-local cutoffs) for every league; permalink is mapped from
+//     Carton and kept in sync (updated, not insert-ignored) since a
+//     corrected venue name regenerates the slug; a season-activation step
+//     snapshots the frozen Official roster the moment a season starts;
+//     scoring fetches each show's setlist ONCE and scores every bracket of
+//     every league against that bracket's own config — Official reads the
+//     frozen season_rosters snapshot (never the live opt-in flag), Casual
+//     scores whoever picked (no seasons, no roster gate). Best-result-
+//     across-replays: a pick's score is the best result across every
+//     scoring pass, so a correct-slot replay upgrades an earlier wrong-slot
+//     partial (never adds to it) and a later ambiguous pass can never
+//     downgrade it — finalize just stops passing, freezing whatever's best.
+//     Carries forward the v6 batch (Cover Pick, Any Debut, "slot not
+//     played" wording). Reopen un-finalizes a show, wipes that league's
+//     scores for it (a genuine correction needs a clean re-score, not a
+//     merge against wrong data), resets winner_sent, and announces.
+//     Live toasts tag only slots that are unambiguous the instant they
+//     happen (opener, set 2 opener, encore) plus debuts; closers are
+//     positional and only ever shown after the fact. Discord is broadcast
+//     (never personal/DMed), per-league webhook, deduped so a show that
+//     scores under two brackets of the same league only posts once.
+//     `reopen`, `cutoff_changed`, and `finalize` are name/PIN-authenticated
+//     (verified against `_auth_player` + `_is_league_admin_or_global`, the
+//     same guard the SQL RPCs use) — these mutate/notify per-league and must
+//     not be callable by anyone holding the public anon key alone.
+// Actions (POST JSON body {action, ...}):
 //   sync_shows | sync_songs | score (default)
+//   | reopen {p_name,p_pin,league_id,show_id}
+//   | cutoff_changed {p_name,p_pin,league_id,show_id}
+//   | finalize {p_name,p_pin,league_id,show_id}
 // ============================================================
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { norm, deriveSlotFacts, scorePicks } from "./scoring.js";
 
 // Instance constant: setlist data source.
 const CARTON = "https://thecarton.net/api/v2";
@@ -37,9 +63,19 @@ async function carton(path: string) {
   return body.data ?? [];
 }
 
-async function notify(msg: string) {
-  const hook = Deno.env.get("DISCORD_WEBHOOK");
-  if (!hook || !msg) return;
+// Discord is broadcast per league, never personal/DMed. There's no DB column
+// for a per-league webhook yet, so this reads DISCORD_WEBHOOK_<LEAGUE NAME>
+// first (e.g. DISCORD_WEBHOOK_AMBASSADORS) and falls back to the single
+// DISCORD_WEBHOOK secret that already exists — keeps Ambassadors working
+// with no new secret, and a future league just needs one more env var, no
+// schema change, until that stops scaling.
+function leagueWebhookEnvKey(leagueName: string) {
+  return "DISCORD_WEBHOOK_" + leagueName.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+async function notifyLeague(leagueName: string, msg: string) {
+  if (!msg) return;
+  const hook = Deno.env.get(leagueWebhookEnvKey(leagueName || "")) || Deno.env.get("DISCORD_WEBHOOK");
+  if (!hook) return;
   await fetch(hook, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -47,10 +83,24 @@ async function notify(msg: string) {
   }).catch(() => {});
 }
 
+// Admin-triggered actions (reopen, cutoff_changed, finalize) must not be
+// callable by anyone holding just the public anon key. This calls the same
+// two SQL helpers the RPC layer uses — `_auth_player` (PIN check) and
+// `_is_league_admin_or_global` (spec §3's shared guard) — via the service-role
+// client, which is granted access to both specifically for this purpose (see
+// sql/stage_c1_rpcs.sql). Throws on either failure; callers should let that
+// propagate to the router's catch-all error response.
+async function requireLeagueAdmin(name: string, pin: string, leagueId: number) {
+  const { data: player, error: authErr } = await supa.rpc("_auth_player", { p_name: name, p_pin: pin });
+  if (authErr || !player?.id) throw new Error("Wrong name or PIN");
+  const { data: ok, error: scopeErr } = await supa.rpc("_is_league_admin_or_global", {
+    p_player_id: player.id, p_league_id: leagueId,
+  });
+  if (scopeErr || !ok) throw new Error("Not authorized for this league");
+  return player;
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const norm = (s: string) =>
-  (s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, " ").trim();
 
 function etHour(): number {
   return Number(new Intl.DateTimeFormat("en-US", {
@@ -61,6 +111,17 @@ function etHour(): number {
 function easternDate(offsetDays = 0) {
   const d = new Date(Date.now() + offsetDays * 864e5);
   return new Intl.DateTimeFormat("sv", { timeZone: "America/New_York" }).format(d);
+}
+
+function groupBy<T>(rows: T[], key: (r: T) => number | string): Map<number | string, T[]> {
+  const m = new Map<number | string, T[]>();
+  for (const r of rows) {
+    const k = key(r);
+    const arr = m.get(k) ?? [];
+    arr.push(r);
+    m.set(k, arr);
+  }
+  return m;
 }
 
 // ---- venue-local default cutoffs ----
@@ -101,7 +162,7 @@ function venueCutoffISO(showdate: string, state: string | null, hour = DEFAULT_C
   return new Date(utcMs).toISOString();
 }
 
-// ---------- sync shows ----------
+// ---------- sync shows (global) + per-league league_shows overlay ----------
 async function syncShows() {
   const rows = await carton(`/shows.json?order_by=showdate&direction=desc&limit=200`);
   const floor = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
@@ -113,33 +174,62 @@ async function syncShows() {
       venue: r.venuename ?? r.venue ?? null,
       city: r.city ?? null,
       state: r.state ?? null,
+      // The slug embeds the venue name, so a corrected venue name regenerates
+      // it — upsert (not insert-ignore) means a later sync always carries a
+      // corrected permalink forward instead of leaving a stale, 404-ing one.
+      permalink: r.permalink ?? null,
     }));
   for (const s of incoming) {
     await supa.from("shows").upsert(s, { onConflict: "id" });
   }
+
   // Festival-tagged shows default to one_set format (promote only — a manual
-  // admin toggle back to standard is never overwritten by later syncs... unless
-  // synced again; toggle after the show list is stable).
+  // admin toggle back to standard is never overwritten by a later sync).
+  let festIds: number[] = [];
   try {
     const fest = await carton(`/shows.json?show_tag=festival&order_by=showdate&direction=desc&limit=100`);
-    const festIds = fest.map((r: any) => Number(r.show_id)).filter(Boolean);
-    if (festIds.length) {
-      await supa.from("shows").update({ format: "one_set" })
-        .in("id", festIds).eq("format", "standard");
-    }
+    festIds = fest.map((r: any) => Number(r.show_id)).filter(Boolean);
   } catch (_) { /* tag not in use — fine */ }
-  // Default cutoff (6 PM ET on show day) wherever the admin hasn't set one.
-  const { data: blank } = await supa.from("shows")
-    .select("id,showdate,state").is("cutoff_at", null).gte("showdate", floor);
-  let defaulted = 0;
-  for (const s of blank ?? []) {
-    await supa.from("shows").update({ cutoff_at: venueCutoffISO(s.showdate, s.state) }).eq("id", s.id);
-    defaulted++;
+
+  // Every league needs an overlay row for every show — not just at Stage A
+  // migration time, but ongoing, so a brand-new league (the FB league) or a
+  // brand-new show both get covered automatically on the next sync.
+  const { data: leagues } = await supa.from("leagues").select("id");
+  let overlaysCreated = 0, cutoffsDefaulted = 0;
+  for (const lg of leagues ?? []) {
+    const { data: existing } = await supa.from("league_shows")
+      .select("show_id").eq("league_id", lg.id);
+    const have = new Set((existing ?? []).map((r: any) => r.show_id));
+    const missing = incoming.filter((s: any) => !have.has(s.id));
+    for (const s of missing) {
+      await supa.from("league_shows").insert({
+        league_id: lg.id,
+        show_id: s.id,
+        cutoff_at: venueCutoffISO(s.showdate, s.state),
+        format: festIds.includes(s.id) ? "one_set" : "standard",
+      });
+      overlaysCreated++; cutoffsDefaulted++;
+    }
+    if (festIds.length) {
+      await supa.from("league_shows").update({ format: "one_set" })
+        .eq("league_id", lg.id).in("show_id", festIds).eq("format", "standard");
+    }
+    // Default cutoff (6 PM venue-local) wherever nobody's set one yet.
+    const { data: blank } = await supa.from("league_shows")
+      .select("show_id").eq("league_id", lg.id).is("cutoff_at", null);
+    for (const row of blank ?? []) {
+      const s = incoming.find((x: any) => x.id === row.show_id);
+      if (!s) continue;
+      await supa.from("league_shows")
+        .update({ cutoff_at: venueCutoffISO(s.showdate, s.state) })
+        .eq("league_id", lg.id).eq("show_id", row.show_id);
+      cutoffsDefaulted++;
+    }
   }
-  return { synced: incoming.length, cutoffs_defaulted: defaulted };
+  return { synced: incoming.length, overlays_created: overlaysCreated, cutoffs_defaulted: cutoffsDefaulted };
 }
 
-// ---------- sync songs ----------
+// ---------- sync songs (global catalog — unchanged by the multi-tenant split) ----------
 async function syncSongs() {
   const rows = await carton(`/songs.json`);
   const upserts = rows.map((r: any) => ({
@@ -156,33 +246,50 @@ async function syncSongs() {
   return { songs: upserts.length };
 }
 
-// ---------- scoring ----------
-async function eligibleShows() {
-  const floor = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
-  const { data, error } = await supa.from("shows")
-    .select("*").gte("showdate", floor).neq("status", "final")
-    .not("cutoff_at", "is", null).lte("cutoff_at", new Date().toISOString());
+// ---------- season activation ----------
+// Any Official season whose start date has arrived and hasn't been snapshot
+// yet gets its roster written once, from whoever is currently opted in (and
+// not banned) in that season's league. From then on scoring reads ONLY this
+// snapshot, never the live opt-in flag — frozen in both directions, so an
+// opt-out or a boot mid-season leaves that player on the board.
+async function activateSeasons() {
+  const today = easternDate(0);
+  const { data: seasons } = await supa.from("seasons")
+    .select("id,bracket_id,name").lte("start_date", today).is("roster_locked_at", null);
+  let activated = 0;
+  for (const se of seasons ?? []) {
+    const { data: bracket } = await supa.from("brackets").select("league_id").eq("id", se.bracket_id).single();
+    if (!bracket) continue;
+    const { data: members } = await supa.from("league_members").select("player_id")
+      .eq("league_id", bracket.league_id).eq("official_opt_in", true).eq("banned", false);
+    const rows = (members ?? []).map((m: any) => ({ season_id: se.id, player_id: m.player_id }));
+    if (rows.length) await supa.from("season_rosters").insert(rows);
+    await supa.from("seasons").update({ roster_locked_at: new Date().toISOString() }).eq("id", se.id);
+    activated++;
+  }
+  return activated;
+}
+
+// ---------- eligible league_shows for scoring ----------
+// A show becomes eligible the moment ANY league's overlay says cutoff has
+// passed and it isn't final yet — leagues finalize/reopen the same global
+// show independently of each other.
+async function eligibleLeagueShows() {
+  const { data: ls, error } = await supa.from("league_shows").select("*")
+    .neq("status", "final").not("cutoff_at", "is", null)
+    .lte("cutoff_at", new Date().toISOString());
   if (error) throw error;
-  return data ?? [];
+  if (!ls?.length) return [];
+  const floor = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const showIds = [...new Set(ls.map((r: any) => r.show_id))];
+  const { data: shows } = await supa.from("shows").select("*").in("id", showIds).gte("showdate", floor);
+  const showById = new Map((shows ?? []).map((s: any) => [s.id, s]));
+  return ls.filter((r: any) => showById.has(r.show_id))
+    .map((r: any) => ({ ...r, show: showById.get(r.show_id) }));
 }
 
 function isLiveWindow(show: any) {
   return show.showdate === easternDate(0) || show.showdate === easternDate(-1);
-}
-
-// Shows close themselves at 8 AM ET the morning after (if no admin finalized them):
-// after 8 AM, everything dated before today finalizes; before 8 AM, only older shows.
-async function autoFinalize() {
-  const cut = etHour() >= 8 ? easternDate(0) : easternDate(-1);
-  const { data } = await supa.from("shows")
-    .select("*").lt("showdate", cut).neq("status", "final");
-  let n = 0;
-  for (const s of data ?? []) {
-    if (s.cutoff_at) await scoreOne(s).catch(() => {});
-    await supa.from("shows").update({ status: "final" }).eq("id", s.id);
-    n++;
-  }
-  return n;
 }
 
 async function playerNames() {
@@ -190,75 +297,132 @@ async function playerNames() {
   return Object.fromEntries((data ?? []).map((p: any) => [p.id, p.name]));
 }
 
+// Shows close themselves at 8 AM ET the morning after (if no admin finalized
+// them), per league: after 8 AM, everything dated before today finalizes;
+// before 8 AM, only older shows.
+async function autoFinalize() {
+  const cut = etHour() >= 8 ? easternDate(0) : easternDate(-1);
+  const rows = await eligibleLeagueShows();
+  let n = 0;
+  for (const r of rows) {
+    if (r.show.showdate >= cut) continue; // not old enough to auto-close yet
+    await scoreShow(r.show, [r]).catch(() => {}); // one last score against the final setlist
+    await supa.from("league_shows").update({ status: "final" })
+      .eq("league_id", r.league_id).eq("show_id", r.show_id);
+    n++;
+  }
+  return n;
+}
+
+// ---------- announcements (per league) ----------
 async function announcements() {
   const nowIso = new Date().toISOString();
   const soonIso = new Date(Date.now() + 60 * 60_000).toISOString();
+  const { data: leagues } = await supa.from("leagues").select("id,name");
+  const leagueName = new Map((leagues ?? []).map((l: any) => [l.id, l.name]));
 
-  // (a) 1-hour warning, naming the unvoted
+  // (a) 1-hour warning, naming whoever hasn't picked in either bracket yet
   {
-    const { data: shows } = await supa.from("shows").select("*")
+    const { data: lsRows } = await supa.from("league_shows").select("*")
       .is("remind_sent", null).gt("cutoff_at", nowIso).lte("cutoff_at", soonIso).neq("status", "final");
-    for (const sh of shows ?? []) {
-      const [pn, { data: picks }] = await Promise.all([
-        playerNames(),
-        supa.from("picks").select("player_id").eq("show_id", sh.id),
+    for (const ls of lsRows ?? []) {
+      const { data: show } = await supa.from("shows").select("venue,showdate").eq("id", ls.show_id).single();
+      const [{ data: members }, { data: brackets }] = await Promise.all([
+        supa.from("league_members").select("player_id").eq("league_id", ls.league_id).eq("banned", false),
+        supa.from("brackets").select("id").eq("league_id", ls.league_id),
       ]);
+      const bracketIds = (brackets ?? []).map((b: any) => b.id);
+      const { data: picks } = await supa.from("picks").select("player_id")
+        .eq("show_id", ls.show_id).in("bracket_id", bracketIds.length ? bracketIds : [-1]);
       const voted = new Set((picks ?? []).map((p: any) => p.player_id));
-      const missing = Object.entries(pn).filter(([id]) => !voted.has(id)).map(([, n]) => n);
-      await notify(missing.length
-        ? `\u23F0 **1 hour to lock** \u2014 ${sh.venue ?? sh.showdate}. Still waiting on: ${missing.join(", ")}`
-        : `\u23F0 **1 hour to lock** \u2014 ${sh.venue ?? sh.showdate}. Everyone's in \u{1F95A}`);
-      await supa.from("shows").update({ remind_sent: nowIso }).eq("id", sh.id);
+      const pn = await playerNames();
+      const missing = (members ?? []).filter((m: any) => !voted.has(m.player_id))
+        .map((m: any) => pn[m.player_id]).filter(Boolean);
+      const label = show?.venue ?? show?.showdate ?? `show ${ls.show_id}`;
+      await notifyLeague(leagueName.get(ls.league_id) ?? "", missing.length
+        ? `⏰ **1 hour to lock** — ${label}. Still waiting on: ${missing.join(", ")}`
+        : `⏰ **1 hour to lock** — ${label}. Everyone's in \u{1F95A}`);
+      await supa.from("league_shows").update({ remind_sent: nowIso })
+        .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
     }
   }
   // (b) lock announcement
   {
-    const { data: shows } = await supa.from("shows").select("*")
-      .is("lock_sent", null).not("cutoff_at", "is", null)
-      .lte("cutoff_at", nowIso).gte("showdate", easternDate(-1));
-    for (const sh of shows ?? []) {
-      const { data: picks } = await supa.from("picks").select("player_id").eq("show_id", sh.id);
+    const { data: lsRows } = await supa.from("league_shows").select("*")
+      .is("lock_sent", null).not("cutoff_at", "is", null).lte("cutoff_at", nowIso);
+    for (const ls of lsRows ?? []) {
+      const { data: show } = await supa.from("shows").select("venue,showdate").eq("id", ls.show_id).single();
+      if (!show || show.showdate < easternDate(-1)) continue; // don't spam-lock ancient shows on first sync
+      const { data: brackets } = await supa.from("brackets").select("id").eq("league_id", ls.league_id);
+      const bracketIds = (brackets ?? []).map((b: any) => b.id);
+      const { data: picks } = await supa.from("picks").select("player_id")
+        .eq("show_id", ls.show_id).in("bracket_id", bracketIds.length ? bracketIds : [-1]);
       const n = new Set((picks ?? []).map((p: any) => p.player_id)).size;
-      await notify(`\u{1F512} **Picks are locked** for ${sh.venue ?? sh.showdate} \u2014 ${n} sheets in. Boards are live in the app.`);
-      await supa.from("shows").update({ lock_sent: nowIso }).eq("id", sh.id);
+      const label = show.venue ?? show.showdate;
+      await notifyLeague(leagueName.get(ls.league_id) ?? "",
+        `\u{1F512} **Picks are locked** for ${label} — ${n} sheets in. Boards are live in the app.`);
+      await supa.from("league_shows").update({ lock_sent: nowIso })
+        .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
     }
   }
-  // (c) show winner (fires within a minute of finalize, manual or auto)
+  // (c) show winner (fires within a minute of finalize, manual or auto) —
+  // one message per league, bundling every bracket that league runs.
   {
-    const { data: shows } = await supa.from("shows").select("*")
-      .is("winner_sent", null).eq("status", "final").gte("showdate", easternDate(-7));
-    for (const sh of shows ?? []) {
-      const { data: sc } = await supa.from("scores").select("player_id,points")
-        .eq("show_id", sh.id).order("points", { ascending: false });
-      if (sc?.length) {
-        const pn = await playerNames();
-        const top = sc[0].points;
-        const winners = sc.filter((x: any) => x.points === top).map((x: any) => pn[x.player_id]);
-        const runner = sc.find((x: any) => x.points < top);
-        await notify(`\u{1F3C6} **${sh.venue ?? sh.showdate}** is final \u2014 **${winners.join(" & ")}** take${winners.length > 1 ? "" : "s"} it with **${top} pts**${runner ? ` (next: ${pn[runner.player_id]} \u00B7 ${runner.points})` : ""}`);
+    const { data: lsRows } = await supa.from("league_shows").select("*")
+      .is("winner_sent", null).eq("status", "final");
+    for (const ls of lsRows ?? []) {
+      const { data: show } = await supa.from("shows").select("venue,showdate").eq("id", ls.show_id).single();
+      if (!show || show.showdate < easternDate(-7)) {
+        // Too old to be worth announcing (e.g. first sync after a long gap) —
+        // still flag it so this loop doesn't keep revisiting it forever.
+        await supa.from("league_shows").update({ winner_sent: nowIso })
+          .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
+        continue;
       }
-      await supa.from("shows").update({ winner_sent: nowIso }).eq("id", sh.id);
+      const { data: brackets } = await supa.from("brackets").select("id,name").eq("league_id", ls.league_id);
+      const pn = await playerNames();
+      const parts: string[] = [];
+      for (const b of brackets ?? []) {
+        const { data: sc } = await supa.from("scores").select("player_id,points")
+          .eq("bracket_id", b.id).eq("show_id", ls.show_id).order("points", { ascending: false });
+        if (!sc?.length) continue;
+        const top = sc[0].points;
+        if (top <= 0) continue;
+        const winners = sc.filter((x: any) => x.points === top).map((x: any) => pn[x.player_id]);
+        parts.push(`**${b.name}**: ${winners.join(" & ")} · ${top} pts`);
+      }
+      const label = show.venue ?? show.showdate;
+      if (parts.length) {
+        await notifyLeague(leagueName.get(ls.league_id) ?? "", `\u{1F3C6} **${label}** is final\n${parts.join("\n")}`);
+      }
+      await supa.from("league_shows").update({ winner_sent: nowIso })
+        .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
     }
   }
-  // (d) season champion, once every show in range is final
+  // (d) season champion, once every show in range is final for that bracket's league
   {
     const { data: seasons } = await supa.from("seasons").select("*")
       .is("winner_sent", null).lt("end_date", easternDate(0));
     for (const se of seasons ?? []) {
-      const { data: sshows } = await supa.from("shows").select("id,status")
+      const { data: bracket } = await supa.from("brackets").select("league_id").eq("id", se.bracket_id).single();
+      if (!bracket) continue;
+      const { data: sshows } = await supa.from("shows").select("id")
         .gte("showdate", se.start_date).lte("showdate", se.end_date);
-      if ((sshows ?? []).some((x: any) => x.status !== "final")) continue; // not settled yet
-      const ids = (sshows ?? []).map((x: any) => x.id);
-      if (ids.length) {
-        const { data: sc } = await supa.from("scores").select("player_id,points").in("show_id", ids);
+      const showIds = (sshows ?? []).map((x: any) => x.id);
+      if (showIds.length) {
+        const { data: lsStatus } = await supa.from("league_shows").select("status")
+          .eq("league_id", bracket.league_id).in("show_id", showIds);
+        if ((lsStatus ?? []).some((x: any) => x.status !== "final")) continue; // not settled yet
+        const { data: sc } = await supa.from("scores").select("player_id,points")
+          .eq("bracket_id", se.bracket_id).in("show_id", showIds);
         const totals: Record<string, number> = {};
         for (const r of sc ?? []) totals[r.player_id] = (totals[r.player_id] ?? 0) + r.points;
         const ranked = Object.entries(totals).sort((a, b) => b[1] - a[1]);
         if (ranked.length) {
           const pn = await playerNames();
           const podium = ranked.slice(0, 3).map(([id, p], i) =>
-            `${["\u{1F947}", "\u{1F948}", "\u{1F949}"][i]} ${pn[id]} \u00B7 ${p}`).join("   ");
-          await notify(`\u{1F451} **${se.name} is in the books!**\n${podium}`);
+            `${["\u{1F947}", "\u{1F948}", "\u{1F949}"][i]} ${pn[id]} · ${p}`).join("   ");
+          await notifyLeague(leagueName.get(bracket.league_id) ?? "", `\u{1F451} **${se.name} is in the books!**\n${podium}`);
         }
       }
       await supa.from("seasons").update({ winner_sent: nowIso }).eq("id", se.id);
@@ -266,23 +430,31 @@ async function announcements() {
   }
 }
 
+// ---------- scoring ----------
 async function scoreShows() {
+  const seasonsActivated = await activateSeasons();
   const autoclosed = await autoFinalize();
   await announcements();
-  let shows = await eligibleShows();
-  if (!shows.length) return { scored: [], autoclosed, note: "no eligible shows" };
-  const live = shows.some(isLiveWindow);
-  const rounds = live ? BURST_POLLS : 1;
+  let rows = await eligibleLeagueShows();
+  if (!rows.length) return { scored: [], autoclosed, seasons_activated: seasonsActivated, note: "no eligible shows" };
+
+  const live = rows.some((r: any) => isLiveWindow(r.show));
+  const roundsN = live ? BURST_POLLS : 1;
   let results: any[] = [];
-  for (let i = 0; i < rounds; i++) {
-    if (i > 0) { await sleep(BURST_GAP_MS); shows = await eligibleShows(); }
+  for (let i = 0; i < roundsN; i++) {
+    if (i > 0) { await sleep(BURST_GAP_MS); rows = await eligibleLeagueShows(); }
     results = [];
-    for (const show of shows) results.push(await scoreOne(show));
+    const byShow = groupBy(rows, (r: any) => r.show_id);
+    for (const showRows of byShow.values()) {
+      results.push(await scoreShow(showRows[0].show, showRows));
+    }
   }
-  return { scored: results, burst: live, autoclosed };
+  return { scored: results, burst: live, autoclosed, seasons_activated: seasonsActivated };
 }
 
-async function scoreOne(show: any) {
+// One setlist fetch for the whole show, then every bracket of every league
+// that has it active gets scored against the same shared setlist.
+async function scoreShow(show: any, leagueShowRows: any[]) {
   const rows = await carton(`/setlists/showdate/${show.showdate}.json`);
   const mine = rows.filter((r: any) => Number(r.show_id) === Number(show.id));
   const use = mine.length ? mine : rows;
@@ -301,7 +473,7 @@ async function scoreOne(show: any) {
   })).filter((s: any) => s.songname);
   if (!songs.length) return { show: show.id, note: "empty setlist" };
 
-  // ---- DIFF against what's stored; write ONLY changes (toast-storm fix) ----
+  // ---- diff against what's stored; write ONLY changes (toast-storm fix) ----
   const { data: prevRows } = await supa.from("setlist_songs")
     .select("position,songname,setnumber,is_encore").eq("show_id", show.id);
   const prevByPos = new Map((prevRows ?? []).map((r: any) => [r.position, r]));
@@ -317,145 +489,187 @@ async function scoreOne(show: any) {
     await supa.from("setlist_songs").delete().eq("show_id", show.id).gt("position", maxPos);
   }
 
-  // announce genuinely new songs (skip full-setlist backfills of past shows)
+  // ---- derive show-level structural facts — global, computed once, shared
+  //      by every bracket's scoring below (pure logic lives in scoring.js) ----
+  const slotFacts = deriveSlotFacts(songs);
+  const { set2, encore, played, slotSong, slotImpossible, anyDebut } = slotFacts;
+
+  // ---- announce genuinely new songs, once per LEAGUE (not once per bracket
+  //      — a league running Casual + Official must only get one message) ----
   const prevSet = new Set((prevRows ?? []).map((r: any) => norm(r.songname)));
   const newSongs = songs.filter((s: any) => !prevSet.has(norm(s.songname)));
   if (newSongs.length && (prevSet.size > 0 || isLiveWindow(show))) {
-    const head = prevSet.size === 0 ? `🥚 **Show's on** — ${show.venue ?? show.showdate}\n` : "";
-    await notify(head + newSongs.map((s: any) =>
-      `🎵 **${s.songname}**${s.is_encore ? " *(encore)*" : ""}`).join("\n"));
+    const firstEncorePos = encore.length ? Math.min(...encore.map((s: any) => s.position)) : null;
+    const set2FirstPos = set2.length ? set2[0].position : null;
+    const lines = newSongs.map((s: any) => {
+      // Only tag slots that are unambiguous the instant they happen — closer,
+      // show_closer and set1_closer can't be known until nothing else
+      // follows, so they never show up here, only in the after-the-fact
+      // setlist view.
+      const tags: string[] = [];
+      if (!s.is_encore && s.position === songs[0].position) tags.push("Opener");
+      if (set2FirstPos != null && s.position === set2FirstPos) tags.push("Set 2 Opener");
+      if (firstEncorePos != null && s.position === firstEncorePos) tags.push("Encore");
+      else if (s.is_encore) tags.push("encore");
+      if (/debut/i.test(s.footnote ?? "")) tags.push("DEBUT \u{1F95A}");
+      const tag = tags.length ? ` — *${tags.join(", ")}*` : "";
+      return `\u{1F3B5} **${s.songname}**${tag}`;
+    });
+    const head = prevSet.size === 0 ? `\u{1F95A} **Show's on** — ${show.venue ?? show.showdate}\n` : "";
+    const msg = head + lines.join("\n");
+    const seenLeagues = new Set<number>();
+    for (const r of leagueShowRows) {
+      if (seenLeagues.has(r.league_id)) continue;
+      seenLeagues.add(r.league_id);
+      const { data: lg } = await supa.from("leagues").select("name").eq("id", r.league_id).single();
+      if (lg) await notifyLeague(lg.name, msg);
+    }
   }
 
-  // ---- derive slot targets ----
-  const nonEncore = songs.filter((s: any) => !s.is_encore);
-  const encore = songs.filter((s: any) => s.is_encore);
-  // group non-encore songs into sets by first-seen setnumber (naming-agnostic)
-  const setOrder: string[] = [];
-  const setGroups: Record<string, any[]> = {};
-  for (const s of nonEncore) {
-    if (!(s.setnumber in setGroups)) { setGroups[s.setnumber] = []; setOrder.push(s.setnumber); }
-    setGroups[s.setnumber].push(s);
-  }
-  const set1 = setGroups[setOrder[0]] ?? [];
-  const set2 = setGroups[setOrder[1]] ?? [];
-  const opener = nonEncore[0]?.songname ?? songs[0].songname;
-  const closer = nonEncore.length ? nonEncore[nonEncore.length - 1].songname : null;
-  const encoreSet = new Set(encore.map((s: any) => norm(s.songname)));
-  const played = new Set(songs.map((s: any) => norm(s.songname)));
-  const eq = (a: string, b: string | null) => b != null && norm(a) === norm(b);
-  const slotSong: Record<string, (pick: string) => boolean> = {
-    opener:      (p) => eq(p, opener),
-    set1_closer: (p) => eq(p, set1.length ? set1[set1.length - 1].songname : null),
-    set2_opener: (p) => eq(p, set2.length ? set2[0].songname : null),
-    closer:      (p) => eq(p, closer),
-    encore:      (p) => encoreSet.has(norm(p)),
-    show_closer: (p) => eq(p, songs[songs.length - 1].songname),
-    second_song: (p) => songs.length > 1 && eq(p, songs[1].songname),
-    cover_call:  (p) => songs.some((s: any) => s.is_cover === true && norm(s.songname) === norm(p)),
-    debut_call:  (p) => songs.some((s: any) => /debut/i.test(s.footnote ?? "") && norm(s.songname) === norm(p)),
-  };
-  // slots whose target doesn't exist in this show's structure (e.g. set 2 at a one-setter)
-  const slotImpossible: Record<string, boolean> = {
-    set2_opener: set2.length === 0,
-    set1_closer: set1.length === 0,
-    encore: encore.length === 0,
-    second_song: songs.length < 2,
-    cover_call: !songs.some((s: any) => s.is_cover === true),
-    debut_call: !songs.some((s: any) => /debut/i.test(s.footnote ?? "")),
-  };
-
-  // ---- config + picks ----
-  const { data: cfgRow } = await supa.from("game_config").select("data").eq("id", 1).single();
-  const cfg = cfgRow!.data;
-  const sect = (show.format === "one_set" && cfg.oneset) ? cfg.oneset : cfg;
-  const flatPts = Number(sect.flat_points ?? cfg.flat_points ?? 1);
-  const slotPoints: Record<string, number> = {};
-  const slotType: Record<string, string> = {};
-  for (const s of sect.slots ?? []) {
-    slotPoints[s.key] = Number(s.points ?? 2);
-    slotType[s.key] = s.type ?? s.key;
+  // ---- score every bracket of every league that has this show active ----
+  const perBracket: any[] = [];
+  const seenBrackets = new Set<number>();
+  for (const lsRow of leagueShowRows) {
+    const { data: brackets } = await supa.from("brackets").select("*").eq("league_id", lsRow.league_id);
+    for (const bracket of brackets ?? []) {
+      if (seenBrackets.has(bracket.id)) continue;
+      seenBrackets.add(bracket.id);
+      perBracket.push(await scoreBracket({ show, lsRow, bracket, songs, slotFacts }));
+    }
+    if (lsRow.status === "upcoming") {
+      await supa.from("league_shows").update({ status: "live" })
+        .eq("league_id", lsRow.league_id).eq("show_id", lsRow.show_id);
+    }
   }
 
-  const { data: picks } = await supa.from("picks").select("*").eq("show_id", show.id);
+  return { show: show.id, songs: songs.length, new: newSongs.length, brackets: perBracket };
+}
+
+async function scoreBracket(ctx: { show: any; lsRow: any; bracket: any; songs: any[]; slotFacts: any }) {
+  const { show, lsRow, bracket, songs, slotFacts } = ctx;
+  const cfg = bracket.config;
+
+  // ---- who's in scope for this bracket ----
+  // Official reads the frozen season_rosters snapshot, never the live
+  // opt-in flag. Casual has no seasons, so nobody is filtered out — anyone
+  // with picks in this bracket for this show gets scored.
+  let allowedPlayerIds: Set<string> | null = null;
+  if (bracket.kind === "official") {
+    const { data: season } = await supa.from("seasons").select("id")
+      .eq("bracket_id", bracket.id).lte("start_date", show.showdate).gte("end_date", show.showdate)
+      .maybeSingle();
+    if (!season) return { bracket: bracket.id, kind: bracket.kind, note: "no active season — not scored" };
+    const { data: roster } = await supa.from("season_rosters").select("player_id").eq("season_id", season.id);
+    allowedPlayerIds = new Set((roster ?? []).map((r: any) => r.player_id));
+  }
+
+  const { data: picks } = await supa.from("picks").select("*")
+    .eq("bracket_id", bracket.id).eq("show_id", show.id);
   const byPlayer: Record<string, any[]> = {};
-  for (const p of picks ?? []) (byPlayer[p.player_id] ??= []).push(p);
+  for (const p of picks ?? []) {
+    if (allowedPlayerIds && !allowedPlayerIds.has(p.player_id)) continue;
+    (byPlayer[p.player_id] ??= []).push(p);
+  }
 
-  // existing scores, so we only write on change (second half of toast fix)
   const { data: prevScores } = await supa.from("scores")
-    .select("player_id,points,breakdown").eq("show_id", show.id);
+    .select("player_id,points,breakdown").eq("bracket_id", bracket.id).eq("show_id", show.id);
   const prevScore = new Map((prevScores ?? []).map((r: any) => [r.player_id, r]));
 
   let writes = 0;
   for (const [playerId, ppicks] of Object.entries(byPlayer)) {
-    let total = 0;
-    const breakdown: any[] = [];
-    const anyDebut = songs.some((x: any) => /debut/i.test(x.footnote ?? ""));
-    for (const p of ppicks) {
-      let pts = 0, hit = false, reason = "not played";
-      const isSlot = p.slot in slotPoints;
-      if (norm(p.songname) === "any debut") {
-        if (anyDebut) { pts = isSlot ? slotPoints[p.slot] : flatPts; hit = true; reason = "a debut was played"; }
-        else reason = "no debut this show";
-        total += pts;
-        breakdown.push({ slot: p.slot, songname: p.songname, hit, points: pts, reason });
-        continue;
-      }
-      const stype = slotType[p.slot] ?? p.slot;
-      const exactHit = stype === "cover_pick"
-        ? songs.some((x: any) => x.is_cover === true && norm(x.songname) === norm(p.songname))
-        : slotSong[stype]?.(p.songname);
-      if (isSlot && exactHit) {
-        pts = slotPoints[p.slot]; hit = true;
-        reason = stype === "cover_pick" ? "cover played" : `${stype} — exact`;
-      } else if (played.has(norm(p.songname))) {
-        hit = true;
-        if (isSlot) {
-          const why = slotImpossible[stype] ? "slot not played"
-            : stype === "cover_pick" ? "played, but it's an original" : "played, wrong slot";
-          if (cfg.partial_credit) { pts = Number(cfg.partial_points ?? 1); reason = why; }
-          else reason = why + " (no partial credit)";
-        } else { pts = flatPts; reason = "played"; }
-      }
-      if (hit && pts > 0) {
-        const row = songs.find((s: any) => norm(s.songname) === norm(p.songname));
-        const b = cfg.bonuses ?? {};
-        if (row?.is_cover && Number(b.cover)) { pts += Number(b.cover); reason += " +cover"; }
-        if (/debut/i.test(row?.footnote ?? "") && Number(b.debut)) { pts += Number(b.debut); reason += " +debut"; }
-      }
-      total += pts;
-      breakdown.push({ slot: p.slot, songname: p.songname, hit, points: pts, reason });
-    }
-    const expected = (sect.slots?.length ?? 0) + Number(sect.flat_picks ?? 0);
-    const perf = Number((cfg.bonuses ?? {}).perfect ?? 0);
-    if (perf > 0 && expected > 0 && ppicks.length === expected && breakdown.every((x: any) => x.hit)) {
-      total += perf;
-      breakdown.push({ slot: "bonus", songname: "Perfect sheet", hit: true, points: perf, reason: "every pick hit" });
-    }
     const prev = prevScore.get(playerId);
+    // All the actual scoring — slot matching, partial credit, bonuses,
+    // wildcards, best-result-across-replays — lives in scoring.js as pure
+    // data-in/data-out logic; this loop only handles the DB read/write.
+    const { breakdown, total } = scorePicks({
+      picks: ppicks, songs, slotFacts, cfg, format: lsRow.format, prevBreakdown: prev?.breakdown,
+    });
+
     if (!prev || prev.points !== total || JSON.stringify(prev.breakdown) !== JSON.stringify(breakdown)) {
       await supa.from("scores").upsert({
-        player_id: playerId, show_id: show.id, points: total,
+        bracket_id: bracket.id, player_id: playerId, show_id: show.id, points: total,
         breakdown, updated_at: new Date().toISOString(),
-      }, { onConflict: "player_id,show_id" });
+      }, { onConflict: "player_id,bracket_id,show_id" });
       writes++;
     }
   }
+  return { bracket: bracket.id, kind: bracket.kind, players: Object.keys(byPlayer).length, score_writes: writes };
+}
 
-  if (show.status === "upcoming") {
-    await supa.from("shows").update({ status: "live" }).eq("id", show.id);
+// ---------- reopen (un-finalize so corrected Carton data re-scores) ----------
+async function reopenShow(name: string, pin: string, leagueId: number, showId: number) {
+  await requireLeagueAdmin(name, pin, leagueId);
+  const { data: brackets } = await supa.from("brackets").select("id").eq("league_id", leagueId);
+  const bracketIds = (brackets ?? []).map((b: any) => b.id);
+  // Best-result-across-replays must NOT lock in points earned against
+  // setlist data that's since been corrected on The Carton — a genuine
+  // correction needs a clean re-score, not a merge that preserves the old,
+  // wrong best result forever. Wipe this league's scores for the show.
+  if (bracketIds.length) {
+    await supa.from("scores").delete().eq("show_id", showId).in("bracket_id", bracketIds);
   }
-  return { show: show.id, songs: songs.length, new: newSongs.length, score_writes: writes };
+  await supa.from("league_shows").update({ status: "live", winner_sent: null })
+    .eq("league_id", leagueId).eq("show_id", showId);
+  const { data: lg } = await supa.from("leagues").select("name").eq("id", leagueId).single();
+  const { data: show } = await supa.from("shows").select("venue,showdate").eq("id", showId).single();
+  if (lg) {
+    await notifyLeague(lg.name,
+      `\u{1F504} **Scores reopened** for ${show?.venue ?? show?.showdate ?? showId} — corrected setlist, re-scoring now.`);
+  }
+  return { ok: true, league_id: leagueId, show_id: showId };
+}
+
+// ---------- cutoff-changed notice ----------
+async function cutoffChanged(name: string, pin: string, leagueId: number, showId: number) {
+  await requireLeagueAdmin(name, pin, leagueId);
+  const { data: ls } = await supa.from("league_shows").select("cutoff_at")
+    .eq("league_id", leagueId).eq("show_id", showId).single();
+  const { data: lg } = await supa.from("leagues").select("name").eq("id", leagueId).single();
+  const { data: show } = await supa.from("shows").select("venue,showdate").eq("id", showId).single();
+  if (!lg || !ls) return { ok: false, error: "league or show not found" };
+  const when = ls.cutoff_at
+    ? new Date(ls.cutoff_at).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }) + " ET"
+    : "cleared";
+  await notifyLeague(lg.name, `\u{1F553} **Cutoff changed** for ${show?.venue ?? show?.showdate ?? showId} — now ${when}.`);
+  return { ok: true };
+}
+
+// ---------- finalize (score one last time, then lock) ----------
+// The careful live/upcoming -> final transition: one last scoring pass against
+// the current setlist (so the frozen breakdown reflects the complete show,
+// not a stale mid-show snapshot), then lock the status, then let
+// announcements() fire the winner notice immediately rather than waiting for
+// the next scheduled cycle (harmless to call — it's gated on winner_sent
+// being null either way). This replaces the old app's finalizeShow(), which
+// ran an unauthenticated edge-function score() call followed by an
+// unauthenticated admin_set_show_status RPC.
+async function finalizeShow(name: string, pin: string, leagueId: number, showId: number) {
+  await requireLeagueAdmin(name, pin, leagueId);
+  const { data: lsRow } = await supa.from("league_shows").select("*")
+    .eq("league_id", leagueId).eq("show_id", showId).single();
+  if (!lsRow) return { ok: false, error: "show not found for this league" };
+  const { data: show } = await supa.from("shows").select("*").eq("id", showId).single();
+  if (!show) return { ok: false, error: "show not found" };
+  await scoreShow(show, [lsRow]).catch(() => {}); // best effort — a missing/stale setlist shouldn't block finalizing
+  await supa.from("league_shows").update({ status: "final" })
+    .eq("league_id", leagueId).eq("show_id", showId);
+  await announcements();
+  return { ok: true, league_id: leagueId, show_id: showId };
 }
 
 // ---------- router ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
-    const { action } = await req.json().catch(() => ({ action: "score" }));
-    const out =
-      action === "sync_shows" ? await syncShows() :
-      action === "sync_songs" ? await syncSongs() :
-      await scoreShows();
+    const body = await req.json().catch(() => ({ action: "score" }));
+    const { action, league_id, show_id, p_name, p_pin } = body ?? {};
+    let out;
+    if (action === "sync_shows") out = await syncShows();
+    else if (action === "sync_songs") out = await syncSongs();
+    else if (action === "reopen") out = await reopenShow(p_name, p_pin, Number(league_id), Number(show_id));
+    else if (action === "cutoff_changed") out = await cutoffChanged(p_name, p_pin, Number(league_id), Number(show_id));
+    else if (action === "finalize") out = await finalizeShow(p_name, p_pin, Number(league_id), Number(show_id));
+    else out = await scoreShows();
     return Response.json({ ok: true, ...out }, { headers: cors });
   } catch (e) {
     return Response.json({ ok: false, error: String(e) }, { status: 500, headers: cors });

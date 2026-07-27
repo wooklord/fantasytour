@@ -7,8 +7,12 @@
     songList: [],
     cfg: null,
     timers: [],
-    boardSeason: null
+    boardSeason: null,
     // null = auto-pick current season
+    leagues: [],
+    // raw my_leagues() rows for this session
+    currentLeagueId: null,
+    currentBracketId: null
   };
 
   // src/core/dom.js
@@ -61,11 +65,11 @@
     if (error) throw new Error(error.message.replace(/^.*?: /, ""));
     return data;
   }
-  async function edgeFn(action) {
+  async function edgeFn(action, extra = {}) {
     const r = await fetch(FN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_ANON, "apikey": SUPABASE_ANON },
-      body: JSON.stringify({ action })
+      body: JSON.stringify({ action, ...extra })
     });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || "edge function failed");
@@ -157,6 +161,87 @@
     return s.status === "live" ? "live" : "locked";
   }
 
+  // src/core/switcher.js
+  var currentBracket = () => state.leagues.find((l) => l.bracket_id === state.currentBracketId);
+  var isCurrentLeagueAdmin = () => {
+    if (!state.session) return false;
+    if (state.session.is_global_admin) return true;
+    const row = currentBracket();
+    return !!(row && row.is_league_admin);
+  };
+  async function loadConfig() {
+    const { data, error } = await db.from("brackets").select("config").eq("id", state.currentBracketId).single();
+    if (error) throw new Error("Couldn't load bracket config: " + error.message);
+    state.cfg = data.config;
+  }
+  async function resolveLeagues() {
+    state.leagues = await rpc("my_leagues", { p_name: state.session.name, p_pin: state.session.pin });
+    if (!state.leagues.length) return false;
+    const saved = Number(localStorage.getItem("ft_bracket_id"));
+    const found = state.leagues.find((l) => l.bracket_id === saved);
+    const pick = found || state.leagues.find((l) => l.bracket_kind === "casual") || state.leagues[0];
+    state.currentBracketId = pick.bracket_id;
+    state.currentLeagueId = pick.league_id;
+    localStorage.setItem("ft_bracket_id", String(state.currentBracketId));
+    return true;
+  }
+  function renderSwitcher() {
+    const el = document.getElementById("switcher");
+    if (!el) return;
+    if (!state.session || !state.leagues.length) {
+      el.innerHTML = "";
+      return;
+    }
+    const leagueIds = [...new Set(state.leagues.map((l) => l.league_id))];
+    if (leagueIds.length === 1) {
+      el.innerHTML = state.leagues.map((r) => `<button class="linkbtn switcher-btn${r.bracket_id === state.currentBracketId ? " on" : ""}"
+      onclick="switchToBracket(${r.bracket_id})">${esc(r.bracket_name)}</button>`).join("");
+    } else {
+      el.innerHTML = `<select onchange="switchToBracket(Number(this.value))">
+      ${leagueIds.map((lid) => {
+        const rows = state.leagues.filter((l) => l.league_id === lid);
+        return `<optgroup label="${esc(rows[0].league_name)}">
+          ${rows.map((r) => `<option value="${r.bracket_id}" ${r.bracket_id === state.currentBracketId ? "selected" : ""}>${esc(r.bracket_name)}</option>`).join("")}
+        </optgroup>`;
+      }).join("")}
+    </select>`;
+    }
+  }
+  async function switchToBracket(bracketId) {
+    const row = state.leagues.find((l) => l.bracket_id === bracketId);
+    if (!row || bracketId === state.currentBracketId) return;
+    state.currentBracketId = bracketId;
+    state.currentLeagueId = row.league_id;
+    localStorage.setItem("ft_bracket_id", String(bracketId));
+    state.tab = "shows";
+    state.currentShow = null;
+    await loadConfig();
+    subscribeRealtime();
+    renderSwitcher();
+    const admintab = document.getElementById("admintab");
+    if (admintab) admintab.style.display = isCurrentLeagueAdmin() ? "" : "none";
+    await renderAll();
+  }
+
+  // src/core/leagueShows.js
+  async function fetchShows(queryFn) {
+    const [{ data: shows }, ls] = await Promise.all([
+      queryFn(db.from("shows").select("*")),
+      rpc("get_league_shows", { p_league_id: state.currentLeagueId })
+    ]);
+    const byId = Object.fromEntries((ls || []).map((l) => [l.show_id, l]));
+    return (shows || []).map((s) => ({ ...s, ...byId[s.id] }));
+  }
+  async function fetchShow(id) {
+    const [{ data: show }, ls] = await Promise.all([
+      db.from("shows").select("*").eq("id", id).single(),
+      rpc("get_league_shows", { p_league_id: state.currentLeagueId })
+    ]);
+    if (!show) return null;
+    const row = (ls || []).find((l) => l.show_id === id);
+    return { ...show, ...row };
+  }
+
   // src/core/trophy.js
   var WIN_SVG = '<svg viewBox="0 0 100 100" style="width:__S__px;height:__S__px;vertical-align:-.32em"><ellipse cx="50" cy="83" rx="36" ry="9.5" fill="#000" opacity=".13"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(64.9,76.7) rotate(328) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(64.9,76.7) rotate(328) scale(1,0.5)"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(29.9,77.1) rotate(353) scale(1,0.5)" class="h"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(29.9,77.1) rotate(353) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.7,-3.6 11.2,0 C8.7,3.6 3.4,3.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(35.3,77.2) rotate(26) scale(1,0.5)" class="h"/><path d="M0,0 C3.4,-3.6 8.7,-3.6 11.2,0 C8.7,3.6 3.4,3.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(35.3,77.2) rotate(26) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(52.1,77.3) rotate(280) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(52.1,77.3) rotate(280) scale(1,0.5)"/><path d="M0,0 C3.0,-3.3 7.9,-3.3 10.2,0 C7.9,3.3 3.0,3.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(61.7,78.2) rotate(31) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.3 7.9,-3.3 10.2,0 C7.9,3.3 3.0,3.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(61.7,78.2) rotate(31) scale(1,0.5)"/><path d="M0,0 C3.5,-3.7 9.1,-3.7 11.7,0 C9.1,3.7 3.5,3.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(70.0,79.7) rotate(347) scale(1,0.5)" class="h"/><path d="M0,0 C3.5,-3.7 9.1,-3.7 11.7,0 C9.1,3.7 3.5,3.7 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(70.0,79.7) rotate(347) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(79.3,80.2) rotate(42) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(79.3,80.2) rotate(42) scale(1,0.5)"/><path d="M0,0 C2.8,-2.9 7.2,-2.9 9.2,0 C7.2,2.9 2.8,2.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(47.7,80.6) rotate(36) scale(1,0.5)" class="h"/><path d="M0,0 C2.8,-2.9 7.2,-2.9 9.2,0 C7.2,2.9 2.8,2.9 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(47.7,80.6) rotate(36) scale(1,0.5)"/><path d="M0,0 C2.9,-3.1 7.5,-3.1 9.6,0 C7.5,3.1 2.9,3.1 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(82.2,81.2) rotate(287) scale(1,0.5)" class="h"/><path d="M0,0 C2.9,-3.1 7.5,-3.1 9.6,0 C7.5,3.1 2.9,3.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(82.2,81.2) rotate(287) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.2,-3.4 10.6,0 C8.2,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(23.8,81.3) rotate(201) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.2,-3.4 10.6,0 C8.2,3.4 3.2,3.4 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(23.8,81.3) rotate(201) scale(1,0.5)"/><path d="M0,0 C3.5,-3.7 9.0,-3.7 11.6,0 C9.0,3.7 3.5,3.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(42.1,81.7) rotate(69) scale(1,0.5)" class="h"/><path d="M0,0 C3.5,-3.7 9.0,-3.7 11.6,0 C9.0,3.7 3.5,3.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(42.1,81.7) rotate(69) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.3,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(24.7,81.7) rotate(47) scale(1,0.5)" class="h"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.3,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(24.7,81.7) rotate(47) scale(1,0.5)"/><path d="M0,0 C3.1,-3.4 8.2,-3.4 10.5,0 C8.2,3.4 3.1,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(82.9,81.9) rotate(42) scale(1,0.5)" class="h"/><path d="M0,0 C3.1,-3.4 8.2,-3.4 10.5,0 C8.2,3.4 3.1,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(82.9,81.9) rotate(42) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(23.1,82.0) rotate(77) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.2 7.8,-3.2 9.9,0 C7.8,3.2 3.0,3.2 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(23.1,82.0) rotate(77) scale(1,0.5)"/><path d="M0,0 C3.5,-3.8 9.2,-3.8 11.8,0 C9.2,3.8 3.5,3.8 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(65.1,82.0) rotate(350) scale(1,0.5)" class="h"/><path d="M0,0 C3.5,-3.8 9.2,-3.8 11.8,0 C9.2,3.8 3.5,3.8 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(65.1,82.0) rotate(350) scale(1,0.5)"/><path d="M0,0 C3.6,-3.9 9.4,-3.9 12.1,0 C9.4,3.9 3.6,3.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(52.2,82.8) rotate(109) scale(1,0.5)" class="h"/><path d="M0,0 C3.6,-3.9 9.4,-3.9 12.1,0 C9.4,3.9 3.6,3.9 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(52.2,82.8) rotate(109) scale(1,0.5)"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(72.1,83.0) rotate(76) scale(1,0.5)" class="h"/><path d="M0,0 C3.1,-3.3 8.1,-3.3 10.4,0 C8.1,3.3 3.1,3.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(72.1,83.0) rotate(76) scale(1,0.5)"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.2,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(33.2,83.0) rotate(308) scale(1,0.5)" class="h"/><path d="M0,0 C3.4,-3.6 8.8,-3.6 11.2,0 C8.8,3.6 3.4,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(33.2,83.0) rotate(308) scale(1,0.5)"/><path d="M0,0 C3.7,-4.0 9.7,-4.0 12.5,0 C9.7,4.0 3.7,4.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(26.4,83.7) rotate(36) scale(1,0.5)" class="h"/><path d="M0,0 C3.7,-4.0 9.7,-4.0 12.5,0 C9.7,4.0 3.7,4.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(26.4,83.7) rotate(36) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(47.9,83.9) rotate(77) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.2 7.7,-3.2 9.9,0 C7.7,3.2 3.0,3.2 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(47.9,83.9) rotate(77) scale(1,0.5)"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.2,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(65.1,84.3) rotate(278) scale(1,0.5)" class="h"/><path d="M0,0 C3.0,-3.2 7.9,-3.2 10.2,0 C7.9,3.2 3.0,3.2 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(65.1,84.3) rotate(278) scale(1,0.5)"/><path d="M0,0 C2.8,-3.0 7.2,-3.0 9.3,0 C7.2,3.0 2.8,3.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(21.8,84.5) rotate(107) scale(1,0.5)" class="h"/><path d="M0,0 C2.8,-3.0 7.2,-3.0 9.3,0 C7.2,3.0 2.8,3.0 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(21.8,84.5) rotate(107) scale(1,0.5)"/><path d="M0,0 C3.3,-3.5 8.6,-3.5 11.0,0 C8.6,3.5 3.3,3.5 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(43.7,85.3) rotate(32) scale(1,0.5)" class="h"/><path d="M0,0 C3.3,-3.5 8.6,-3.5 11.0,0 C8.6,3.5 3.3,3.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(43.7,85.3) rotate(32) scale(1,0.5)"/><path d="M0,0 C3.3,-3.6 8.7,-3.6 11.1,0 C8.7,3.6 3.3,3.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(56.0,85.4) rotate(87) scale(1,0.5)" class="h"/><path d="M0,0 C3.3,-3.6 8.7,-3.6 11.1,0 C8.7,3.6 3.3,3.6 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(56.0,85.4) rotate(87) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(75.0,85.6) rotate(134) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(75.0,85.6) rotate(134) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.7,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(59.4,86.9) rotate(345) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.7,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#447A36" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(59.4,86.9) rotate(345) scale(1,0.5)"/><ellipse cx="50" cy="80" rx="14" ry="3.4" fill="#000" opacity=".22"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(41.0,80.5) rotate(24) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#6FB457" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(41.0,80.5) rotate(24) scale(1,0.5)"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.5999999999999996" stroke-linejoin="round" transform="translate(50.0,82.5) rotate(160) scale(1,0.5)" class="h"/><path d="M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.2" stroke-linejoin="round" transform="translate(50.0,82.5) rotate(160) scale(1,0.5)"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(-33) scale(1,1.0)" class="h"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(-33) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(19) scale(1,1.0)" class="h"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(52.6,58.8) rotate(19) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-53) scale(1,1.0)" class="h"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-53) scale(1,1.0)"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-1) scale(1,1.0)" class="h"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(59.5,56.7) rotate(-1) scale(1,1.0)"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-73) scale(1,1.0)" class="h"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-73) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-21) scale(1,1.0)" class="h"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(65.4,52.3) rotate(-21) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-93) scale(1,1.0)" class="h"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-93) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-41) scale(1,1.0)" class="h"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(69.3,46.2) rotate(-41) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-113) scale(1,1.0)" class="h"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-113) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-61) scale(1,1.0)" class="h"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(71.0,39.1) rotate(-61) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-133) scale(1,1.0)" class="h"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-133) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-81) scale(1,1.0)" class="h"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(70.1,31.9) rotate(-81) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-153) scale(1,1.0)" class="h"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-153) scale(1,1.0)"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-101) scale(1,1.0)" class="h"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(66.8,25.4) rotate(-101) scale(1,1.0)"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-173) scale(1,1.0)" class="h"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-173) scale(1,1.0)"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-121) scale(1,1.0)" class="h"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(61.4,20.4) rotate(-121) scale(1,1.0)"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(213) scale(1,1.0)" class="h"/><path d="M0,0 C2.7,-2.9 6.9,-2.9 8.9,0 C6.9,2.9 2.7,2.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(213) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(161) scale(1,1.0)" class="h"/><path d="M0,0 C2.5,-2.7 6.5,-2.7 8.4,0 C6.5,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(47.4,58.8) rotate(161) scale(1,1.0)"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(233) scale(1,1.0)" class="h"/><path d="M0,0 C2.5,-2.7 6.6,-2.7 8.5,0 C6.6,2.7 2.5,2.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(233) scale(1,1.0)"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(181) scale(1,1.0)" class="h"/><path d="M0,0 C2.4,-2.5 6.2,-2.5 8.0,0 C6.2,2.5 2.4,2.5 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(40.5,56.7) rotate(181) scale(1,1.0)"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(253) scale(1,1.0)" class="h"/><path d="M0,0 C2.4,-2.6 6.3,-2.6 8.0,0 C6.3,2.6 2.4,2.6 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(253) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(201) scale(1,1.0)" class="h"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.5,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(34.6,52.3) rotate(201) scale(1,1.0)"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(273) scale(1,1.0)" class="h"/><path d="M0,0 C2.3,-2.4 5.9,-2.4 7.6,0 C5.9,2.4 2.3,2.4 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(273) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(221) scale(1,1.0)" class="h"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(30.7,46.2) rotate(221) scale(1,1.0)"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(293) scale(1,1.0)" class="h"/><path d="M0,0 C2.1,-2.3 5.6,-2.3 7.1,0 C5.6,2.3 2.1,2.3 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(293) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(241) scale(1,1.0)" class="h"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.0,39.1) rotate(241) scale(1,1.0)"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(313) scale(1,1.0)" class="h"/><path d="M0,0 C2.0,-2.1 5.2,-2.1 6.7,0 C5.2,2.1 2.0,2.1 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(313) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(261) scale(1,1.0)" class="h"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.3,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(29.9,31.9) rotate(261) scale(1,1.0)"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(333) scale(1,1.0)" class="h"/><path d="M0,0 C1.9,-2.0 4.9,-2.0 6.2,0 C4.9,2.0 1.9,2.0 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(333) scale(1,1.0)"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(281) scale(1,1.0)" class="h"/><path d="M0,0 C1.8,-1.9 4.6,-1.9 5.9,0 C4.6,1.9 1.8,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(33.2,25.4) rotate(281) scale(1,1.0)"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(353) scale(1,1.0)" class="h"/><path d="M0,0 C1.7,-1.9 4.5,-1.9 5.8,0 C4.5,1.9 1.7,1.9 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(353) scale(1,1.0)"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="none" stroke="#F2EEDC" stroke-width="3.8" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(301) scale(1,1.0)" class="h"/><path d="M0,0 C1.6,-1.7 4.2,-1.7 5.4,0 C4.2,1.7 1.6,1.7 0,0 Z" fill="#5B9E45" stroke="#1A2415" stroke-width="1.4" stroke-linejoin="round" transform="translate(38.6,20.4) rotate(301) scale(1,1.0)"/><g fill="#F5B93B" stroke="none"><path d="M20,30 l1.6,3 3,1.6 -3,1.6 -1.6,3 -1.6,-3 -3,-1.6 3,-1.6 Z"/><path d="M79,44 l1.2,2.3 2.3,1.2 -2.3,1.2 -1.2,2.3 -1.2,-2.3 -2.3,-1.2 2.3,-1.2 Z"/><circle cx="72" cy="20" r="1.6"/></g></svg>';
   var winBadge = (px) => WIN_SVG.replace(/__S__/g, px);
@@ -182,10 +267,10 @@
     markTab();
     const todayStr = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
     const graceStr = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
-    const [{ data: up }, { data: past }, { data: seas }] = await Promise.all([
-      db.from("shows").select("*").gte("showdate", graceStr).order("showdate"),
-      db.from("shows").select("*").lt("showdate", graceStr).order("showdate", { ascending: false }).limit(12),
-      db.from("seasons").select("*").order("start_date")
+    const [up, past, seas] = await Promise.all([
+      fetchShows((q) => q.gte("showdate", graceStr).order("showdate")),
+      fetchShows((q) => q.lt("showdate", graceStr).order("showdate", { ascending: false }).limit(12)),
+      rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId })
     ]);
     const seasonOf = (d) => (seas || []).find((se) => se.start_date <= d && d <= se.end_date);
     const isRecent = (s) => s.showdate < todayStr || s.status === "final";
@@ -194,19 +279,16 @@
     const finals = [...up || [], ...past || []].filter((s) => s.status === "final").map((s) => s.id);
     const winners = {};
     if (finals.length) {
-      const [{ data: sc }, { data: pl }] = await Promise.all([
-        db.from("scores").select("show_id,player_id,points").in("show_id", finals),
-        db.from("players_public").select("id,name")
-      ]);
-      const pn = Object.fromEntries((pl || []).map((p) => [p.id, p.name]));
+      const sc = await rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId });
+      const relevant = (sc || []).filter((s) => finals.includes(s.show_id));
       const best = {};
-      for (const s of sc || []) {
+      for (const s of relevant) {
         if (s.points <= 0) continue;
         if (!best[s.show_id] || s.points > best[s.show_id]) best[s.show_id] = s.points;
       }
-      for (const s of sc || []) {
+      for (const s of relevant) {
         if (s.points > 0 && s.points === best[s.show_id])
-          ((_b = winners[_a = s.show_id]) != null ? _b : winners[_a] = { points: s.points, names: [] }).names.push(pn[s.player_id] || "?");
+          ((_b = winners[_a = s.show_id]) != null ? _b : winners[_a] = { points: s.points, names: [] }).names.push(s.player_name || "?");
       }
     }
     const row = (s) => {
@@ -257,13 +339,12 @@
     clearTimersFor("board");
     state.tab = "board";
     markTab();
-    const [{ data: sc }, { data: plist }, { data: allShows }, { data: seasons }] = await Promise.all([
-      db.from("scores").select("points, player_id, show_id"),
-      db.from("players_public").select("id,name"),
-      db.from("shows").select("id,showdate,venue,status"),
-      db.from("seasons").select("*").order("start_date")
+    const [sc, allShows, seasons] = await Promise.all([
+      rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId }),
+      fetchShows((q) => q),
+      rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId })
     ]);
-    const pname = Object.fromEntries((plist || []).map((p) => [p.id, p.name]));
+    const pname = Object.fromEntries((sc || []).map((s) => [s.player_id, s.player_name]));
     const showById = Object.fromEntries((allShows || []).map((sh) => [sh.id, sh]));
     const today = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
     if (state.boardSeason === null) {
@@ -341,6 +422,10 @@
   }
 
   // src/features/admin.js
+  function officialBracketId() {
+    var _a;
+    return (_a = state.leagues.find((l) => l.league_id === state.currentLeagueId && l.bracket_kind === "official")) == null ? void 0 : _a.bracket_id;
+  }
   async function renderAdmin() {
     var _a, _b, _c, _d;
     clearTimersFor("admin");
@@ -354,8 +439,10 @@
       { key: "closer", type: "closer", label: "Closer", points: 2 },
       { key: "cover1", type: "cover_pick", label: "Cover Pick", points: 2 }
     ], flat_picks: 3, flat_points: 1 };
-    const { data: shows } = await db.from("shows").select("*").gte("showdate", new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10)).order("showdate");
-    const { data: seasonsA } = await db.from("seasons").select("*").order("start_date");
+    const [shows, seasonsA] = await Promise.all([
+      fetchShows((q) => q.gte("showdate", new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10)).order("showdate")),
+      rpc("get_bracket_seasons", { p_bracket_id: officialBracketId() })
+    ]);
     const todayA = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
     const nextShow = (shows || []).find((sh) => sh.showdate >= todayA) || (shows || [])[(shows || []).length - 1];
     $("#main").innerHTML = `
@@ -442,9 +529,9 @@
   async function loadPlayers() {
     const { data: pl } = await db.from("players_public").select("*").order("created_at");
     $("#playerlist").innerHTML = (pl || []).map((p) => `
-    <div class="pickres hit"><span>${p.is_admin ? "\u2605" : "\xB7"}</span>
+    <div class="pickres hit"><span>\xB7</span>
       <span>${esc(p.name)}</span>
-      <span class="pt">${p.id === state.session.id ? '<small class="muted">you</small>' : p.is_admin ? '<small class="muted">admin</small>' : `<button class="btn ghost small" onclick="bootPlayer('` + p.id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')" style="border-color:var(--coral);color:var(--coral)">Boot</button>`}</span>
+      <span class="pt">${p.id === state.session.id ? '<small class="muted">you</small>' : `<button class="btn ghost small" onclick="bootPlayer('` + p.id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')" style="border-color:var(--coral);color:var(--coral)">Boot</button>`}</span>
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
   }
   function seasonRow(se) {
@@ -464,7 +551,7 @@
     const [name, start, end] = [...row.querySelectorAll("input")].map((i) => i.value);
     const id = row.dataset.season ? Number(row.dataset.season) : null;
     try {
-      await rpc("admin_save_season", { p_name: state.session.name, p_pin: state.session.pin, p_id: id, p_sname: name, p_start: start || null, p_end: end || null });
+      await rpc("admin_save_season", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: officialBracketId(), p_id: id, p_sname: name, p_start: start || null, p_end: end || null });
       toast("Season saved \u2714", "score");
       state.boardSeason = null;
       renderAdmin();
@@ -491,7 +578,7 @@
     if (!bansOpen) return;
     $("#banlist").innerHTML = '<p class="muted">Loading\u2026</p>';
     try {
-      const rows = await rpc("admin_list_bans", { p_name: state.session.name, p_pin: state.session.pin });
+      const rows = await rpc("admin_list_bans", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId });
       $("#banlist").innerHTML = (rows || []).map((r) => `
       <div class="pickres miss"><span>\u26D4</span><span>${esc(r.name)}</span>
         <span class="pt"><small class="muted">${new Date(r.banned_at).toLocaleDateString()}</small>
@@ -504,7 +591,7 @@
   async function unban(name) {
     if (!confirm(`Unban "${name}"? The name becomes registerable again.`)) return;
     try {
-      await rpc("admin_unban", { p_name: state.session.name, p_pin: state.session.pin, p_banned: name });
+      await rpc("admin_unban", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_banned: name });
       toast(`${name} unbanned`, "score");
       bansOpen = false;
       toggleBans();
@@ -513,13 +600,13 @@
     }
   }
   async function bootPlayer(id, name) {
-    if (!confirm(`Remove ${name}? Their picks and scores are deleted permanently \u2014 including any shows they won.`)) return;
-    const ban = confirm(`Also block the name "${name}" from re-registering?
+    if (!confirm(`Remove ${name} from this league? Their past picks/scores stay on the books \u2014 they just stop being able to submit new ones.`)) return;
+    const ban = confirm(`Also block the name "${name}" from rejoining this league?
 
-OK = boot + ban \xB7 Cancel = boot only`);
+OK = remove + ban \xB7 Cancel = remove only`);
     try {
-      await rpc("admin_boot_player", { p_name: state.session.name, p_pin: state.session.pin, p_player_id: id, p_ban: ban });
-      toast(`${name} booted${ban ? " and banned" : ""}`, "score");
+      await rpc("admin_league_boot", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_player_id: id, p_ban: ban });
+      toast(`${name} removed${ban ? " and banned" : ""}`, "score");
       loadPlayers();
       loadRoster();
     } catch (e) {
@@ -528,7 +615,7 @@ OK = boot + ban \xB7 Cancel = boot only`);
   }
   async function toggleFormat(showId, next) {
     try {
-      await rpc("admin_set_show_format", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: showId, p_format: next });
+      await rpc("admin_set_show_format", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_show_id: showId, p_format: next });
       toast("Format: " + (next === "one_set" ? "1 set" : "2 set"), "score");
       renderAdmin();
     } catch (e) {
@@ -539,7 +626,7 @@ OK = boot + ban \xB7 Cancel = boot only`);
     const showId = Number($("#roster-show").value);
     if (!showId) return;
     try {
-      const rows = await rpc("admin_pick_status", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: showId });
+      const rows = await rpc("admin_pick_status", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: showId });
       const total = rows.length, done = rows.filter((r) => r.picks_count > 0).length;
       $("#roster").innerHTML = `
       <p class="muted" style="margin-bottom:6px"><b style="color:var(--mint)">${done}</b> of ${total} players have picks in</p>
@@ -606,7 +693,7 @@ OK = boot + ban \xB7 Cancel = boot only`);
       oneset: { slots: slots1, flat_picks: Number($("#c1-flat").value), flat_points: Number($("#c1-flatpts").value) }
     };
     try {
-      await rpc("admin_update_config", { p_name: state.session.name, p_pin: state.session.pin, p_data: data });
+      await rpc("admin_update_config", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_data: data });
       state.cfg = data;
       toast("Rules saved \u2714", "score");
     } catch (e) {
@@ -617,7 +704,7 @@ OK = boot + ban \xB7 Cancel = boot only`);
     const input = document.querySelector(`input[data-show="${showId}"]`);
     if (!input.value) return;
     try {
-      await rpc("admin_set_cutoff", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: showId, p_cutoff: new Date(input.value).toISOString() });
+      await rpc("admin_set_cutoff", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_show_id: showId, p_cutoff: new Date(input.value).toISOString() });
       btn.textContent = "\u2714";
       setTimeout(() => btn.textContent = "Set", 1500);
     } catch (e) {
@@ -629,9 +716,7 @@ OK = boot + ban \xB7 Cancel = boot only`);
     btn.disabled = true;
     btn.textContent = "\u2026";
     try {
-      await edgeFn("score").catch(() => {
-      });
-      await rpc("admin_set_show_status", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: showId, p_status: "final" });
+      await edgeFn("finalize", { p_name: state.session.name, p_pin: state.session.pin, league_id: state.currentLeagueId, show_id: showId });
       toast("Show finalized \u{1F3C1}", "score");
       renderAdmin();
     } catch (e) {
@@ -671,7 +756,7 @@ OK = boot + ban \xB7 Cancel = boot only`);
     const savedShow = state.currentShow;
     await renderBoard();
     await renderShows();
-    if (state.session.is_admin) await renderAdmin();
+    if (isCurrentLeagueAdmin()) await renderAdmin();
     state.currentShow = savedShow;
   }
   function applyLayout() {
@@ -679,7 +764,7 @@ OK = boot + ban \xB7 Cancel = boot only`);
     $("#cols") && ($("#cols").style.display = desk ? "grid" : "none");
     const c = document.getElementById("cols");
     if (c) {
-      const admin = !!(state.session && state.session.is_admin);
+      const admin = !!(state.session && isCurrentLeagueAdmin());
       document.getElementById("col-admin").style.display = admin && desk ? "" : "none";
       c.style.gridTemplateColumns = admin ? "1fr 1.15fr 1fr" : "1fr 1.2fr";
     }
@@ -695,14 +780,39 @@ OK = boot + ban \xB7 Cancel = boot only`);
 
   // src/features/picks.js
   var isWildcard = (v) => (v || "").trim().toLowerCase() === "any debut";
+  function draftKey(showId) {
+    return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`;
+  }
   async function openShow(id) {
     if (isDesktop()) state.tab = "shows";
     clearTimersFor("shows");
-    const { data: show } = await db.from("shows").select("*").eq("id", id).single();
+    const show = await fetchShow(id);
     state.currentShow = show;
     const st = showState(show);
-    if (st === "open") renderPickSheet(show);
-    else renderShowDetail(show);
+    if (st !== "open") {
+      renderShowDetail(show);
+      return;
+    }
+    let gate = { ok: true, reason: null };
+    try {
+      const [row] = await rpc("can_submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id });
+      if (row) gate = row;
+    } catch (e) {
+    }
+    if (gate.ok) renderPickSheet(show);
+    else renderIneligible(show, gate.reason);
+  }
+  function renderIneligible(show, reason) {
+    const casual = state.leagues.find((l) => l.league_id === state.currentLeagueId && l.bracket_kind === "casual");
+    $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button></p>
+    <div class="sheet">
+      <h2>${esc(show.venue || "TBA")}</h2>
+      <div class="sub">${fmtDate(show.showdate)}</div>
+      <p class="muted" style="margin-top:14px">${esc(reason || "Picks aren't open for this bracket.")}</p>
+      ${casual ? `<button class="btn ghost small" onclick="switchToBracket(${casual.bracket_id})">Switch to Casual</button>` : ""}
+    </div>
+    ${footerHtml()}`;
   }
   function prettifySlotKey(key) {
     return key.replace(/[_-]+/g, " ").replace(/([a-zA-Z])(\d)/g, "$1 $2").trim().split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
@@ -741,11 +851,11 @@ OK = boot + ban \xB7 Cancel = boot only`);
   async function renderPickSheet(show) {
     let mine = [];
     try {
-      mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: show.id });
+      mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id });
     } catch (e) {
     }
-    const draftKey = `ft_draft_${state.session.id}_${show.id}`;
-    const draft = JSON.parse(localStorage.getItem(draftKey) || "null");
+    const dKey = draftKey(show.id);
+    const draft = JSON.parse(localStorage.getItem(dKey) || "null");
     const val = (k) => esc((draft && draft[k] != null ? draft[k] : (mine.find((p) => p.slot === k) || {}).songname) || "");
     const slots = slotDefs(show.format);
     const slotHtml = (s) => `
@@ -773,7 +883,7 @@ OK = boot + ban \xB7 Cancel = boot only`);
       document.querySelectorAll(".slotline input").forEach((i) => {
         if (i.value.trim()) d[i.dataset.slot] = i.value;
       });
-      localStorage.setItem(draftKey, JSON.stringify(d));
+      localStorage.setItem(dKey, JSON.stringify(d));
     }));
     $("#save").onclick = savePicks;
     if (state.cfg.voting_override !== "open" && show.cutoff_at) state.timers.push(setInterval(() => {
@@ -849,8 +959,8 @@ ${unknown.map((u) => u.songname).join("\n")}
 
 Save anyway?`)) return;
     try {
-      await rpc("submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: state.currentShow.id, p_picks: picks });
-      localStorage.removeItem(`ft_draft_${state.session.id}_${state.currentShow.id}`);
+      await rpc("submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: state.currentShow.id, p_picks: picks });
+      localStorage.removeItem(draftKey(state.currentShow.id));
       toast("Picks saved \u2714", "score");
     } catch (e) {
       $("#p-err").textContent = e.message;
@@ -859,13 +969,12 @@ Save anyway?`)) return;
   async function renderShowDetail(show) {
     var _a, _b;
     clearTimers();
-    const [{ data: setlist }, picks, { data: scores }, { data: plist }] = await Promise.all([
+    const [{ data: setlist }, picks, scores] = await Promise.all([
       db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
-      rpc("get_show_picks", { p_show_id: show.id }).catch(() => []),
-      db.from("scores").select("*").eq("show_id", show.id).order("points", { ascending: false }),
-      db.from("players_public").select("id,name")
+      rpc("get_show_picks", { p_bracket_id: state.currentBracketId, p_show_id: show.id }).catch(() => []),
+      rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id }).then((rows) => (rows || []).sort((a, b) => b.points - a.points))
     ]);
-    const pname = Object.fromEntries((plist || []).map((p) => [p.id, p.name]));
+    const pname = Object.fromEntries((scores || []).map((s) => [s.player_id, s.player_name]));
     const mineHits = new Set((picks || []).filter((p) => p.player_id === state.session.id).map((p) => p.songname.toLowerCase()));
     let lastSet = null;
     const setHtml = (setlist || []).map((s) => {
@@ -925,42 +1034,43 @@ Save anyway?`)) return;
 
   // src/core/realtime.js
   var myLastPts = {};
+  var channel = null;
+  var visListenerAttached = false;
   function subscribeRealtime() {
-    db.channel("live").on("postgres_changes", { event: "INSERT", schema: "public", table: "setlist_songs" }, (p) => {
+    if (channel) db.removeChannel(channel);
+    channel = db.channel(`live-${state.currentBracketId}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "setlist_songs" }, (p) => {
       const s = p.new;
       toast(`\u{1F3B5} ${esc(s.songname)}${s.is_encore ? " (encore)" : ""}`, "", `song:${s.show_id}:${(s.songname || "").toLowerCase()}`);
       if (state.currentShow && state.tab !== "admin" && s.show_id === state.currentShow.id) openShow(state.currentShow.id);
-    }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "shows" }, async (p) => {
-      const sh = p.new;
+    }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "league_shows", filter: `league_id=eq.${state.currentLeagueId}` }, async (p) => {
+      const ls = p.new;
       const fresh = (ts) => ts && Date.now() - new Date(ts).getTime() < 3 * 6e4;
-      if (fresh(sh.remind_sent)) {
+      if (!fresh(ls.remind_sent) && !fresh(ls.lock_sent) && !fresh(ls.winner_sent)) return;
+      const { data: sh } = await db.from("shows").select("*").eq("id", ls.show_id).single();
+      if (!sh) return;
+      if (fresh(ls.remind_sent)) {
         let mine = [];
         try {
-          mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: sh.id });
+          mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id });
         } catch (e) {
         }
         toast(mine.length ? `\u23F0 1 hour to lock \u2014 ${esc(sh.venue || sh.showdate)}. Your picks are in \u2714` : `\u23F0 1 hour to lock \u2014 ${esc(sh.venue || sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
       }
-      if (fresh(sh.lock_sent))
+      if (fresh(ls.lock_sent))
         toast(`\u{1F512} Picks locked \u2014 ${esc(sh.venue || sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);
-      if (fresh(sh.winner_sent)) {
+      if (fresh(ls.winner_sent)) {
         try {
-          const [{ data: sc }, { data: pl }] = await Promise.all([
-            db.from("scores").select("player_id,points").eq("show_id", sh.id).order("points", { ascending: false }).limit(2),
-            db.from("players_public").select("id,name")
-          ]);
-          if (sc == null ? void 0 : sc.length) {
-            const pn = Object.fromEntries((pl || []).map((x) => [x.id, x.name]));
-            toast(`\u{1F3C6} ${esc(pn[sc[0].player_id] || "?")} takes ${esc(sh.venue || sh.showdate)} with ${sc[0].points} pts`, "score", `win:${sh.id}`);
-          }
+          const sc = await rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id });
+          const top = (sc || []).slice().sort((a, b) => b.points - a.points)[0];
+          if (top) toast(`\u{1F3C6} ${esc(top.player_name || "?")} takes ${esc(sh.venue || sh.showdate)} with ${top.points} pts`, "score", `win:${sh.id}`);
         } catch (e) {
         }
       }
-    }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "seasons" }, (p) => {
+    }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "seasons", filter: `bracket_id=eq.${state.currentBracketId}` }, (p) => {
       const se = p.new;
       if (se.winner_sent && Date.now() - new Date(se.winner_sent).getTime() < 3 * 6e4)
         toast(`\u{1F451} ${esc(se.name)} is in the books \u2014 check Standings for the podium`, "score", `season:${se.id}`);
-    }).on("postgres_changes", { event: "*", schema: "public", table: "scores" }, (p) => {
+    }).on("postgres_changes", { event: "*", schema: "public", table: "scores", filter: `bracket_id=eq.${state.currentBracketId}` }, (p) => {
       var _a, _b;
       if (((_a = p.new) == null ? void 0 : _a.player_id) === ((_b = state.session) == null ? void 0 : _b.id) && myLastPts[p.new.show_id] !== p.new.points) {
         myLastPts[p.new.show_id] = p.new.points;
@@ -968,9 +1078,12 @@ Save anyway?`)) return;
       }
       if (state.tab === "board") renderBoard();
     }).subscribe();
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible" && state.session) refreshCurrent();
-    });
+    if (!visListenerAttached) {
+      visListenerAttached = true;
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible" && state.session) refreshCurrent();
+      });
+    }
   }
   function refreshCurrent() {
     if (state.tab === "shows" && state.currentShow && showState(state.currentShow) === "open") return;
@@ -985,11 +1098,6 @@ Save anyway?`)) return;
   }
 
   // src/core/session.js
-  async function loadConfig() {
-    const { data, error } = await db.from("game_config").select("data").eq("id", 1).single();
-    if (error) throw new Error("Couldn't load game config: " + error.message);
-    state.cfg = data.data;
-  }
   async function loadSongs() {
     const { data, error } = await db.from("songs_cache").select("*").order("times_played", { ascending: false });
     if (error) throw new Error("Couldn't load song catalog: " + error.message);
@@ -1003,6 +1111,13 @@ Save anyway?`)) return;
     localStorage.removeItem("ft_session");
     location.reload();
   }
+  function renderNoLeague() {
+    $("#main").innerHTML = `<div class="panel" style="margin-top:30px">
+    <h2>You're not in a league yet</h2>
+    <p class="muted">Ask a league admin to add you \u2014 they'll need your player name.</p>
+    <button class="btn ghost" onclick="logout()">Log out</button>
+  </div>`;
+  }
   async function boot() {
     document.title = APP_NAME;
     const nameEl = document.getElementById("appName");
@@ -1012,9 +1127,15 @@ Save anyway?`)) return;
       renderAuth();
       return;
     }
-    $("#tabs").style.display = "flex";
-    if (state.session.is_admin) $("#admintab").style.display = "";
     try {
+      const hasLeague = await resolveLeagues();
+      if (!hasLeague) {
+        renderNoLeague();
+        return;
+      }
+      $("#tabs").style.display = "flex";
+      if (isCurrentLeagueAdmin()) $("#admintab").style.display = "";
+      renderSwitcher();
       await Promise.all([loadConfig(), loadSongs()]);
       subscribeRealtime();
       await renderAll();
@@ -1051,7 +1172,8 @@ Save anyway?`)) return;
     toggleBans,
     unban,
     runEdge,
-    bootPlayer
+    bootPlayer,
+    switchToBracket
   });
   boot();
 })();

@@ -48,6 +48,10 @@ header{position:sticky;top:0;z-index:50;background:var(--chrome);backdrop-filter
 .who{margin-left:auto;font-size:.85rem;color:var(--cream-dim)}
 .who b{color:var(--cream)}
 .linkbtn{background:none;border:none;color:var(--coral);font-size:.8rem;text-decoration:underline;padding:2px 4px}
+.switcher{display:flex;gap:4px;flex:none}
+.switcher-btn{text-decoration:none;border:1px solid var(--line2);border-radius:8px;padding:4px 9px;font-size:.78rem;color:var(--cream-dim)}
+.switcher-btn.on{color:var(--yolk);border-color:var(--yolk)}
+.switcher select{background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:4px 8px;font-size:.78rem}
 
 /* ---------- tabs ---------- */
 nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:50;display:flex;background:var(--chrome);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}

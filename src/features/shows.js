@@ -1,6 +1,7 @@
 import { $, esc, footerHtml } from "../core/dom.js";
-import { db } from "../core/supabaseClient.js";
+import { rpc } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
+import { fetchShows } from "../core/leagueShows.js";
 import { fmtDate, countdown, clearTimersFor, showState } from "../core/format.js";
 import { winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
@@ -9,10 +10,10 @@ export async function renderShows(){
   clearTimersFor("shows"); state.tab = "shows"; state.currentShow = null; markTab();
   const todayStr = new Date().toLocaleDateString('sv');
   const graceStr = new Date(Date.now() - 2*864e5).toISOString().slice(0,10);
-  const [{ data: up }, { data: past }, { data: seas }] = await Promise.all([
-    db.from("shows").select("*").gte("showdate", graceStr).order("showdate"),
-    db.from("shows").select("*").lt("showdate", graceStr).order("showdate",{ascending:false}).limit(12),
-    db.from("seasons").select("*").order("start_date"),
+  const [up, past, seas] = await Promise.all([
+    fetchShows(q => q.gte("showdate", graceStr).order("showdate")),
+    fetchShows(q => q.lt("showdate", graceStr).order("showdate",{ascending:false}).limit(12)),
+    rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId }),
   ]);
   const seasonOf = d => (seas||[]).find(se => se.start_date <= d && d <= se.end_date);
   const isRecent = s => s.showdate < todayStr || s.status === "final";
@@ -21,19 +22,16 @@ export async function renderShows(){
   const finals = [...(up||[]), ...(past||[])].filter(s => s.status === "final").map(s => s.id);
   const winners = {};
   if (finals.length){
-    const [{ data: sc }, { data: pl }] = await Promise.all([
-      db.from("scores").select("show_id,player_id,points").in("show_id", finals),
-      db.from("players_public").select("id,name"),
-    ]);
-    const pn = Object.fromEntries((pl||[]).map(p => [p.id, p.name]));
+    const sc = await rpc("get_bracket_scores", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId });
+    const relevant = (sc||[]).filter(s => finals.includes(s.show_id));
     const best = {};
-    for (const s of sc||[]){
+    for (const s of relevant){
       if (s.points <= 0) continue;
       if (!best[s.show_id] || s.points > best[s.show_id]) best[s.show_id] = s.points;
     }
-    for (const s of sc||[]){
+    for (const s of relevant){
       if (s.points > 0 && s.points === best[s.show_id])
-        (winners[s.show_id] ??= { points: s.points, names: [] }).names.push(pn[s.player_id] || "?");
+        (winners[s.show_id] ??= { points: s.points, names: [] }).names.push(s.player_name || "?");
     }
   }
   const row = s => {

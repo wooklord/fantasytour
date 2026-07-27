@@ -9,10 +9,10 @@ export async function rpc(fn, args){
   if (error) throw new Error(error.message.replace(/^.*?: /,""));
   return data;
 }
-export async function edgeFn(action){
+export async function edgeFn(action, extra = {}){
   const r = await fetch(FN_URL, { method:"POST",
     headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+SUPABASE_ANON, "apikey":SUPABASE_ANON },
-    body: JSON.stringify({ action }) });
+    body: JSON.stringify({ action, ...extra }) });
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || "edge function failed");
   return j;

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node test/compare.mjs"
+    "test": "node test/scenario.test.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.24.2",

@@ -11,4 +11,7 @@ export const state = {
   cfg: null,
   timers: [],
   boardSeason: null, // null = auto-pick current season
+  leagues: [],           // raw my_leagues() rows for this session
+  currentLeagueId: null,
+  currentBracketId: null,
 };

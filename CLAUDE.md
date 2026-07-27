@@ -70,20 +70,41 @@ directly (lower risk), keep these habits:
    score update → standings; etc.). A valid-syntax, wrong-scope bug won't be caught
    by a syntax check — only by tracing.
 
-**Known limitation of `test/compare.mjs`:** it compares rendered DOM structure and
-text between `legacy-index.html` and the current build — nothing else. It is blind
-to CSS (including computed styles, cascade interactions between dead and live
-selectors), external resource loading (fonts, the Supabase CDN script), and anything
-in `<head>` that isn't reflected in DOM text. One real bug has already slipped past
-it this way: a dormant `.logo span` CSS rule (never matched anything pre-split,
-since `.logo` had no `<span>`) went live and broke the header title's font styling
-when a `<span>` was added to that element for the `APP_NAME` work — a PASS the
-whole time, because the DOM text was unchanged. Don't treat a harness PASS as proof
-a frontend change is visually correct — it only proves the DOM/JS behavior didn't
-change. (A full line-by-line diff of `styles.css` against the original inline
-`<style>` block, done after finding that bug, confirmed no other CSS content —
-gradients, box-shadows, transforms, keyframes, media queries, custom properties —
-was lost in the split.)
+**`test/compare.mjs` and `legacy-index.html` are retired (Stage C2a).** That harness
+diffed the current build's rendered DOM against a frozen pre-2.0 monolith, to catch
+accidental behavior changes during the `index.html`-splitting refactor — its premise
+was "same behavior, different file layout." Stage C2 makes the app deliberately
+different (league/bracket switcher, Official gating, bracket-scoped data), so
+"identical to the old build" stopped being the thing worth proving; both files were
+deleted rather than kept around as a stale "reference" someone could mistake for a
+spec of the old flat schema.
+
+**What replaced it: `test/scenario.test.mjs`**, run via `npm test`. Same underlying
+mechanism as before (`test/harness.mjs` + `test/fakeSupabase.mjs` stub the Supabase
+client and browser globals, then `window.eval()` the real bundled `app.js` through a
+scripted user flow, with a `_emit()` hook to fake Realtime pushes) — the only change
+is what the run is checked against: fixed expectations instead of a second run.
+`test/fixtures.mjs` is the bracket-scoped fixture data (leagues/brackets/
+league_members/league_shows/seasons/season_rosters/bracket-scoped scores) the fake
+RPC handlers compute real join/gating logic against, not flat pre-2.0 stubs.
+`test/scoring.test.mjs` is untouched by any of this — it tests `scoring.js` in
+isolation against real Carton setlist fixtures, with no DOM/Supabase dependency.
+
+**Known limitation, still true of the new harness:** it asserts DOM structure and
+JS behavior — it is still blind to CSS (computed styles, cascade interactions
+between dead and live selectors), external resource loading (fonts, the Supabase CDN
+script), and anything in `<head>` that isn't reflected in DOM text. One real bug
+already slipped past the old version this way: a dormant `.logo span` CSS rule
+(never matched anything pre-split, since `.logo` had no `<span>`) went live and
+broke the header title's font styling when a `<span>` was added to that element for
+the `APP_NAME` work — a PASS the whole time, because the DOM text was unchanged.
+Don't treat a scenario-test PASS as proof a frontend change is visually correct —
+it only proves the DOM/JS behavior didn't change. Also worth remembering when
+writing fixtures: build cutoff/date fixtures off the real wall clock (`Date.now()`),
+not a hardcoded date — a fixed past "now" silently drifts into the past itself and
+every show reads as already-locked regardless of what the test intends to exercise
+(this bit the C2a rewrite once, caught immediately by the new fixed-expectation
+assertions rather than staying invisible the way a diff-only check would have).
 
 ## Postgres / Supabase gotchas learned the hard way
 
@@ -99,6 +120,56 @@ was lost in the split.)
 - Realtime only pushes tables in the `supabase_realtime` publication. `shows` and
   `scores` are in it; adding a table to realtime requires
   `alter publication supabase_realtime add table <t>`.
+- **`league_members.banned` is vestigial as of Stage C1.** League boot
+  (`admin_league_boot`) hard-deletes the `league_members` row (keeping picks/scores
+  frozen per the season-roster rule) and separately inserts into that league's
+  `banned_names`, which is what `admin_add_league_member` actually checks. Nothing
+  in Stage C1 sets or reads the `banned` column — don't assume it's the enforcement
+  mechanism if you see it later; it's leftover from the pre-2.0 flat schema.
+- **Standings/scores/seasons/schedule reads are RPCs, built in Stage C2a**
+  (`sql/stage_c2a_rpcs.sql`): `get_bracket_scores` (authenticated + membership-
+  gated — cross-league visibility is Global-admin-only, so this isn't public
+  like the others), `get_league_shows`, `get_bracket_seasons` (both public, no
+  auth — schedule/season date ranges aren't per-player), plus `can_submit_picks`
+  (the shared Official-eligibility check, also backing `submit_picks` itself via
+  an internal `_official_gate` helper — one implementation, not a client-side
+  copy that could drift out of sync). Stage A left no public select policy on
+  `scores`/`seasons`/`season_rosters`/`league_shows`/`picks`/`league_members`
+  (intentional — scoped reads go through RPCs, not RLS), so before these existed
+  those direct reads returned nothing at all.
+- **`reopen`/`cutoff_changed`/`finalize` are name/PIN-authenticated** edge-function
+  actions (`carton-sync`), not SQL RPCs. Each verifies the caller via `_auth_player`
+  + `_is_league_admin_or_global` (same guard the SQL RPCs use) before doing
+  anything. This closed a real hole: those two actions previously took only
+  `{league_id, show_id}` with no auth at all, so anyone holding the public anon
+  key could wipe a league's scores or spam a fake cutoff notice. There is
+  deliberately no `admin_reopen_show` SQL RPC and no `admin_set_show_status` RPC —
+  the edge function's authenticated actions are the only path for these
+  transitions now.
+- **`_auth_player`/`_is_league_admin_or_global`/`_official_gate` had Postgres's
+  default `PUBLIC` execute grant** (every new function gets it unless explicitly
+  revoked, and nothing in this codebase's history ever had). `_auth_player`
+  returns the full `players` row including `pin_hash`, so it was directly
+  callable via `/rpc/_auth_player` by anyone holding the anon key — fixed in
+  `sql/stage_c2a_rpcs.sql` with explicit `revoke ... from public`. Impact was
+  limited (it requires the correct name **and** PIN to return anything, so this
+  could only leak an account's own hash back to someone who already fully
+  controls it), but it's not what the `service_role`-only grant was supposed to
+  mean — check for this same gap on any future internal-only helper.
+- **Open question, not yet addressed: PIN-guessing surface at scale.** `login`
+  is a public, unrated RPC endpoint that accepts a name + a 4–8 digit PIN, and
+  nothing rate-limits guesses against it. Fine at today's scale (~10
+  Ambassadors), but worth thinking through deliberately before the ~50-person
+  Facebook league joins — a bigger, less-trusted pool. Not solved in Stage C2a.
+- **Known gap: auth rejections from `reopen`/`cutoff_changed`/`finalize` return
+  HTTP 500**, same as any other internal error (the handler's single `catch`
+  turns every thrown error — "wrong PIN," "not authorized," a genuine bug —
+  into `{ok:false, error:...}` with a 500 status). Functionally correct today,
+  but the status code alone can't tell an auth failure from a real server
+  error. Worth splitting before Stage C2 builds error handling against these
+  actions: have `requireLeagueAdmin`'s failures surface as 401 (bad name/PIN)
+  or 403 (valid player, not authorized for this league) instead of falling
+  through to the generic 500.
 
 ---
 
@@ -116,8 +187,11 @@ Standings with podium (top-3 trophies, gold/silver/bronze **eggs** inside the
 wreaths), single Score column (season pts, or career when "All time"), season
 selector, nerd stats (shows/avg/high/wins). Draft persistence (pick sheets save to
 localStorage every keystroke, restore on return, never wiped by foreground refresh).
-3-state theme (auto-follow-phone / light / dark). Collapsible desktop sidebar with
-live top-3 mini-standings; bottom-tab single-view on mobile. Tie handling shows
+3-state theme (auto-follow-phone / light / dark). Desktop is a static, non-collapsible
+3-column grid (Standings / Shows / Admin, each showing full content — confirmed by
+reading the actual source and git history during Stage C2a; there's no collapse
+affordance or top-3-trimmed variant anywhere in the codebase's history, despite an
+earlier version of this doc describing one); bottom-tab single-view on mobile. Tie handling shows
 co-winners everywhere ("X & Y tie"). App icon = green laurel wreath (halo on
 favicon/small badges only, not the header). Winner "trophy" = wreath over a laurel
 pile; podium version has the medal egg inside.
@@ -127,10 +201,13 @@ pile; podium version has the medal egg inside.
 - **v6 edge function batch** ("carton-sync-v6"): Cover Pick slot type + Any Debut
   wildcard scoring; "slot not played" wording; tie-fix. Was HELD from deploy while a
   show's picks were locked. Deploy edge fn first, then frontend.
-- **Reopen button** (un-finalize a show so corrected Carton data re-scores): planned,
-  should also fire a "scores reopened" notification and RESET the show's `winner_sent`
-  flag so the corrected winner re-announces. Pairs with "correct The Carton before
-  finalizing" workflow (a friend of the dev can edit setlists on The Carton).
+- **Reopen button** (un-finalize a show so corrected Carton data re-scores): **built**
+  as the edge function's `reopen` action (Stage C1) — name/PIN-authenticated, wipes
+  that league's scores for the show, resets `league_shows.status = 'live'` and
+  `winner_sent = null` so the corrected winner re-announces, and fires a "scores
+  reopened" Discord notice. Pairs with "correct The Carton before finalizing"
+  workflow (a friend of the dev can edit setlists on The Carton). Frontend wiring
+  (a button that calls this action) is a Stage C2 item.
 - **Slot labels in setlists & notifications**: setlist view shows all slot labels
   ("Laurel — Opener"); live toasts tag ONLY unambiguous-when-they-happen slots
   (opener, set2_opener, encore) + debut. Closer/show_closer are positional so only
@@ -165,6 +242,10 @@ Full spec in `docs/MULTITENANT_SPEC.md`. Summary:
   Frozen in both directions (opting out / getting booted mid-season leaves you on the
   board, frozen). This makes the "no mid-season change" rule structurally unbreakable.
   Admin override edits the roster explicitly.
+- **An Official bracket with no season covering a show's date scores nobody for
+  that show — signed off, not a bug.** Correct given Official is discrete seasons
+  and Casual is the perpetual tally; the Stage C admin warning (below) is the
+  mitigation for "someone forgot to create a season," not a scoring change.
 - **Global is a SUPERSET of league admin**: every league-scoped power/read uses one
   shared guard `is_league_admin(league) OR is_global_admin`, so Global can act inside
   or see any league (to fix a fumbling league admin). The ONLY Global-exclusive power
@@ -212,9 +293,11 @@ run (drop-and-recreate `seasons`, matching picks/scores).
    config; Official reads the roster). Fold in: v6 Cover Pick/wildcard, reopen +
    notification + winner_sent reset, slot labels, debut toast, the Discord
    broadcast/per-league notification rework.
-3. **Stage C** — frontend: league/bracket switcher, every screen scoped to current
-   bracket, league-admin panel, Global-admin screen (create leagues, appoint admins,
-   cross-league stats, nuclear boot). Carry over the cleaner admin show-row layout.
+3. **Stage C** — a full RPC rewrite in SQL (every function reworked for the
+   Global/League/Bracket model — see design notes below), plus the frontend:
+   league/bracket switcher, every screen scoped to current bracket, league-admin
+   panel, Global-admin screen (create leagues, appoint admins, cross-league stats,
+   nuclear boot). Carry over the cleaner admin show-row layout.
 4. App back up; smoke-test **Ambassadors ▸ Official** + empty **Casual**.
 5. Create the **Facebook League** via the Global screen, appoint its 2 admins (need to
    know who they are + whether they have beta accounts), they add ~50 players.
@@ -236,6 +319,21 @@ run (drop-and-recreate `seasons`, matching picks/scores).
 - **Verify repeated-song / sandwich handling** during the scoring rewrite. Sandwiches
   (A > B > A) mean the same song holds two positions, so it gets multiple shots at
   matching a slot. Confirm the scorer evaluates every appearance, not just the first.
+- **`slotImpossible` conflates two different things** — design item, not yet built.
+  It currently means only "this slot doesn't structurally exist for this show" (no
+  set 2 at a one-setter, no encore at all) — and that check is correct as-is;
+  `set1_closer`/`set2_opener` are each keyed on their OWN set being empty, which is
+  the right symmetry (don't "fix" this into checking the other set — that would
+  mark `set1_closer` permanently impossible on every one-set show, a real
+  regression on finalized data, not just wording). The thing actually missing is a
+  separate concept: "this slot isn't determinable YET." Set 1 Closer is unknowable
+  until set 2 starts; Set 2 Closer and Show Closer are unknowable until the show
+  truly ends. Add a distinct `slotNotYetDetermined` alongside `slotImpossible` for
+  this. Pairs with the already-queued rule that closers only get labeled post-show,
+  never in live toasts — same underlying ambiguity, one for toast wording, one for
+  breakdown reason text. Low stakes: breakdown reason strings freeze at finalize
+  (see the Postgres gotcha below), so this only ever affects what a player sees
+  mid-show, never the final record.
 - **Duplicates stay OFF by default.** Add a warning tooltip on that admin toggle
   noting the consequence: with duplicates allowed, on a one-song encore a song picked
   for both Encore and Show Closer scores both slots — usually a free double.
@@ -249,6 +347,79 @@ run (drop-and-recreate `seasons`, matching picks/scores).
 
 ### Stage C design notes (frontend)
 
+- **Scope correction: Stage C requires a full RPC rewrite in SQL, not just
+  frontend work.** Every function needs reworking for the Global/League/Bracket
+  model, guarded by the shared `is_league_admin(league) OR is_global_admin` check
+  from spec §3. This was not previously scoped and is a substantial addition —
+  Stage A only created tables and RLS, no functions, so every RPC from
+  `schema.sql`/`add_*.sql` is still live against the old flat schema today.
+  **Split into C1 (SQL, `sql/stage_c1_rpcs.sql`) and C2 (frontend)** — C1 fully
+  done and run before C2 starts, since the frontend can't be tested against RPCs
+  that don't exist yet.
+- **Stage C1 is done (SQL written; run + smoke-tested by the dev).** Notable
+  decisions baked into `sql/stage_c1_rpcs.sql`, not otherwise obvious from the
+  spec:
+  - League boot (`admin_league_boot`) is a hard delete of the `league_members`
+    row only — picks/scores untouched. Ban is a separate `banned_names` insert,
+    checked by the new `admin_add_league_member` RPC (necessary infra: without
+    it, `global_create_league` + `global_appoint_league_admin` produce a league
+    nobody can join). See the `league_members.banned` gotcha above.
+  - `get_show_picks`/`admin_pick_status` join `players` directly for names
+    (never gated on `league_members` still existing), so a booted player's
+    frozen historical line still displays correctly.
+  - `admin_set_show_status` was dropped outright, not carried forward or
+    replaced — see the edge-function gotcha above for why.
+  - `global_boot_player` is the only Global-exclusive nuclear boot (deletes the
+    player account everywhere, cascading picks/scores/memberships via existing
+    FKs); it's structurally distinct from league boot, not a superset built on
+    top of it.
+- **Stage C2a is done** — SQL (`sql/stage_c2a_rpcs.sql`, run + smoke-tested) and
+  the frontend plumbing that brings the app back online: the league/bracket
+  switcher (`src/core/switcher.js`, new `state.leagues`/`currentLeagueId`/
+  `currentBracketId`), the shows+`league_shows` merge helper
+  (`src/core/leagueShows.js` — `showState()` silently treated every show as
+  perpetually un-open without it, since Stage A moved `cutoff_at`/`status`/
+  `format` off `shows`), every RPC call site updated to Stage C1/C2a signatures,
+  `admin_league_boot`/edge-function `finalize` replacing the two dropped RPCs,
+  `realtime.js` rebuilt as a teardown-and-rebuildable per-bracket subscription,
+  and the test harness rewrite noted above. C2b (admin surfaces) and C2c
+  (polish) are separate, not-yet-started phases.
+  - The season editor is deliberately **not** bracket-switcher-scoped: it always
+    resolves the current league's Official bracket id directly
+    (`officialBracketId()` in `admin.js`), not `state.currentBracketId` — an
+    admin looking at Casual still needs to manage Official's seasons, and
+    seasons only ever belong to Official.
+  - The ★ admin-badge marker is dropped from the Players admin panel (renders
+    "·" for everyone but "you") — `players_public` carries no admin flag
+    post-Stage-A and there's no public read on `league_members` to source a
+    per-player one from either. Accepted, temporary regression; C2b's proper
+    member-management rebuild is the real fix.
+  - Pick-sheet drafts are now keyed by bracket too
+    (`ft_draft_${sessionId}_${bracketId}_${showId}`) — the old key would have
+    silently shown one bracket's in-progress draft inside the other's sheet.
+- **Official gating must BLOCK pick submission, not silently skip scoring.** Two
+  distinct cases, each with its own error:
+  1. No season covers the show's date — check the SHOW's date, not today's,
+     since a future show inside a future season's range is legitimately votable
+     now.
+  2. The player isn't in that season's participant set — check `season_rosters`
+     if the season has activated (`roster_locked_at` set); otherwise fall back to
+     the live `official_opt_in` flag as the proxy (no snapshot exists yet).
+  Enforce this in the rewritten `submit_picks` RPC as the authoritative guard. The
+  frontend must not even present a fillable Official pick sheet in either case —
+  show the reason and point the player at Casual instead. Casual is unaffected:
+  no seasons, no opt-in, always votable.
+- **Admin warning: no season covering upcoming shows.** The league-admin panel
+  needs a visible warning when an Official bracket has no season covering
+  upcoming shows. Since submission is now blocked (not silently unscored) in that
+  case, forgetting to create a season closes Official entirely — this warning is
+  the mitigation.
+- **Opt-in override.** League admins can add or remove a player from a running
+  Official season's `season_rosters` directly, including someone who opted out
+  before activation. Removal keeps that player's existing scores frozen and just
+  stops further accrual. No audit trail of when someone was added, and no
+  standings indicator for it — a mid-season addition is inherently handicapped by
+  the shows they missed, and the players will sort it out among themselves.
 - **Player tooltips on pick-sheet slots** — plain-language definitions so bets are
   informed. Especially the three closers (a player recently lost points picking Show
   Closer when they meant Set 2 Closer), the Any Debut wildcard, and Cover Pick's

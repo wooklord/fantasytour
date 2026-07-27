@@ -33,6 +33,16 @@ export function createFakeSupabase(tables, rpcHandlers, calls){
     };
     return b;
   }
+  // Minimal `col=eq.val` parser — the only filter shape the app ever sends —
+  // so a fake emit only invokes handlers whose filter actually matches,
+  // rather than trusting the real filter string compiles.
+  function matchesFilter(filterStr, payload){
+    if (!filterStr) return true;
+    const m = /^(\w+)=eq\.(.+)$/.exec(filterStr);
+    if (!m) return true;
+    const [, col, val] = m;
+    return String(payload[col]) === val;
+  }
   const channelHandlers = [];
   return {
     from: builder,
@@ -40,9 +50,10 @@ export function createFakeSupabase(tables, rpcHandlers, calls){
       calls?.push({ type:"rpc", fn, args });
       const h = rpcHandlers[fn];
       if (!h) return { data: null, error: { message: `unhandled rpc ${fn}` } };
-      try { return { data: await h(args), error: null }; }
+      try { return { data: await h(args, tables), error: null }; }
       catch(e){ return { data: null, error: { message: e.message } }; }
     },
+    removeChannel(){}, // teardown-and-rebuild churns channels; nothing to clean up in the fake
     channel(name){
       const chan = {
         on(event, filter, cb){ channelHandlers.push({ event, filter, cb }); return chan; },
@@ -53,7 +64,8 @@ export function createFakeSupabase(tables, rpcHandlers, calls){
     // test-only hook to fire a fake postgres_changes event
     _emit(table, event, payload){
       for (const h of channelHandlers)
-        if (h.filter.table === table && (h.filter.event === event || h.filter.event === "*"))
+        if (h.filter.table === table && (h.filter.event === event || h.filter.event === "*")
+            && matchesFilter(h.filter.filter, payload))
           h.cb({ new: payload });
     },
   };

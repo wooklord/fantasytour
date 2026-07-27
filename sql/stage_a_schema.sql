@@ -179,7 +179,7 @@ declare
   def_cfg jsonb := '{
     "slots": [
       {"key":"opener","type":"opener","label":"Opener","points":2},
-      {"key":"closer","type":"closer","label":"Closer","points":2},
+      {"key":"closer","type":"closer","label":"Set 2 Closer","points":2},
       {"key":"encore","type":"encore","label":"Encore","points":2}
     ],
     "flat_picks": 3, "flat_points": 1,

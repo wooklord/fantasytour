@@ -1,10 +1,20 @@
 import { $, esc, footerHtml } from "../core/dom.js";
 import { db, rpc, edgeFn } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
+import { fetchShows } from "../core/leagueShows.js";
 import { fmtDate, clearTimersFor } from "../core/format.js";
 import { toast } from "../core/toast.js";
 import { loadConfig, loadSongs } from "../core/session.js";
 import { markTab } from "../core/layout.js";
+
+// Seasons only ever belong to a league's Official bracket, and the season
+// editor has to keep working regardless of which bracket the switcher
+// currently shows — an admin looking at Casual still needs to manage
+// Official's seasons. So this resolves the league's Official bracket_id
+// directly, rather than assuming state.currentBracketId.
+function officialBracketId(){
+  return state.leagues.find(l => l.league_id === state.currentLeagueId && l.bracket_kind === "official")?.bracket_id;
+}
 
 export async function renderAdmin(){
   clearTimersFor("admin"); state.tab = "admin"; markTab();
@@ -16,8 +26,10 @@ export async function renderAdmin(){
       {key:"closer",type:"closer",label:"Closer",points:2},
       {key:"cover1",type:"cover_pick",label:"Cover Pick",points:2}
     ], flat_picks:3, flat_points:1 };
-  const { data: shows } = await db.from("shows").select("*").gte("showdate", new Date(Date.now()-7*864e5).toISOString().slice(0,10)).order("showdate");
-  const { data: seasonsA } = await db.from("seasons").select("*").order("start_date");
+  const [shows, seasonsA] = await Promise.all([
+    fetchShows(q => q.gte("showdate", new Date(Date.now()-7*864e5).toISOString().slice(0,10)).order("showdate")),
+    rpc("get_bracket_seasons", { p_bracket_id: officialBracketId() }),
+  ]);
   const todayA = new Date().toLocaleDateString('sv');
   const nextShow = (shows||[]).find(sh => sh.showdate >= todayA) || (shows||[])[(shows||[]).length-1];
   $("#main").innerHTML = `
@@ -102,12 +114,16 @@ export async function renderAdmin(){
   loadPlayers();
 }
 export async function loadPlayers(){
+  // players_public no longer carries an admin flag (Stage A trimmed it to
+  // id/name/created_at) and there's no public read on league_members to
+  // source a per-player badge from either — dropping the ★ marker here is
+  // an accepted, temporary regression, to be rebuilt properly in C2b
+  // alongside the league-scoped member-list this panel really needs.
   const { data: pl } = await db.from("players_public").select("*").order("created_at");
   $("#playerlist").innerHTML = (pl||[]).map(p => `
-    <div class="pickres hit"><span>${p.is_admin ? "★" : "·"}</span>
+    <div class="pickres hit"><span>·</span>
       <span>${esc(p.name)}</span>
       <span class="pt">${p.id===state.session.id ? '<small class="muted">you</small>'
-        : p.is_admin ? '<small class="muted">admin</small>'
         : '<button class="btn ghost small" onclick="bootPlayer(\''+p.id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')" style="border-color:var(--coral);color:var(--coral)">Boot</button>'}</span>
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
 }
@@ -126,7 +142,7 @@ export async function saveSeason(row){
   const [name, start, end] = [...row.querySelectorAll("input")].map(i => i.value);
   const id = row.dataset.season ? Number(row.dataset.season) : null;
   try{
-    await rpc("admin_save_season", { p_name:state.session.name, p_pin:state.session.pin, p_id:id, p_sname:name, p_start:start||null, p_end:end||null });
+    await rpc("admin_save_season", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:officialBracketId(), p_id:id, p_sname:name, p_start:start||null, p_end:end||null });
     toast("Season saved ✔", "score"); state.boardSeason = null; renderAdmin();
   }catch(e){ toast(esc(e.message)); }
 }
@@ -145,7 +161,7 @@ export async function toggleBans(){
   if (!bansOpen) return;
   $("#banlist").innerHTML = '<p class="muted">Loading…</p>';
   try{
-    const rows = await rpc("admin_list_bans", { p_name:state.session.name, p_pin:state.session.pin });
+    const rows = await rpc("admin_list_bans", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId });
     $("#banlist").innerHTML = (rows||[]).map(r => `
       <div class="pickres miss"><span>⛔</span><span>${esc(r.name)}</span>
         <span class="pt"><small class="muted">${new Date(r.banned_at).toLocaleDateString()}</small>
@@ -156,23 +172,23 @@ export async function toggleBans(){
 export async function unban(name){
   if (!confirm(`Unban "${name}"? The name becomes registerable again.`)) return;
   try{
-    await rpc("admin_unban", { p_name:state.session.name, p_pin:state.session.pin, p_banned:name });
+    await rpc("admin_unban", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_banned:name });
     toast(`${name} unbanned`, "score");
     bansOpen = false; toggleBans();
   }catch(e){ toast(esc(e.message)); }
 }
 export async function bootPlayer(id, name){
-  if (!confirm(`Remove ${name}? Their picks and scores are deleted permanently — including any shows they won.`)) return;
-  const ban = confirm(`Also block the name "${name}" from re-registering?\n\nOK = boot + ban · Cancel = boot only`);
+  if (!confirm(`Remove ${name} from this league? Their past picks/scores stay on the books — they just stop being able to submit new ones.`)) return;
+  const ban = confirm(`Also block the name "${name}" from rejoining this league?\n\nOK = remove + ban · Cancel = remove only`);
   try{
-    await rpc("admin_boot_player", { p_name:state.session.name, p_pin:state.session.pin, p_player_id:id, p_ban:ban });
-    toast(`${name} booted${ban ? " and banned" : ""}`, "score");
+    await rpc("admin_league_boot", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_player_id:id, p_ban:ban });
+    toast(`${name} removed${ban ? " and banned" : ""}`, "score");
     loadPlayers(); loadRoster();
   }catch(e){ toast(esc(e.message)); }
 }
 export async function toggleFormat(showId, next){
   try{
-    await rpc("admin_set_show_format", { p_name:state.session.name, p_pin:state.session.pin, p_show_id:showId, p_format:next });
+    await rpc("admin_set_show_format", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_show_id:showId, p_format:next });
     toast("Format: " + (next === "one_set" ? "1 set" : "2 set"), "score");
     renderAdmin();
   }catch(e){ toast(esc(e.message)); }
@@ -181,7 +197,7 @@ export async function loadRoster(){
   const showId = Number($("#roster-show").value);
   if (!showId) return;
   try{
-    const rows = await rpc("admin_pick_status", { p_name:state.session.name, p_pin:state.session.pin, p_show_id:showId });
+    const rows = await rpc("admin_pick_status", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:showId });
     const total = rows.length, done = rows.filter(r => r.picks_count > 0).length;
     $("#roster").innerHTML = `
       <p class="muted" style="margin-bottom:6px"><b style="color:var(--mint)">${done}</b> of ${total} players have picks in</p>
@@ -244,7 +260,7 @@ export async function saveConfig(){
     oneset: { slots: slots1, flat_picks: Number($("#c1-flat").value), flat_points: Number($("#c1-flatpts").value) },
   };
   try{
-    await rpc("admin_update_config", { p_name:state.session.name, p_pin:state.session.pin, p_data:data });
+    await rpc("admin_update_config", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_data:data });
     state.cfg = data; toast("Rules saved ✔", "score");
   }catch(e){ $("#cfg-err").textContent = e.message; }
 }
@@ -252,7 +268,7 @@ export async function saveCutoff(showId, btn){
   const input = document.querySelector(`input[data-show="${showId}"]`);
   if (!input.value) return;
   try{
-    await rpc("admin_set_cutoff", { p_name:state.session.name, p_pin:state.session.pin, p_show_id:showId, p_cutoff:new Date(input.value).toISOString() });
+    await rpc("admin_set_cutoff", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_show_id:showId, p_cutoff:new Date(input.value).toISOString() });
     btn.textContent = "✔"; setTimeout(() => btn.textContent = "Set", 1500);
   }catch(e){ toast(esc(e.message)); }
 }
@@ -260,8 +276,7 @@ export async function finalizeShow(showId, btn){
   if (!confirm("Run final scoring and mark this show complete? Picks and scores lock for good.")) return;
   btn.disabled = true; btn.textContent = "…";
   try{
-    await edgeFn("score").catch(() => {});
-    await rpc("admin_set_show_status", { p_name:state.session.name, p_pin:state.session.pin, p_show_id:showId, p_status:"final" });
+    await edgeFn("finalize", { p_name:state.session.name, p_pin:state.session.pin, league_id:state.currentLeagueId, show_id:showId });
     toast("Show finalized 🏁", "score");
     renderAdmin();
   }catch(e){ toast(esc(e.message)); btn.disabled = false; btn.textContent = "Finalize"; }

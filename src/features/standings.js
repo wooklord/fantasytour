@@ -1,6 +1,7 @@
 import { $, esc, footerHtml } from "../core/dom.js";
-import { db } from "../core/supabaseClient.js";
+import { rpc } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
+import { fetchShows } from "../core/leagueShows.js";
 import { clearTimersFor } from "../core/format.js";
 import { trophy, winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
@@ -12,13 +13,12 @@ export function setBoardSeason(v){ state.boardSeason = v; renderBoard(); }
 
 export async function renderBoard(){
   clearTimersFor("board"); state.tab = "board"; markTab();
-  const [{ data: sc }, { data: plist }, { data: allShows }, { data: seasons }] = await Promise.all([
-    db.from("scores").select("points, player_id, show_id"),
-    db.from("players_public").select("id,name"),
-    db.from("shows").select("id,showdate,venue,status"),
-    db.from("seasons").select("*").order("start_date"),
+  const [sc, allShows, seasons] = await Promise.all([
+    rpc("get_bracket_scores", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId }),
+    fetchShows(q => q),
+    rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId }),
   ]);
-  const pname = Object.fromEntries((plist||[]).map(p => [p.id, p.name]));
+  const pname = Object.fromEntries((sc||[]).map(s => [s.player_id, s.player_name]));
   const showById = Object.fromEntries((allShows||[]).map(sh => [sh.id, sh]));
   const today = new Date().toLocaleDateString('sv');
   if (state.boardSeason === null){
