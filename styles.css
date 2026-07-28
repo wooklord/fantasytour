@@ -48,15 +48,28 @@ input,select{font-family:inherit;font-size:16px}
 header{position:sticky;top:0;z-index:50;background:var(--chrome);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .bar{max-width:680px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:12px 16px}
 .logo{display:flex;align-items:center;gap:8px;font-family:'Fraunces',serif;font-weight:800;font-size:1.35rem;letter-spacing:.5px;color:var(--yolk);font-variation-settings:'SOFT' 100,'WONK' 1;flex:none;min-width:0}
+.logo-icon{width:48px;height:48px;flex:none}
 .logo span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .who{margin-left:auto;font-size:.85rem;color:var(--cream-dim);text-align:right;line-height:1.3;min-width:0;flex:1 1 auto}
 .who b{color:var(--cream);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .who .who-league{font-size:.72rem;color:var(--cream-dim);opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* The wordmark text is the first thing that can go — the wreath icon alone
-   still reads as the app, and a squeezed header was truncating the play
-   name down to one letter otherwise (there's no title/league text on the
-   other side of the header that could yield room instead). */
-@media (max-width:460px){ .logo span{display:none} }
+/* Shrink before hiding — 460px was catching essentially every phone in
+   portrait (375-430px is the common range), not just genuinely cramped
+   widths, and vanished the wordmark even when there was slack left over.
+   Two shrink steps (icon + text scale down together) buy back room for
+   the player name across that whole common range; only below 340px
+   (narrower than any current phone — iPhone SE1 is 320, and even that
+   still gets ~pocket change of room after the smaller icon) does the
+   wordmark text actually disappear, as a last resort. */
+@media (max-width:460px){
+  .logo{font-size:1.05rem}
+  .logo-icon{width:38px;height:38px}
+}
+@media (max-width:400px){
+  .logo{font-size:.9rem}
+  .logo-icon{width:32px;height:32px}
+}
+@media (max-width:340px){ .logo span{display:none} }
 .bracket-label{flex:none;font-size:.72rem;font-weight:600;letter-spacing:.4px;color:var(--yolk);opacity:.85;text-transform:uppercase;pointer-events:none;user-select:none}
 .linkbtn{background:none;border:none;color:var(--coral);font-size:.8rem;text-decoration:underline;padding:2px 4px}
 .switcher{display:flex;gap:4px;flex:none;flex-wrap:wrap}
