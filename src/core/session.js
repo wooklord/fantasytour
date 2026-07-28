@@ -3,7 +3,7 @@ import { db } from "./supabaseClient.js";
 import { state } from "./state.js";
 import { renderAuth } from "../features/auth.js";
 import { subscribeRealtime } from "./realtime.js";
-import { renderAll } from "./layout.js";
+import { renderAll, applyLayout } from "./layout.js";
 import { APP_NAME } from "./config.js";
 import { loadConfig, resolveLeagues, renderSwitcher, isCurrentLeagueAdmin } from "./switcher.js";
 
@@ -33,6 +33,16 @@ export async function boot(){
   const nameEl = document.getElementById("appName");
   if (nameEl) nameEl.textContent = APP_NAME;
   renderWho();
+  // Must run before ANY render decision below, not just the logged-in path:
+  // on desktop, #cols starts hidden (inline style in index.html) and only
+  // becomes visible once this runs — `$("#main")` redirects to a column
+  // inside it. Every one of renderAuth()/renderNoLeague()/the catch panel
+  // below writes via $("#main"), so without this they silently render into
+  // a hidden container on desktop. This bug predated Stage C2a entirely
+  // (present since the 3-column layout's introduction, commit e7fa3ef) —
+  // nobody noticed because testing almost always carried over an existing
+  // localStorage session, which skipped straight past the broken branch.
+  applyLayout();
   if (!state.session){ renderAuth(); return; }
   try{
     const hasLeague = await resolveLeagues();

@@ -87,13 +87,14 @@ export async function renderAdmin(){
     </div>
     <div class="panel"><h2>Shows & cutoffs</h2>
       <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
-      ${(shows||[]).map(sh => `<div class="showrow">
-        <div class="date">${fmtDate(sh.showdate)}</div>
-        <div class="v"><div class="venue">${esc(sh.venue||"TBA")}</div>
-          <div class="loc"><input type="datetime-local" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16) : ""}" style="background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.8rem"></div></div>
-        <button onclick="toggleFormat(${sh.id}, '${sh.format==='one_set'?'standard':'one_set'}')" title="pick sheet format">${sh.format==='one_set'?'1 set':'2 set'}</button>
-        <button onclick="saveCutoff(${sh.id}, this)">Set</button>
-        ${sh.status!=='final' && sh.cutoff_at && new Date(sh.cutoff_at) < new Date() ? '<button onclick="finalizeShow('+sh.id+', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ''}
+      ${(shows||[]).map(sh => `<div class="arow">
+        <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue||"TBA")}</span></div>
+        <input class="cutoff-in" type="datetime-local" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16) : ""}">
+        <div class="arow-btns">
+          <button onclick="toggleFormat(${sh.id}, '${sh.format==='one_set'?'standard':'one_set'}')" title="pick sheet format">${sh.format==='one_set'?'1 set':'2 set'}</button>
+          <button onclick="saveCutoff(${sh.id}, this)">Set</button>
+          ${sh.status!=='final' && sh.cutoff_at && new Date(sh.cutoff_at) < new Date() ? '<button onclick="finalizeShow('+sh.id+', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ''}
+        </div>
       </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
     </div>
     <div class="panel"><h2>Players</h2>

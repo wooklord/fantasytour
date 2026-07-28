@@ -297,7 +297,15 @@ run (drop-and-recreate `seasons`, matching picks/scores).
    Global/League/Bracket model — see design notes below), plus the frontend:
    league/bracket switcher, every screen scoped to current bracket, league-admin
    panel, Global-admin screen (create leagues, appoint admins, cross-league stats,
-   nuclear boot). Carry over the cleaner admin show-row layout.
+   nuclear boot). Carry over the cleaner admin show-row layout — **done in C2a**:
+   `.arow`/`.arow-head`/`.cutoff-in`/`.arow-btns` (stacked date+venue / cutoff
+   input / buttons, each row wrapping independently), replacing the shared
+   `.showrow` single-line flex row that was overlapping buttons with venue
+   text once too many controls got packed into it. (Despite the phrasing here
+   suggesting this already existed somewhere — it didn't: git history has zero
+   trace of `.arow` ever existing before C2a. Same false-memory pattern as the
+   "collapsible sidebar" note elsewhere in this file; the fix was real, the
+   prior existence wasn't.)
 4. App back up; smoke-test **Ambassadors ▸ Official** + empty **Casual**.
 5. Create the **Facebook League** via the Global screen, appoint its 2 admins (need to
    know who they are + whether they have beta accounts), they add ~50 players.

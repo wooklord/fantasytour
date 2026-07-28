@@ -52,7 +52,12 @@ begin
   select league_id into v_league_id from brackets where id = p_bracket_id;
   if v_league_id is null then raise exception 'Bracket not found'; end if;
   if not pl.is_global_admin and not exists (
-    select 1 from league_members where league_id = v_league_id and player_id = pl.id
+    -- Qualified with the lm alias deliberately: player_id/league_id are also
+    -- this function's RETURNS TABLE output columns, and PL/pgSQL parses
+    -- output columns as in-scope variables — an unqualified reference here
+    -- is genuinely ambiguous between "the column" and "the output variable"
+    -- (this exact bug shipped once; see stage_c2a_fix_ambiguous_player_id.sql).
+    select 1 from league_members lm where lm.league_id = v_league_id and lm.player_id = pl.id
   ) then
     raise exception 'Not a member of this league';
   end if;

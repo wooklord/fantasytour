@@ -4,6 +4,7 @@ import { isCurrentLeagueAdmin } from "./switcher.js";
 import { renderShows } from "../features/shows.js";
 import { renderBoard } from "../features/standings.js";
 import { renderAdmin } from "../features/admin.js";
+import { renderAuth } from "../features/auth.js";
 
 export function markTab(){
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
@@ -35,5 +36,9 @@ export function applyLayout(){
 let _lastDesk = isDesktop();
 window.addEventListener("resize", () => {
   const now = isDesktop();
-  if (now !== _lastDesk){ _lastDesk = now; if (state.session) renderAll(); }
+  if (now === _lastDesk) return;
+  _lastDesk = now;
+  applyLayout(); // always — #cols visibility must track the breakpoint even pre-login
+  if (state.session) renderAll();
+  else renderAuth(); // re-render into whichever container is now current
 });

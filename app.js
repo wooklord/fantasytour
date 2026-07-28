@@ -500,13 +500,14 @@
     </div>
     <div class="panel"><h2>Shows & cutoffs</h2>
       <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
-      ${(shows || []).map((sh) => `<div class="showrow">
-        <div class="date">${fmtDate(sh.showdate)}</div>
-        <div class="v"><div class="venue">${esc(sh.venue || "TBA")}</div>
-          <div class="loc"><input type="datetime-local" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : ""}" style="background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.8rem"></div></div>
-        <button onclick="toggleFormat(${sh.id}, '${sh.format === "one_set" ? "standard" : "one_set"}')" title="pick sheet format">${sh.format === "one_set" ? "1 set" : "2 set"}</button>
-        <button onclick="saveCutoff(${sh.id}, this)">Set</button>
-        ${sh.status !== "final" && sh.cutoff_at && new Date(sh.cutoff_at) < /* @__PURE__ */ new Date() ? '<button onclick="finalizeShow(' + sh.id + ', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ""}
+      ${(shows || []).map((sh) => `<div class="arow">
+        <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue || "TBA")}</span></div>
+        <input class="cutoff-in" type="datetime-local" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : ""}">
+        <div class="arow-btns">
+          <button onclick="toggleFormat(${sh.id}, '${sh.format === "one_set" ? "standard" : "one_set"}')" title="pick sheet format">${sh.format === "one_set" ? "1 set" : "2 set"}</button>
+          <button onclick="saveCutoff(${sh.id}, this)">Set</button>
+          ${sh.status !== "final" && sh.cutoff_at && new Date(sh.cutoff_at) < /* @__PURE__ */ new Date() ? '<button onclick="finalizeShow(' + sh.id + ', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ""}
+        </div>
       </div>`).join("") || '<p class="muted">No shows \u2014 sync first.</p>'}
     </div>
     <div class="panel"><h2>Players</h2>
@@ -772,10 +773,11 @@ OK = remove + ban \xB7 Cancel = remove only`);
   var _lastDesk = isDesktop();
   window.addEventListener("resize", () => {
     const now = isDesktop();
-    if (now !== _lastDesk) {
-      _lastDesk = now;
-      if (state.session) renderAll();
-    }
+    if (now === _lastDesk) return;
+    _lastDesk = now;
+    applyLayout();
+    if (state.session) renderAll();
+    else renderAuth();
   });
 
   // src/features/picks.js
@@ -1123,6 +1125,7 @@ Save anyway?`)) return;
     const nameEl = document.getElementById("appName");
     if (nameEl) nameEl.textContent = APP_NAME;
     renderWho();
+    applyLayout();
     if (!state.session) {
       renderAuth();
       return;

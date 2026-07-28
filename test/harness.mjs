@@ -84,6 +84,37 @@ export function mainHTML(window, mode){
   return d.getElementById("main")?.innerHTML || "";
 }
 
+// Boots with NO localStorage session at all — the renderAuth() path.
+// runScenario always presets a valid session, so it never exercises this;
+// a whole layout being broken specifically on this path (login form landing
+// in a hidden desktop column) shipped once without either scenario catching
+// it. Returns enough to check the login form actually landed somewhere
+// visible, not just that it rendered *somewhere* in the DOM.
+export async function runLoggedOutBoot({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const dbHolder = {};
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, dbHolder);
+  // deliberately no ft_session in localStorage
+
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+
+  const colsDisplay = window.document.getElementById("cols")?.style.display || "";
+  const authFormPresent = !!window.document.querySelector("#a-name");
+  // On desktop, $("#main") redirects into #main-shows (default tab) — the
+  // form has to have landed there, AND #cols itself has to actually be
+  // shown (this is the exact thing that was broken: content could land in
+  // the right element while that element's container stayed display:none).
+  const authFormInVisibleContainer = mode === "desktop"
+    ? colsDisplay === "grid" && !!window.document.querySelector("#main-shows #a-name")
+    : authFormPresent;
+
+  return { colsDisplay, authFormPresent, authFormInVisibleContainer };
+}
+
 // scripts: array of JS source strings to eval, in order, after globals are set.
 export async function runScenario({ html, scripts, mode, presetSession }){
   const { tables, ids } = makeFixtures();

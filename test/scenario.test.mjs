@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -97,6 +97,17 @@ async function runMode(mode){
 
   check("no crash reached the last-resort error trap",
     !(byLabel(log, "boot")?.html || "").includes("Script failed to load"));
+
+  // runScenario always presets a valid session, so it never boots into
+  // renderAuth() at all — a separate boot, with no session, is the only way
+  // to exercise the login screen itself. This is exactly the coverage gap
+  // that let a whole layout (login form landing in a hidden desktop column)
+  // ship unnoticed: not "desktop vs mobile" so much as "the auth path was
+  // never run in either mode."
+  const loggedOut = await runLoggedOutBoot({ html, scripts, mode });
+  check("logged-out boot renders the login form somewhere visible",
+    loggedOut.authFormPresent && loggedOut.authFormInVisibleContainer,
+    `colsDisplay: "${loggedOut.colsDisplay}" authFormPresent: ${loggedOut.authFormPresent} inVisibleContainer: ${loggedOut.authFormInVisibleContainer}`);
 
   return failures.length;
 }
