@@ -4,13 +4,18 @@ import { isCurrentLeagueAdmin } from "./switcher.js";
 import { renderShows } from "../features/shows.js";
 import { renderBoard } from "../features/standings.js";
 import { renderAdmin } from "../features/admin.js";
+import { renderSettings } from "../features/settings.js";
 import { renderAuth } from "../features/auth.js";
+
+// The third tab/column is a shared slot: Admin for league admins, Settings
+// for everyone else — not two separate destinations.
+export const renderAdminOrSettings = () => isCurrentLeagueAdmin() ? renderAdmin() : renderSettings();
 
 export function markTab(){
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
 }
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
-  ({ shows: renderShows, board: renderBoard, admin: renderAdmin })[b.dataset.tab]();
+  ({ shows: renderShows, board: renderBoard, admin: renderAdminOrSettings })[b.dataset.tab]();
 });
 
 // desktop: paint every column; keep `tab` pointed so each render targets its own container
@@ -20,17 +25,17 @@ export async function renderAll(){
   const savedShow = state.currentShow;
   await renderBoard();
   await renderShows();
-  if (isCurrentLeagueAdmin()) await renderAdmin();
+  await renderAdminOrSettings();
   state.currentShow = savedShow;
 }
+// Third column is always shown now — it's Admin or Settings, never empty.
 export function applyLayout(){
   const desk = isDesktop();
   $("#cols") && ($("#cols").style.display = desk ? "grid" : "none");
   const c = document.getElementById("cols");
   if (c){
-    const admin = !!(state.session && isCurrentLeagueAdmin());
-    document.getElementById("col-admin").style.display = admin && desk ? "" : "none";
-    c.style.gridTemplateColumns = admin ? "1fr 1.15fr 1fr" : "1fr 1.2fr";
+    document.getElementById("col-admin").style.display = desk ? "" : "none";
+    c.style.gridTemplateColumns = "1fr 1.15fr 1fr";
   }
 }
 let _lastDesk = isDesktop();

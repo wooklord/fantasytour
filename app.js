@@ -23,7 +23,7 @@
     return el.querySelector(sel);
   };
   var esc = (s) => String(s != null ? s : "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  var footerHtml = () => `<footer class="muted" style="text-align:center;padding:20px 0 4px">Created by Kyle McKinley</footer>`;
+  var footerHtml = () => `<footer class="colophon-foot">Created by Kyle McKinley</footer>`;
 
   // src/core/config.js
   var SUPABASE_URL = "https://zdfhglvjxquvkjyvophz.supabase.co";
@@ -169,43 +169,72 @@
     const row = currentBracket();
     return !!(row && row.is_league_admin);
   };
+  var bracketsForLeague = (leagueId) => state.leagues.filter((l) => l.league_id === leagueId);
   async function loadConfig() {
     const { data, error } = await db.from("brackets").select("config").eq("id", state.currentBracketId).single();
     if (error) throw new Error("Couldn't load bracket config: " + error.message);
     state.cfg = data.config;
+  }
+  async function defaultBracketFor(leagueId) {
+    const rows = bracketsForLeague(leagueId);
+    const casual = rows.find((l) => l.bracket_kind === "casual") || rows[0];
+    const official = rows.find((l) => l.bracket_kind === "official");
+    if (!official) return casual;
+    try {
+      const seasons = await rpc("get_bracket_seasons", { p_bracket_id: official.bracket_id });
+      const today = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
+      const soon = new Date(Date.now() + 14 * 864e5).toLocaleDateString("sv");
+      const relevant = (seasons || []).some((se) => se.start_date <= soon && se.end_date >= today);
+      return relevant ? official : casual;
+    } catch (e) {
+      return casual;
+    }
   }
   async function resolveLeagues() {
     state.leagues = await rpc("my_leagues", { p_name: state.session.name, p_pin: state.session.pin });
     if (!state.leagues.length) return false;
     const saved = Number(localStorage.getItem("ft_bracket_id"));
     const found = state.leagues.find((l) => l.bracket_id === saved);
-    const pick = found || state.leagues.find((l) => l.bracket_kind === "casual") || state.leagues[0];
+    const pick = found || await defaultBracketFor(state.leagues[0].league_id);
     state.currentBracketId = pick.bracket_id;
     state.currentLeagueId = pick.league_id;
     localStorage.setItem("ft_bracket_id", String(state.currentBracketId));
     return true;
   }
-  function renderSwitcher() {
-    const el = document.getElementById("switcher");
+  function renderHeaderChrome() {
+    const who = document.getElementById("whoami");
+    if (who) {
+      who.innerHTML = state.session ? `<b>${esc(state.session.name)}</b>${currentBracket() ? `<div class="who-league">${esc(currentBracket().league_name)}</div>` : ""}` : "";
+    }
+    const lbl = document.getElementById("bracketLabel");
+    if (lbl) lbl.textContent = currentBracket() ? currentBracket().bracket_name : "";
+    const admintab = document.getElementById("admintab");
+    const title = document.getElementById("col-admin-title");
+    const label = isCurrentLeagueAdmin() ? "Admin" : "Settings";
+    if (admintab) admintab.textContent = label;
+    if (title) title.textContent = label;
+  }
+  function renderBracketToggle() {
+    const el = document.getElementById("bracketToggle");
     if (!el) return;
-    if (!state.session || !state.leagues.length) {
+    el.innerHTML = bracketsForLeague(state.currentLeagueId).map((r) => `<button class="linkbtn switcher-btn${r.bracket_id === state.currentBracketId ? " on" : ""}"
+    onclick="switchToBracket(${r.bracket_id})">${esc(r.bracket_name)}</button>`).join("");
+  }
+  function renderLeagueSelector() {
+    const el = document.getElementById("leagueSelect");
+    if (!el) return;
+    const leagueIds = [...new Set(state.leagues.map((l) => l.league_id))];
+    if (leagueIds.length <= 1) {
       el.innerHTML = "";
       return;
     }
-    const leagueIds = [...new Set(state.leagues.map((l) => l.league_id))];
-    if (leagueIds.length === 1) {
-      el.innerHTML = state.leagues.map((r) => `<button class="linkbtn switcher-btn${r.bracket_id === state.currentBracketId ? " on" : ""}"
-      onclick="switchToBracket(${r.bracket_id})">${esc(r.bracket_name)}</button>`).join("");
-    } else {
-      el.innerHTML = `<select onchange="switchToBracket(Number(this.value))">
+    el.innerHTML = `<div class="field"><label>League</label>
+    <select onchange="switchToLeague(Number(this.value))">
       ${leagueIds.map((lid) => {
-        const rows = state.leagues.filter((l) => l.league_id === lid);
-        return `<optgroup label="${esc(rows[0].league_name)}">
-          ${rows.map((r) => `<option value="${r.bracket_id}" ${r.bracket_id === state.currentBracketId ? "selected" : ""}>${esc(r.bracket_name)}</option>`).join("")}
-        </optgroup>`;
-      }).join("")}
-    </select>`;
-    }
+      const row = state.leagues.find((l) => l.league_id === lid);
+      return `<option value="${lid}" ${lid === state.currentLeagueId ? "selected" : ""}>${esc(row.league_name)}</option>`;
+    }).join("")}
+    </select></div>`;
   }
   async function switchToBracket(bracketId) {
     const row = state.leagues.find((l) => l.bracket_id === bracketId);
@@ -217,10 +246,16 @@
     state.currentShow = null;
     await loadConfig();
     subscribeRealtime();
-    renderSwitcher();
-    const admintab = document.getElementById("admintab");
-    if (admintab) admintab.style.display = isCurrentLeagueAdmin() ? "" : "none";
+    renderHeaderChrome();
     await renderAll();
+  }
+  async function switchToLeague(leagueId) {
+    var _a;
+    if (leagueId === state.currentLeagueId) return;
+    const rows = bracketsForLeague(leagueId);
+    const curKind = (_a = currentBracket()) == null ? void 0 : _a.bracket_kind;
+    const pick = rows.find((r) => r.bracket_kind === curKind) || rows.find((r) => r.bracket_kind === "casual") || rows[0];
+    if (pick) await switchToBracket(pick.bracket_id);
   }
 
   // src/core/leagueShows.js
@@ -260,7 +295,7 @@
 
   // src/features/shows.js
   async function renderShows() {
-    var _a, _b;
+    var _a, _b, _c;
     clearTimersFor("shows");
     state.tab = "shows";
     state.currentShow = null;
@@ -273,6 +308,7 @@
       rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId })
     ]);
     const seasonOf = (d) => (seas || []).find((se) => se.start_date <= d && d <= se.end_date);
+    const isOfficial = ((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official";
     const isRecent = (s) => s.showdate < todayStr || s.status === "final";
     const upcoming = (up || []).filter((s) => !isRecent(s));
     const justPlayed = (up || []).filter(isRecent);
@@ -288,7 +324,7 @@
       }
       for (const s of relevant) {
         if (s.points > 0 && s.points === best[s.show_id])
-          ((_b = winners[_a = s.show_id]) != null ? _b : winners[_a] = { points: s.points, names: [] }).names.push(s.player_name || "?");
+          ((_c = winners[_b = s.show_id]) != null ? _c : winners[_b] = { points: s.points, names: [] }).names.push(s.player_name || "?");
       }
     }
     const row = (s) => {
@@ -297,7 +333,8 @@
       const cd = st === "open" ? countdown(s.cutoff_at) : null;
       const txt = st === "final" ? "complete" : st === "open" && cd ? "locks in " + cd : st;
       const win = st === "final" && winners[s.id] ? ` <span style="color:var(--yolk);font-size:.82rem">${winBadge(36)} ${winners[s.id].names.map(esc).join(" & ")} \xB7 ${winners[s.id].points}</span>` : "";
-      return `<div class="showrow">
+      const noSeason = isOfficial && !seasonOf(s.showdate);
+      return `<div class="showrow${noSeason ? " unavailable" : ""}">
       <div class="date">${fmtDate(s.showdate)}</div>
       <div class="v"><div class="venue">${esc(s.venue || "TBA")}</div>
         <div class="loc">${esc(s.city || "")}${s.state ? ", " + esc(s.state) : ""}
@@ -315,7 +352,19 @@
         return brk + row(sh);
       }).join("");
     };
+    let rosterBanner = "";
+    if (isOfficial) {
+      const covered = [...upcoming, ...justPlayed].find((s) => seasonOf(s.showdate));
+      if (covered) {
+        try {
+          const [gate] = await rpc("can_submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: covered.id });
+          if (gate && !gate.ok && /roster/i.test(gate.reason || "")) rosterBanner = gate.reason;
+        } catch (e) {
+        }
+      }
+    }
     $("#main").innerHTML = `
+    ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(row).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet \u2014 admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons(past || []) || '<p class="muted">Nothing yet.</p>'}</div>
@@ -421,6 +470,32 @@
     ${footerHtml()}`;
   }
 
+  // src/features/settings.js
+  function settingsPanelHtml() {
+    return `<div class="panel"><h2>Settings</h2>
+    <div class="field"><label>Bracket</label><div class="switcher" id="bracketToggle"></div></div>
+    <div id="leagueSelect"></div>
+    <button class="btn ghost" onclick="logout()">Log out</button>
+    <div class="credits">
+      <p>Fantasy Eggy is an unofficial fan project \u2014 not affiliated with, endorsed by, or sponsored by Eggy or their management. Band names and song titles belong to their respective owners.</p>
+      <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
+      <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
+      <p class="colophon">Created by Kyle McKinley</p>
+    </div>
+  </div>`;
+  }
+  function wireSettingsPanel() {
+    renderBracketToggle();
+    renderLeagueSelector();
+  }
+  async function renderSettings() {
+    clearTimersFor("admin");
+    state.tab = "admin";
+    markTab();
+    $("#main").innerHTML = settingsPanelHtml() + footerHtml();
+    wireSettingsPanel();
+  }
+
   // src/features/admin.js
   function officialBracketId() {
     var _a;
@@ -502,10 +577,13 @@
       <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
       ${(shows || []).map((sh) => `<div class="arow">
         <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue || "TBA")}</span></div>
-        <input class="cutoff-in" type="datetime-local" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : ""}">
+        <input class="cutoff-in" type="datetime-local" step="900" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : ""}">
+        <div class="switcher" style="margin-bottom:8px" title="pick sheet format">
+          <button class="linkbtn switcher-btn${sh.format !== "one_set" ? " on" : ""}" onclick="toggleFormat(${sh.id}, 'standard')">2 set</button>
+          <button class="linkbtn switcher-btn${sh.format === "one_set" ? " on" : ""}" onclick="toggleFormat(${sh.id}, 'one_set')">1 set</button>
+        </div>
         <div class="arow-btns">
-          <button onclick="toggleFormat(${sh.id}, '${sh.format === "one_set" ? "standard" : "one_set"}')" title="pick sheet format">${sh.format === "one_set" ? "1 set" : "2 set"}</button>
-          <button onclick="saveCutoff(${sh.id}, this)">Set</button>
+          <button onclick="saveCutoff(${sh.id}, this)">Change cutoff</button>
           ${sh.status !== "final" && sh.cutoff_at && new Date(sh.cutoff_at) < /* @__PURE__ */ new Date() ? '<button onclick="finalizeShow(' + sh.id + ', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ""}
         </div>
       </div>`).join("") || '<p class="muted">No shows \u2014 sync first.</p>'}
@@ -523,9 +601,11 @@
       </div>
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
     </div>
+    ${settingsPanelHtml()}
     ${footerHtml()}`;
     if ((shows || []).length) loadRoster();
     loadPlayers();
+    wireSettingsPanel();
   }
   async function loadPlayers() {
     const { data: pl } = await db.from("players_public").select("*").order("created_at");
@@ -707,7 +787,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
     try {
       await rpc("admin_set_cutoff", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_show_id: showId, p_cutoff: new Date(input.value).toISOString() });
       btn.textContent = "\u2714";
-      setTimeout(() => btn.textContent = "Set", 1500);
+      setTimeout(() => btn.textContent = "Change cutoff", 1500);
     } catch (e) {
       toast(esc(e.message));
     }
@@ -742,11 +822,12 @@ OK = remove + ban \xB7 Cancel = remove only`);
   }
 
   // src/core/layout.js
+  var renderAdminOrSettings = () => isCurrentLeagueAdmin() ? renderAdmin() : renderSettings();
   function markTab() {
     document.querySelectorAll("nav.tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === state.tab));
   }
   document.querySelectorAll("nav.tabs button").forEach((b) => b.onclick = () => {
-    ({ shows: renderShows, board: renderBoard, admin: renderAdmin })[b.dataset.tab]();
+    ({ shows: renderShows, board: renderBoard, admin: renderAdminOrSettings })[b.dataset.tab]();
   });
   async function renderAll() {
     if (!isDesktop()) {
@@ -757,7 +838,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
     const savedShow = state.currentShow;
     await renderBoard();
     await renderShows();
-    if (isCurrentLeagueAdmin()) await renderAdmin();
+    await renderAdminOrSettings();
     state.currentShow = savedShow;
   }
   function applyLayout() {
@@ -765,9 +846,8 @@ OK = remove + ban \xB7 Cancel = remove only`);
     $("#cols") && ($("#cols").style.display = desk ? "grid" : "none");
     const c = document.getElementById("cols");
     if (c) {
-      const admin = !!(state.session && isCurrentLeagueAdmin());
-      document.getElementById("col-admin").style.display = admin && desk ? "" : "none";
-      c.style.gridTemplateColumns = admin ? "1fr 1.15fr 1fr" : "1fr 1.2fr";
+      document.getElementById("col-admin").style.display = desk ? "" : "none";
+      c.style.gridTemplateColumns = "1fr 1.15fr 1fr";
     }
   }
   var _lastDesk = isDesktop();
@@ -811,7 +891,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
     <div class="sheet">
       <h2>${esc(show.venue || "TBA")}</h2>
       <div class="sub">${fmtDate(show.showdate)}</div>
-      <p class="muted" style="margin-top:14px">${esc(reason || "Picks aren't open for this bracket.")}</p>
+      <p class="ineligible-reason">${esc(reason || "Picks aren't open for this bracket.")}</p>
       ${casual ? `<button class="btn ghost small" onclick="switchToBracket(${casual.bracket_id})">Switch to Casual</button>` : ""}
     </div>
     ${footerHtml()}`;
@@ -1105,9 +1185,6 @@ Save anyway?`)) return;
     if (error) throw new Error("Couldn't load song catalog: " + error.message);
     state.songList = data || [];
   }
-  function renderWho() {
-    $("#whoami").innerHTML = state.session ? `<b>${esc(state.session.name)}</b> <button class="linkbtn" onclick="logout()">log out</button>` : "";
-  }
   function logout() {
     state.session = null;
     localStorage.removeItem("ft_session");
@@ -1124,7 +1201,7 @@ Save anyway?`)) return;
     document.title = APP_NAME;
     const nameEl = document.getElementById("appName");
     if (nameEl) nameEl.textContent = APP_NAME;
-    renderWho();
+    renderHeaderChrome();
     applyLayout();
     if (!state.session) {
       renderAuth();
@@ -1137,8 +1214,7 @@ Save anyway?`)) return;
         return;
       }
       $("#tabs").style.display = "flex";
-      if (isCurrentLeagueAdmin()) $("#admintab").style.display = "";
-      renderSwitcher();
+      renderHeaderChrome();
       await Promise.all([loadConfig(), loadSongs()]);
       subscribeRealtime();
       await renderAll();
@@ -1176,7 +1252,8 @@ Save anyway?`)) return;
     unban,
     runEdge,
     bootPlayer,
-    switchToBracket
+    switchToBracket,
+    switchToLeague
   });
   boot();
 })();

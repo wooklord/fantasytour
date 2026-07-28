@@ -5,7 +5,7 @@ import { renderAuth } from "../features/auth.js";
 import { subscribeRealtime } from "./realtime.js";
 import { renderAll, applyLayout } from "./layout.js";
 import { APP_NAME } from "./config.js";
-import { loadConfig, resolveLeagues, renderSwitcher, isCurrentLeagueAdmin } from "./switcher.js";
+import { loadConfig, resolveLeagues, renderHeaderChrome } from "./switcher.js";
 
 export { loadConfig };
 
@@ -13,10 +13,6 @@ export async function loadSongs(){
   const { data, error } = await db.from("songs_cache").select("*").order("times_played",{ascending:false});
   if (error) throw new Error("Couldn't load song catalog: " + error.message);
   state.songList = data || [];
-}
-export function renderWho(){
-  $("#whoami").innerHTML = state.session
-    ? `<b>${esc(state.session.name)}</b> <button class="linkbtn" onclick="logout()">log out</button>` : "";
 }
 export function logout(){ state.session = null; localStorage.removeItem("ft_session"); location.reload(); }
 
@@ -32,7 +28,7 @@ export async function boot(){
   document.title = APP_NAME;
   const nameEl = document.getElementById("appName");
   if (nameEl) nameEl.textContent = APP_NAME;
-  renderWho();
+  renderHeaderChrome();
   // Must run before ANY render decision below, not just the logged-in path:
   // on desktop, #cols starts hidden (inline style in index.html) and only
   // becomes visible once this runs — `$("#main")` redirects to a column
@@ -48,8 +44,7 @@ export async function boot(){
     const hasLeague = await resolveLeagues();
     if (!hasLeague){ renderNoLeague(); return; }
     $("#tabs").style.display = "flex";
-    if (isCurrentLeagueAdmin()) $("#admintab").style.display = "";
-    renderSwitcher();
+    renderHeaderChrome();
     await Promise.all([loadConfig(), loadSongs()]);
     subscribeRealtime();
     await renderAll();

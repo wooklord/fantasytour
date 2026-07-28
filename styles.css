@@ -41,14 +41,25 @@ input,select{font-family:inherit;font-size:16px}
   body{padding-bottom:0}
 }
 
-/* ---------- top bar ---------- */
+/* ---------- top bar ----------
+   logo | name+league (stacked) | thin bracket label (non-tappable) | theme.
+   Logout and the Casual/Official toggle live in Settings now, not here —
+   this row only ever has to fit 4 short things, so no wrap/shrink games. */
 header{position:sticky;top:0;z-index:50;background:var(--chrome);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-.bar{max-width:680px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 16px}
-.logo{display:flex;align-items:center;gap:8px;font-family:'Fraunces',serif;font-weight:800;font-size:1.35rem;letter-spacing:.5px;color:var(--yolk);font-variation-settings:'SOFT' 100,'WONK' 1}
-.who{margin-left:auto;font-size:.85rem;color:var(--cream-dim)}
-.who b{color:var(--cream)}
+.bar{max-width:680px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:12px 16px}
+.logo{display:flex;align-items:center;gap:8px;font-family:'Fraunces',serif;font-weight:800;font-size:1.35rem;letter-spacing:.5px;color:var(--yolk);font-variation-settings:'SOFT' 100,'WONK' 1;flex:none;min-width:0}
+.logo span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who{margin-left:auto;font-size:.85rem;color:var(--cream-dim);text-align:right;line-height:1.3;min-width:0;flex:1 1 auto}
+.who b{color:var(--cream);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who .who-league{font-size:.72rem;color:var(--cream-dim);opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The wordmark text is the first thing that can go — the wreath icon alone
+   still reads as the app, and a squeezed header was truncating the play
+   name down to one letter otherwise (there's no title/league text on the
+   other side of the header that could yield room instead). */
+@media (max-width:460px){ .logo span{display:none} }
+.bracket-label{flex:none;font-size:.72rem;font-weight:600;letter-spacing:.4px;color:var(--yolk);opacity:.85;text-transform:uppercase;pointer-events:none;user-select:none}
 .linkbtn{background:none;border:none;color:var(--coral);font-size:.8rem;text-decoration:underline;padding:2px 4px}
-.switcher{display:flex;gap:4px;flex:none}
+.switcher{display:flex;gap:4px;flex:none;flex-wrap:wrap}
 .switcher-btn{text-decoration:none;border:1px solid var(--line2);border-radius:8px;padding:4px 9px;font-size:.78rem;color:var(--cream-dim)}
 .switcher-btn.on{color:var(--yolk);border-color:var(--yolk)}
 .switcher select{background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:4px 8px;font-size:.78rem}
@@ -60,7 +71,7 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 
 /* ---------- cards / panels ---------- */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:14px 0}
-.panel h2{font-size:1.25rem;margin-bottom:8px}
+.panel h2{font-size:1.25rem;margin-bottom:8px;overflow-wrap:anywhere}
 .muted{color:var(--cream-dim);font-size:.88rem}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .pill{display:inline-block;font-family:var(--mono);font-size:.75rem;padding:3px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--cream-dim)}
@@ -71,11 +82,16 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 .showrow{display:flex;gap:12px;align-items:center;padding:13px 4px;border-bottom:1px dashed var(--dash)}
 .showrow:last-child{border-bottom:none}
+.showrow.unavailable{opacity:.5}
 .showrow .date{font-family:var(--mono);color:var(--yolk);font-size:.85rem;min-width:74px}
 .showrow .v{flex:1;min-width:0}
-.showrow .v .venue{font-weight:600}
-.showrow .v .loc{font-size:.82rem;color:var(--cream-dim)}
-.showrow button{background:var(--panel2);color:var(--cream);border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:.82rem;font-weight:600}
+/* Venue/city text comes from The Carton's API and its length is out of our
+   control — a long name with no spaces (one real bug already shipped this
+   way) can't wrap and otherwise blows out the row width, dragging the whole
+   page into horizontal scroll. overflow-wrap:anywhere breaks it instead. */
+.showrow .v .venue{font-weight:600;overflow-wrap:anywhere}
+.showrow .v .loc{font-size:.82rem;color:var(--cream-dim);overflow-wrap:anywhere}
+.showrow button{background:var(--panel2);color:var(--cream);border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:.82rem;font-weight:600;flex:none}
 
 /* ---------- admin show row (Shows & cutoffs panel) ----------
    Stacked, not a single flex row like .showrow: the admin row packs a
@@ -87,7 +103,7 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .arow:last-child{border-bottom:none}
 .arow-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 .arow-head .date{font-family:var(--mono);color:var(--yolk);font-size:.85rem}
-.arow-head .venue{font-weight:600}
+.arow-head .venue{font-weight:600;overflow-wrap:anywhere;min-width:0}
 .cutoff-in{display:block;width:100%;margin:8px 0;background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.8rem;box-sizing:border-box}
 .arow-btns{display:flex;gap:8px;flex-wrap:wrap}
 .arow-btns button{background:var(--panel2);color:var(--cream);border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:.82rem;font-weight:600}
@@ -96,8 +112,8 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .sheet{position:relative;background:var(--cream);color:var(--ink);border-radius:6px;padding:26px 22px 22px;margin:22px 6px;box-shadow:0 14px 40px rgba(0,0,0,.5), 0 2px 0 rgba(0,0,0,.2);transform:rotate(-.5deg)}
 .sheet::before,.sheet::after{content:'';position:absolute;width:86px;height:26px;background:rgba(120,120,128,.55);top:-12px;transform:rotate(-4deg);left:14%;box-shadow:inset 0 0 6px rgba(0,0,0,.25)}
 .sheet::after{left:auto;right:12%;transform:rotate(5deg)}
-.sheet h2{font-size:1.5rem;font-variation-settings:'SOFT' 100,'WONK' 1;margin-bottom:2px}
-.sheet .sub{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);margin-bottom:16px;text-transform:uppercase;letter-spacing:1px}
+.sheet h2{font-size:1.5rem;font-variation-settings:'SOFT' 100,'WONK' 1;margin-bottom:2px;overflow-wrap:anywhere}
+.sheet .sub{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);margin-bottom:16px;text-transform:uppercase;letter-spacing:1px;overflow-wrap:anywhere}
 .slotline{display:flex;align-items:baseline;gap:10px;margin:14px 0}
 .slotline label{font-family:'Fraunces',serif;font-weight:700;font-size:1rem;min-width:86px}
 .slotline .pts{font-family:var(--mono);font-size:.7rem;color:var(--ink-soft);border:1px solid var(--ink-soft);border-radius:999px;padding:1px 7px;white-space:nowrap}
@@ -161,3 +177,22 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .acc-list div small{color:var(--ink-soft);font-family:var(--mono);float:right}
 .acc-list div:hover,.acc-list div.sel{background:var(--yolk);color:#221A0A}
 .hidden{display:none!important}
+
+/* ---------- ineligible pick sheet / roster banner ----------
+   The reason is the point of the panel, not a footnote — bump it up out of
+   .muted's dim secondary-text treatment. Calm (full-contrast ink, matching
+   the surrounding .sheet paper card), not alarming (no coral/red) — it's an
+   explanation, not an error. Always sits on the cream .sheet paper
+   regardless of app theme, so it uses --ink (the sheet's own text color),
+   not a --cream/--coral variable that's cream-on-cream in dark mode. */
+.ineligible-reason{font-size:1.05rem;line-height:1.5;color:var(--ink);text-align:center;margin:18px 0}
+.noticebox{background:var(--panel);border:1px solid var(--yolk);border-radius:14px;padding:14px 16px;margin:14px 0;font-size:.95rem;line-height:1.5}
+
+/* ---------- settings / credits ---------- */
+.credits{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.credits p{margin:8px 0;font-size:.82rem;color:var(--cream-dim);line-height:1.5}
+.credits a{color:var(--cream-dim);text-decoration:underline}
+.credits .merch-plug{color:var(--yolk);font-size:.92rem;font-weight:600}
+.credits .merch-plug a{color:var(--yolk)}
+.credits .colophon{font-size:.7rem;color:var(--cream-dim);opacity:.55;margin-top:12px}
+.colophon-foot{text-align:center;padding:20px 0 4px;font-size:.68rem;color:var(--cream-dim);opacity:.45}

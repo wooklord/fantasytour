@@ -132,7 +132,9 @@ export async function runScenario({ html, scripts, mode, presetSession }){
   await tick(); await tick();
   snap("boot");
 
-  log.push({ label: "switcher-rendered", html: window.document.getElementById("switcher")?.innerHTML || "" });
+  log.push({ label: "header-chrome",
+    whoami: window.document.getElementById("whoami")?.innerHTML || "",
+    bracketLabel: window.document.getElementById("bracketLabel")?.textContent || "" });
 
   // shows tab already default; open the upcoming show's pick sheet. Default
   // bracket on first boot (no stored ft_bracket_id) is Casual — never gated.

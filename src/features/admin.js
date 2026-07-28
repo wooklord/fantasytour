@@ -6,6 +6,7 @@ import { fmtDate, clearTimersFor } from "../core/format.js";
 import { toast } from "../core/toast.js";
 import { loadConfig, loadSongs } from "../core/session.js";
 import { markTab } from "../core/layout.js";
+import { settingsPanelHtml, wireSettingsPanel } from "./settings.js";
 
 // Seasons only ever belong to a league's Official bracket, and the season
 // editor has to keep working regardless of which bracket the switcher
@@ -89,10 +90,13 @@ export async function renderAdmin(){
       <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
       ${(shows||[]).map(sh => `<div class="arow">
         <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue||"TBA")}</span></div>
-        <input class="cutoff-in" type="datetime-local" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16) : ""}">
+        <input class="cutoff-in" type="datetime-local" step="900" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16) : ""}">
+        <div class="switcher" style="margin-bottom:8px" title="pick sheet format">
+          <button class="linkbtn switcher-btn${sh.format!=='one_set'?" on":""}" onclick="toggleFormat(${sh.id}, 'standard')">2 set</button>
+          <button class="linkbtn switcher-btn${sh.format==='one_set'?" on":""}" onclick="toggleFormat(${sh.id}, 'one_set')">1 set</button>
+        </div>
         <div class="arow-btns">
-          <button onclick="toggleFormat(${sh.id}, '${sh.format==='one_set'?'standard':'one_set'}')" title="pick sheet format">${sh.format==='one_set'?'1 set':'2 set'}</button>
-          <button onclick="saveCutoff(${sh.id}, this)">Set</button>
+          <button onclick="saveCutoff(${sh.id}, this)">Change cutoff</button>
           ${sh.status!=='final' && sh.cutoff_at && new Date(sh.cutoff_at) < new Date() ? '<button onclick="finalizeShow('+sh.id+', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ''}
         </div>
       </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
@@ -110,9 +114,11 @@ export async function renderAdmin(){
       </div>
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
     </div>
+    ${settingsPanelHtml()}
     ${footerHtml()}`;
   if ((shows||[]).length) loadRoster();
   loadPlayers();
+  wireSettingsPanel();
 }
 export async function loadPlayers(){
   // players_public no longer carries an admin flag (Stage A trimmed it to
@@ -270,7 +276,7 @@ export async function saveCutoff(showId, btn){
   if (!input.value) return;
   try{
     await rpc("admin_set_cutoff", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_show_id:showId, p_cutoff:new Date(input.value).toISOString() });
-    btn.textContent = "✔"; setTimeout(() => btn.textContent = "Set", 1500);
+    btn.textContent = "✔"; setTimeout(() => btn.textContent = "Change cutoff", 1500);
   }catch(e){ toast(esc(e.message)); }
 }
 export async function finalizeShow(showId, btn){

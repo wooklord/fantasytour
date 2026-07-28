@@ -1,6 +1,6 @@
 import { toggleTheme } from "./core/theme.js";
 import { boot, logout } from "./core/session.js";
-import { switchToBracket } from "./core/switcher.js";
+import { switchToBracket, switchToLeague } from "./core/switcher.js";
 import "./core/layout.js";
 import "./core/realtime.js";
 import { doLogin, doRegister } from "./features/auth.js";
@@ -18,7 +18,7 @@ Object.assign(window, {
   toggleTheme, logout, doLogin, doRegister, openShow, renderShows, setBoardSeason,
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
   toggleFormat, saveCutoff, finalizeShow, toggleBans, unban, runEdge, bootPlayer,
-  switchToBracket,
+  switchToBracket, switchToLeague,
 });
 
 boot();

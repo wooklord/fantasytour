@@ -43,10 +43,10 @@ async function runMode(mode){
   const rpcCalls = calls.filter(c => c.type === "rpc");
   const rpcFns = rpcCalls.map(c => c.fn);
 
-  const switcher = byLabel(log, "switcher-rendered");
-  check("switcher renders both Casual and Official",
-    switcher && /Casual/.test(switcher.html) && /Official/.test(switcher.html),
-    `switcher html: ${switcher?.html}`);
+  const header = byLabel(log, "header-chrome");
+  check("header shows the player name, league name, and current bracket label",
+    header && /Wooklord/.test(header.whoami) && /Ambassadors/.test(header.whoami) && /Casual/.test(header.bracketLabel),
+    `header: ${JSON.stringify(header)}`);
 
   const casualSheet = byLabel(log, "pick-sheet-open-casual");
   check("Casual pick sheet renders fillable inputs (never gated)",
@@ -73,6 +73,10 @@ async function runMode(mode){
   check("admin tab renders admin content for a league admin",
     admin && /Seasons|Master switch/.test(admin.html),
     `admin html present: ${!!admin?.html}`);
+
+  check("admin tab's embedded Settings section shows the Casual/Official bracket toggle",
+    admin && /Casual/.test(admin.html) && /Official/.test(admin.html),
+    `admin html: ${admin?.html}`);
 
   // Only themeMode itself (the stored preference) cycles through the literal
   // 3 states — the *rendered* dataset.theme value for "auto" resolves via

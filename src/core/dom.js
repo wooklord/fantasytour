@@ -8,5 +8,7 @@ export const $ = (sel, el=document) => {
 };
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-// Appended at the end of every top-level #main render so the credit shows on every screen.
-export const footerHtml = () => `<footer class="muted" style="text-align:center;padding:20px 0 4px">Created by Kyle McKinley</footer>`;
+// Appended at the end of every top-level #main render — a barely-there
+// colophon. The more visible credit (with the fan-project disclaimer and
+// Carton/merch links) lives in the Settings panel, not here.
+export const footerHtml = () => `<footer class="colophon-foot">Created by Kyle McKinley</footer>`;

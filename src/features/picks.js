@@ -38,7 +38,7 @@ function renderIneligible(show, reason){
     <div class="sheet">
       <h2>${esc(show.venue||"TBA")}</h2>
       <div class="sub">${fmtDate(show.showdate)}</div>
-      <p class="muted" style="margin-top:14px">${esc(reason || "Picks aren't open for this bracket.")}</p>
+      <p class="ineligible-reason">${esc(reason || "Picks aren't open for this bracket.")}</p>
       ${casual ? `<button class="btn ghost small" onclick="switchToBracket(${casual.bracket_id})">Switch to Casual</button>` : ""}
     </div>
     ${footerHtml()}`;
