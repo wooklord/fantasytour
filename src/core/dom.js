@@ -11,4 +11,4 @@ export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','
 // Appended at the end of every top-level #main render — a barely-there
 // colophon. The more visible credit (with the fan-project disclaimer and
 // Carton/merch links) lives in the Settings panel, not here.
-export const footerHtml = () => `<footer class="colophon-foot">Created by Kyle McKinley</footer>`;
+export const footerHtml = () => `<footer class="colophon-foot">K McKinley</footer>`;

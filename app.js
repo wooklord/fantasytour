@@ -23,7 +23,7 @@
     return el.querySelector(sel);
   };
   var esc = (s) => String(s != null ? s : "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  var footerHtml = () => `<footer class="colophon-foot">Created by Kyle McKinley</footer>`;
+  var footerHtml = () => `<footer class="colophon-foot">K McKinley</footer>`;
 
   // src/core/config.js
   var SUPABASE_URL = "https://zdfhglvjxquvkjyvophz.supabase.co";

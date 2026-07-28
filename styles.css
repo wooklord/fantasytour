@@ -207,5 +207,5 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .credits a{color:var(--cream-dim);text-decoration:underline}
 .credits .merch-plug{color:var(--yolk);font-size:.92rem;font-weight:600}
 .credits .merch-plug a{color:var(--yolk)}
-.credits .colophon{font-size:.7rem;color:var(--cream-dim);opacity:.55;margin-top:12px}
-.colophon-foot{text-align:center;padding:20px 0 4px;font-size:.68rem;color:var(--cream-dim);opacity:.45}
+.credits .colophon{margin-top:12px}
+.colophon-foot{text-align:center;padding:20px 0 4px;font-size:.6rem;color:var(--cream-dim);opacity:.35}
