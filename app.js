@@ -588,7 +588,10 @@
         </div>
       </div>`).join("") || '<p class="muted">No shows \u2014 sync first.</p>'}
     </div>
-    <div class="panel"><h2>Players</h2>
+    <div class="panel"><h2>Members</h2>
+      <div class="field"><label>Add a member</label>
+        <input id="member-search" placeholder="Search registered players by name\u2026" oninput="searchMembers()" autocomplete="off"></div>
+      <div id="member-results"></div>
       <div id="playerlist"><p class="muted">Loading\u2026</p></div>
       <button class="linkbtn" id="banToggle" onclick="toggleBans()" style="margin-top:8px">show ban list</button>
       <div id="banlist" class="hidden" style="margin-top:6px"></div>
@@ -604,16 +607,44 @@
     ${settingsPanelHtml()}
     ${footerHtml()}`;
     if ((shows || []).length) loadRoster();
-    loadPlayers();
+    loadMembers();
     wireSettingsPanel();
   }
-  async function loadPlayers() {
-    const { data: pl } = await db.from("players_public").select("*").order("created_at");
-    $("#playerlist").innerHTML = (pl || []).map((p) => `
-    <div class="pickres hit"><span>\xB7</span>
-      <span>${esc(p.name)}</span>
-      <span class="pt">${p.id === state.session.id ? '<small class="muted">you</small>' : `<button class="btn ghost small" onclick="bootPlayer('` + p.id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')" style="border-color:var(--coral);color:var(--coral)">Boot</button>`}</span>
+  async function loadMembers() {
+    const rows = await rpc("admin_list_members", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId });
+    $("#playerlist").innerHTML = (rows || []).map((p) => `
+    <div class="pickres hit"><span>${p.is_league_admin ? "\u2605" : "\xB7"}</span>
+      <span>${esc(p.name)}${p.official_opt_in ? ' <small class="muted">Official</small>' : ""}</span>
+      <span class="pt">${p.player_id === state.session.id ? '<small class="muted">you</small>' : (p.is_league_admin ? '<small class="muted">admin</small> ' : "") + `<button class="btn ghost small" onclick="bootPlayer('` + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')" style="border-color:var(--coral);color:var(--coral)">Boot</button>`}</span>
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
+  }
+  async function searchMembers() {
+    const q = $("#member-search").value.trim();
+    if (q.length < 2) {
+      $("#member-results").innerHTML = "";
+      return;
+    }
+    try {
+      const rows = await rpc("admin_find_players", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_query: q });
+      $("#member-results").innerHTML = (rows || []).map((p) => `
+      <div class="pickres">
+        <span>${esc(p.name)}</span>
+        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Add</button></span>
+      </div>`).join("") || '<p class="muted">No matches.</p>';
+    } catch (e) {
+      $("#member-results").innerHTML = `<p class="err">${esc(e.message)}</p>`;
+    }
+  }
+  async function addMember(id, name) {
+    try {
+      await rpc("admin_add_league_member", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_player_id: id });
+      toast(`${name} added`, "score");
+      $("#member-search").value = "";
+      $("#member-results").innerHTML = "";
+      loadMembers();
+    } catch (e) {
+      toast(esc(e.message));
+    }
   }
   function seasonRow(se) {
     const v = se || { id: "", name: "", start_date: "", end_date: "" };
@@ -623,7 +654,47 @@
     <input type="date" value="${v.end_date}" style="width:130px">
     <button class="btn ghost small" onclick="saveSeason(this.parentElement)">Save</button>
     ${v.id ? `<button class="btn ghost small" onclick="deleteSeason(${v.id})" style="border-color:var(--coral);color:var(--coral)">\u2715</button>` : ""}
-  </div>`;
+  </div>
+  ${v.id ? `<div style="margin:0 0 10px">
+    <button class="linkbtn" id="roster-toggle-${v.id}" onclick="toggleRoster(${v.id})">manage roster</button>
+    <div id="roster-panel-${v.id}" class="hidden" style="margin-top:6px"></div>
+  </div>` : ""}`;
+  }
+  var rosterOpen = {};
+  async function renderRosterPanel(seasonId) {
+    const panel = $("#roster-panel-" + seasonId);
+    if (!panel) return;
+    panel.innerHTML = '<p class="muted">Loading\u2026</p>';
+    try {
+      const [members, roster] = await Promise.all([
+        rpc("admin_list_members", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId }),
+        rpc("admin_list_season_roster", { p_name: state.session.name, p_pin: state.session.pin, p_season_id: seasonId })
+      ]);
+      const onRoster = new Set((roster || []).map((r) => r.player_id));
+      panel.innerHTML = (members || []).map((m) => `
+      <div class="pickres ${onRoster.has(m.player_id) ? "hit" : "miss"}">
+        <span>${onRoster.has(m.player_id) ? "\u2714" : "\u2014"}</span><span>${esc(m.name)}</span>
+        <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)})">${onRoster.has(m.player_id) ? "Remove" : "Add"}</button></span>
+      </div>`).join("") || '<p class="muted">No members in this league yet.</p>';
+    } catch (e) {
+      panel.innerHTML = `<p class="err">${esc(e.message)}</p>`;
+    }
+  }
+  async function toggleRoster(seasonId) {
+    rosterOpen[seasonId] = !rosterOpen[seasonId];
+    const toggleBtn = $("#roster-toggle-" + seasonId), panel = $("#roster-panel-" + seasonId);
+    if (toggleBtn) toggleBtn.textContent = rosterOpen[seasonId] ? "hide roster" : "manage roster";
+    if (panel) panel.classList.toggle("hidden", !rosterOpen[seasonId]);
+    if (rosterOpen[seasonId]) renderRosterPanel(seasonId);
+  }
+  async function setRosterMember(seasonId, playerId, add) {
+    try {
+      await rpc("admin_set_season_roster", { p_name: state.session.name, p_pin: state.session.pin, p_season_id: seasonId, p_player_id: playerId, p_add: add });
+      toast(add ? "Added to roster" : "Removed from roster", "score");
+      renderRosterPanel(seasonId);
+    } catch (e) {
+      toast(esc(e.message));
+    }
   }
   function addSeasonRow() {
     $("#seasonrows").insertAdjacentHTML("beforeend", seasonRow(null));
@@ -688,7 +759,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
     try {
       await rpc("admin_league_boot", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_player_id: id, p_ban: ban });
       toast(`${name} removed${ban ? " and banned" : ""}`, "score");
-      loadPlayers();
+      loadMembers();
       loadRoster();
     } catch (e) {
       toast(esc(e.message));
@@ -1190,10 +1261,17 @@ Save anyway?`)) return;
     localStorage.removeItem("ft_session");
     location.reload();
   }
-  function renderNoLeague() {
+  async function renderNoLeague() {
+    let names = [];
+    try {
+      const { data } = await db.from("leagues").select("name").order("name");
+      names = (data || []).map((l) => l.name);
+    } catch (e) {
+    }
     $("#main").innerHTML = `<div class="panel" style="margin-top:30px">
     <h2>You're not in a league yet</h2>
-    <p class="muted">Ask a league admin to add you \u2014 they'll need your player name.</p>
+    <p class="muted">Ask a league admin to add you \u2014 they'll need your player name (${esc(state.session.name)}).</p>
+    ${names.length ? `<p class="muted">Leagues currently running: ${names.map(esc).join(", ")}.</p>` : ""}
     <button class="btn ghost" onclick="logout()">Log out</button>
   </div>`;
   }
@@ -1210,7 +1288,7 @@ Save anyway?`)) return;
     try {
       const hasLeague = await resolveLeagues();
       if (!hasLeague) {
-        renderNoLeague();
+        await renderNoLeague();
         return;
       }
       $("#tabs").style.display = "flex";
@@ -1252,6 +1330,10 @@ Save anyway?`)) return;
     unban,
     runEdge,
     bootPlayer,
+    searchMembers,
+    addMember,
+    toggleRoster,
+    setRosterMember,
     switchToBracket,
     switchToLeague
   });

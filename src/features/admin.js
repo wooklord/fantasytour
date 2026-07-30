@@ -101,7 +101,10 @@ export async function renderAdmin(){
         </div>
       </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
     </div>
-    <div class="panel"><h2>Players</h2>
+    <div class="panel"><h2>Members</h2>
+      <div class="field"><label>Add a member</label>
+        <input id="member-search" placeholder="Search registered players by name…" oninput="searchMembers()" autocomplete="off"></div>
+      <div id="member-results"></div>
       <div id="playerlist"><p class="muted">Loading…</p></div>
       <button class="linkbtn" id="banToggle" onclick="toggleBans()" style="margin-top:8px">show ban list</button>
       <div id="banlist" class="hidden" style="margin-top:6px"></div>
@@ -117,22 +120,43 @@ export async function renderAdmin(){
     ${settingsPanelHtml()}
     ${footerHtml()}`;
   if ((shows||[]).length) loadRoster();
-  loadPlayers();
+  loadMembers();
   wireSettingsPanel();
 }
-export async function loadPlayers(){
-  // players_public no longer carries an admin flag (Stage A trimmed it to
-  // id/name/created_at) and there's no public read on league_members to
-  // source a per-player badge from either — dropping the ★ marker here is
-  // an accepted, temporary regression, to be rebuilt properly in C2b
-  // alongside the league-scoped member-list this panel really needs.
-  const { data: pl } = await db.from("players_public").select("*").order("created_at");
-  $("#playerlist").innerHTML = (pl||[]).map(p => `
-    <div class="pickres hit"><span>·</span>
-      <span>${esc(p.name)}</span>
-      <span class="pt">${p.id===state.session.id ? '<small class="muted">you</small>'
-        : '<button class="btn ghost small" onclick="bootPlayer(\''+p.id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')" style="border-color:var(--coral);color:var(--coral)">Boot</button>'}</span>
+export async function loadMembers(){
+  // Scoped to the current league via admin_list_members (Stage C2b) —
+  // replaces the old app-wide players_public read, which listed every
+  // registered player regardless of league membership and let Boot fire
+  // against people who weren't actually in this league. is_league_admin
+  // restores the ★ marker the pre-2.0 build had.
+  const rows = await rpc("admin_list_members", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId });
+  $("#playerlist").innerHTML = (rows||[]).map(p => `
+    <div class="pickres hit"><span>${p.is_league_admin ? "★" : "·"}</span>
+      <span>${esc(p.name)}${p.official_opt_in ? ' <small class="muted">Official</small>' : ""}</span>
+      <span class="pt">${p.player_id===state.session.id ? '<small class="muted">you</small>'
+        : (p.is_league_admin ? '<small class="muted">admin</small> ' : '')
+          +'<button class="btn ghost small" onclick="bootPlayer(\''+p.player_id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')" style="border-color:var(--coral);color:var(--coral)">Boot</button>'}</span>
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
+}
+export async function searchMembers(){
+  const q = $("#member-search").value.trim();
+  if (q.length < 2){ $("#member-results").innerHTML = ""; return; }
+  try{
+    const rows = await rpc("admin_find_players", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_query:q });
+    $("#member-results").innerHTML = (rows||[]).map(p => `
+      <div class="pickres">
+        <span>${esc(p.name)}</span>
+        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Add</button></span>
+      </div>`).join("") || '<p class="muted">No matches.</p>';
+  }catch(e){ $("#member-results").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+export async function addMember(id, name){
+  try{
+    await rpc("admin_add_league_member", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_player_id:id });
+    toast(`${name} added`, "score");
+    $("#member-search").value = ""; $("#member-results").innerHTML = "";
+    loadMembers();
+  }catch(e){ toast(esc(e.message)); }
 }
 export function seasonRow(se){
   const v = se || { id:"", name:"", start_date:"", end_date:"" };
@@ -142,7 +166,47 @@ export function seasonRow(se){
     <input type="date" value="${v.end_date}" style="width:130px">
     <button class="btn ghost small" onclick="saveSeason(this.parentElement)">Save</button>
     ${v.id ? `<button class="btn ghost small" onclick="deleteSeason(${v.id})" style="border-color:var(--coral);color:var(--coral)">✕</button>` : ""}
-  </div>`;
+  </div>
+  ${v.id ? `<div style="margin:0 0 10px">
+    <button class="linkbtn" id="roster-toggle-${v.id}" onclick="toggleRoster(${v.id})">manage roster</button>
+    <div id="roster-panel-${v.id}" class="hidden" style="margin-top:6px"></div>
+  </div>` : ""}`;
+}
+// Opt-in override for a running Official season — add/remove a player from
+// season_rosters directly (bypasses the live-flag lock, per the admin
+// override rule in CLAUDE.md). Kept as plain module state, not state.js:
+// purely a UI expand/collapse flag, not app data.
+const rosterOpen = {};
+async function renderRosterPanel(seasonId){
+  const panel = $("#roster-panel-"+seasonId);
+  if (!panel) return;
+  panel.innerHTML = '<p class="muted">Loading…</p>';
+  try{
+    const [members, roster] = await Promise.all([
+      rpc("admin_list_members", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId }),
+      rpc("admin_list_season_roster", { p_name:state.session.name, p_pin:state.session.pin, p_season_id:seasonId }),
+    ]);
+    const onRoster = new Set((roster||[]).map(r => r.player_id));
+    panel.innerHTML = (members||[]).map(m => `
+      <div class="pickres ${onRoster.has(m.player_id)?"hit":"miss"}">
+        <span>${onRoster.has(m.player_id)?"✔":"—"}</span><span>${esc(m.name)}</span>
+        <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)})">${onRoster.has(m.player_id)?"Remove":"Add"}</button></span>
+      </div>`).join("") || '<p class="muted">No members in this league yet.</p>';
+  }catch(e){ panel.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+export async function toggleRoster(seasonId){
+  rosterOpen[seasonId] = !rosterOpen[seasonId];
+  const toggleBtn = $("#roster-toggle-"+seasonId), panel = $("#roster-panel-"+seasonId);
+  if (toggleBtn) toggleBtn.textContent = rosterOpen[seasonId] ? "hide roster" : "manage roster";
+  if (panel) panel.classList.toggle("hidden", !rosterOpen[seasonId]);
+  if (rosterOpen[seasonId]) renderRosterPanel(seasonId);
+}
+export async function setRosterMember(seasonId, playerId, add){
+  try{
+    await rpc("admin_set_season_roster", { p_name:state.session.name, p_pin:state.session.pin, p_season_id:seasonId, p_player_id:playerId, p_add:add });
+    toast(add ? "Added to roster" : "Removed from roster", "score");
+    renderRosterPanel(seasonId);
+  }catch(e){ toast(esc(e.message)); }
 }
 export function addSeasonRow(){ $("#seasonrows").insertAdjacentHTML("beforeend", seasonRow(null)); }
 export async function saveSeason(row){
@@ -190,7 +254,7 @@ export async function bootPlayer(id, name){
   try{
     await rpc("admin_league_boot", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_player_id:id, p_ban:ban });
     toast(`${name} removed${ban ? " and banned" : ""}`, "score");
-    loadPlayers(); loadRoster();
+    loadMembers(); loadRoster();
   }catch(e){ toast(esc(e.message)); }
 }
 export async function toggleFormat(showId, next){

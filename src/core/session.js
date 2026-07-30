@@ -16,10 +16,21 @@ export async function loadSongs(){
 }
 export function logout(){ state.session = null; localStorage.removeItem("ft_session"); location.reload(); }
 
-function renderNoLeague(){
+async function renderNoLeague(){
+  // leagues has a public RLS read policy (stage_a_schema.sql — needed for the
+  // switcher), so this is a free read: no RPC, no auth check needed beyond
+  // the session already established. Naming the actual leagues turns "ask a
+  // league admin" from a dead end into an actionable next step — the player
+  // didn't know a name to give, they didn't know which admin to ask.
+  let names = [];
+  try{
+    const { data } = await db.from("leagues").select("name").order("name");
+    names = (data||[]).map(l => l.name);
+  }catch(e){ /* fall through to the generic copy below */ }
   $("#main").innerHTML = `<div class="panel" style="margin-top:30px">
     <h2>You're not in a league yet</h2>
-    <p class="muted">Ask a league admin to add you — they'll need your player name.</p>
+    <p class="muted">Ask a league admin to add you — they'll need your player name (${esc(state.session.name)}).</p>
+    ${names.length ? `<p class="muted">Leagues currently running: ${names.map(esc).join(", ")}.</p>` : ""}
     <button class="btn ghost" onclick="logout()">Log out</button>
   </div>`;
 }
@@ -42,7 +53,7 @@ export async function boot(){
   if (!state.session){ renderAuth(); return; }
   try{
     const hasLeague = await resolveLeagues();
-    if (!hasLeague){ renderNoLeague(); return; }
+    if (!hasLeague){ await renderNoLeague(); return; }
     $("#tabs").style.display = "flex";
     renderHeaderChrome();
     await Promise.all([loadConfig(), loadSongs()]);

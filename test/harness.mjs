@@ -66,6 +66,27 @@ const RPC_HANDLERS = {
   admin_unban: async () => ({ ok: true }),
   admin_league_boot: async () => ({ ok: true }),
   admin_set_show_format: async () => ({ ok: true }),
+  // Stage C2b — member management. Computed against the fixture's
+  // league_members/players_public/season_rosters, same "real join logic, not
+  // a fixed stub" idiom as my_leagues/get_bracket_scores above.
+  admin_list_members: async ({ p_league_id }, tables) =>
+    tables.league_members.filter(lm => lm.league_id === p_league_id).map(lm => {
+      const p = tables.players_public.find(pp => pp.id === lm.player_id);
+      return { player_id: lm.player_id, name: p?.name, joined_at: p?.created_at,
+        is_league_admin: lm.is_league_admin, official_opt_in: lm.official_opt_in };
+    }),
+  admin_find_players: async ({ p_league_id, p_query }, tables) => {
+    const q = (p_query || "").trim().toLowerCase();
+    if (q.length < 2) throw new Error("Enter at least 2 characters");
+    const memberIds = new Set(tables.league_members.filter(lm => lm.league_id === p_league_id).map(lm => lm.player_id));
+    return tables.players_public
+      .filter(p => p.name.toLowerCase().startsWith(q) && !memberIds.has(p.id))
+      .map(p => ({ player_id: p.id, name: p.name }));
+  },
+  admin_add_league_member: async () => ({ ok: true }),
+  admin_list_season_roster: async ({ p_season_id }, tables) =>
+    tables.season_rosters.filter(sr => sr.season_id === p_season_id),
+  admin_set_season_roster: async () => ({ ok: true }),
   admin_pick_status: async () => [{ player_name: "Wooklord", picks_count: 1, last_saved: "2026-07-26T00:00:00Z" }],
   admin_update_config: async () => ({ ok: true }),
   admin_set_cutoff: async () => ({ ok: true }),
@@ -186,6 +207,28 @@ export async function runScenario({ html, scripts, mode, presetSession }){
   clickTab(window, "admin");
   await tick(); await tick();
   snap("admin");
+
+  // C2b — member search: "wa" should surface the fixture's non-member (p3,
+  // "Wanderer") via admin_find_players' real prefix-match/exclude-members logic.
+  const memberSearch = window.document.querySelector("#member-search");
+  if (memberSearch){
+    memberSearch.value = "wa";
+    // Called directly rather than via dispatchEvent, same as clickTab()/
+    // saveBtn.onclick() below — inline oninput/onclick HTML attributes don't
+    // reliably wire up to jsdom's synthetic event dispatch under
+    // runScripts:"outside-only", so every other step in this harness invokes
+    // the handler function directly instead of trusting a dispatched event.
+    await window.searchMembers();
+    await tick(); await tick();
+  }
+  log.push({ label: "member-search-results", html: window.document.getElementById("member-results")?.innerHTML || "" });
+
+  // C2b — season roster panel: expand the fixture's one season and confirm
+  // it renders against admin_list_season_roster's real join (p1 is already
+  // on the roster; p2 is not).
+  window.toggleRoster(501);
+  await tick(); await tick();
+  log.push({ label: "season-roster-panel", html: window.document.getElementById("roster-panel-501")?.innerHTML || "" });
 
   // theme toggle x3 (auto -> light -> dark -> auto)
   const themeSeq = [];

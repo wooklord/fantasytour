@@ -78,6 +78,29 @@ async function runMode(mode){
     admin && /Casual/.test(admin.html) && /Official/.test(admin.html),
     `admin html: ${admin?.html}`);
 
+  check("Members panel (league-scoped, not app-wide) lists both members, with the ★ badge on the league admin",
+    admin && /★/.test(admin.html) && /Wooklord/.test(admin.html) && /EggHead/.test(admin.html),
+    `admin html: ${admin?.html}`);
+
+  check("Members panel has the add-member search control",
+    admin && /member-search/.test(admin.html),
+    `admin html: ${admin?.html}`);
+
+  check("Seasons panel has a manage-roster control per saved season",
+    admin && /manage roster/.test(admin.html),
+    `admin html: ${admin?.html}`);
+
+  const memberSearch = byLabel(log, "member-search-results");
+  check("searching \"wa\" surfaces the non-member fixture player (Wanderer), not existing members",
+    memberSearch && /Wanderer/.test(memberSearch.html) && !/Wooklord/.test(memberSearch.html) && !/EggHead/.test(memberSearch.html),
+    `member-search-results: ${memberSearch?.html}`);
+
+  const rosterPanel = byLabel(log, "season-roster-panel");
+  check("season roster panel renders real join logic: p1 (on roster) gets Remove, p2 (not) gets Add",
+    rosterPanel && /Wooklord/.test(rosterPanel.html) && /Remove/.test(rosterPanel.html)
+      && /EggHead/.test(rosterPanel.html) && />Add</.test(rosterPanel.html),
+    `season-roster-panel: ${rosterPanel?.html}`);
+
   // Only themeMode itself (the stored preference) cycles through the literal
   // 3 states — the *rendered* dataset.theme value for "auto" resolves via
   // matchMedia("prefers-color-scheme"), which the harness stubs to always

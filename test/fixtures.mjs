@@ -52,14 +52,25 @@ export function makeFixtures(){
       { league_id: LEAGUE_ID, show_id: 2, cutoff_at: iso(-7*24*60), format: "standard", status: "final",
         remind_sent: iso(-7*24*60-70), lock_sent: iso(-7*24*60-60), winner_sent: iso(-7*24*60-10) },
     ],
-    // Empty on purpose — matches production post-launch-wipe: no Official
-    // season exists yet, so Official-gating's "no season covers this show"
-    // branch is the realistic default case to test against.
-    seasons: [],
-    season_rosters: [],
+    // One past season (well outside show 1's date, 2026-07-27) so it doesn't
+    // disturb the existing "no season covers this show" Official-ineligible
+    // assertion — its only job here is giving the season-roster admin UI
+    // something real to list/toggle. season_rosters has one member on it, so
+    // the roster panel exercises both the "already on roster" (Remove) and
+    // "not on roster" (Add) render branches.
+    seasons: [
+      { id: 501, bracket_id: OFFICIAL_ID, name: "Past Season", start_date: "2026-01-01", end_date: "2026-01-31", roster_locked_at: null },
+    ],
+    season_rosters: [
+      { season_id: 501, player_id: "p1" },
+    ],
     players_public: [
       { id: "p1", name: "Wooklord", created_at: "2026-01-01" },
       { id: "p2", name: "EggHead", created_at: "2026-01-02" },
+      // Registered but not yet in league_members — the non-member match
+      // admin_find_players should be able to surface for the "add a member"
+      // search.
+      { id: "p3", name: "Wanderer", created_at: "2026-01-03" },
     ],
     scores: [
       { player_id: "p1", bracket_id: CASUAL_ID, show_id: 2, points: 5, breakdown: [{ slot:"opener", songname:"Distraction", points:2, hit:true, reason:"hit" }] },

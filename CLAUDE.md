@@ -391,20 +391,46 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   `admin_league_boot`/edge-function `finalize` replacing the two dropped RPCs,
   `realtime.js` rebuilt as a teardown-and-rebuildable per-bracket subscription,
   and the test harness rewrite noted above. C2b (admin surfaces) and C2c
-  (polish) are separate, not-yet-started phases.
+  (polish) were separate, not-yet-started phases — C2b is now done (below);
+  C2c remains not started.
   - The season editor is deliberately **not** bracket-switcher-scoped: it always
     resolves the current league's Official bracket id directly
     (`officialBracketId()` in `admin.js`), not `state.currentBracketId` — an
     admin looking at Casual still needs to manage Official's seasons, and
     seasons only ever belong to Official.
-  - The ★ admin-badge marker is dropped from the Players admin panel (renders
-    "·" for everyone but "you") — `players_public` carries no admin flag
-    post-Stage-A and there's no public read on `league_members` to source a
-    per-player one from either. Accepted, temporary regression; C2b's proper
-    member-management rebuild is the real fix.
   - Pick-sheet drafts are now keyed by bracket too
     (`ft_draft_${sessionId}_${bracketId}_${showId}`) — the old key would have
     silently shown one bracket's in-progress draft inside the other's sheet.
+- **Stage C2b is done** — member management admin surface, prompted by a real
+  onboarding gap: a new player registered, hit "not in a league yet," and had
+  to be added by hand via a raw RPC call because no admin UI for it existed.
+  New SQL (`sql/stage_c2b_member_mgmt.sql`, run + smoke-tested): three
+  admin-gated read RPCs — `admin_list_members` (replaces the C2a-era Players
+  panel's app-wide `players_public` read, which listed every registered
+  player regardless of league membership and let Boot fire against people
+  who weren't actually in the league; this is also what restores the ★
+  admin-badge marker C2a had dropped, since it carries `is_league_admin`
+  again), `admin_find_players` (name-prefix search, min 2 chars enforced
+  server-side, capped at 8 rows, excludes existing members — the discovery
+  mechanism for "add a member"; accepted privacy tradeoff: a capped prefix
+  search still allows slow enumeration by an admin iterating letters, judged
+  acceptable given the small admin-adds-you trust model this app already
+  runs on), and `admin_list_season_roster` (feeds the season opt-in-override
+  UI; the mutation, `admin_set_season_roster`, already existed from Stage
+  C1). All wired into `admin.js`'s renamed Members panel (`loadMembers`,
+  `searchMembers`/`addMember`) and a per-season "manage roster" control in
+  the Seasons panel (`toggleRoster`/`setRosterMember`). `admin_league_boot`
+  and `admin_list_bans`/`admin_unban` needed no changes — both were already
+  correctly wired to the league-scoped RPCs by Stage C1/C2a, confirm-text
+  included.
+  - Onboarding dead end fixed alongside this: `renderNoLeague()` in
+    `src/core/session.js` now lists real league names (a free read off the
+    public `leagues` table) instead of just "ask a league admin" with no way
+    to know who that is. A fuller request-to-join flow was considered and
+    deliberately not built — join-approval is already entirely admin-driven
+    by design (FB league admins manually verify signups via Facebook
+    comments), so a parallel request-queue would duplicate
+    `admin_add_league_member` for no real gain at this scale.
 - **Official gating must BLOCK pick submission, not silently skip scoring.** Two
   distinct cases, each with its own error:
   1. No season covers the show's date — check the SHOW's date, not today's,

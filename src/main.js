@@ -10,6 +10,7 @@ import { setBoardSeason } from "./features/standings.js";
 import {
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
   toggleFormat, saveCutoff, finalizeShow, toggleBans, unban, runEdge, bootPlayer,
+  searchMembers, addMember, toggleRoster, setRosterMember,
 } from "./features/admin.js";
 
 // Functions referenced from inline HTML onclick/onchange attributes must live
@@ -18,6 +19,7 @@ Object.assign(window, {
   toggleTheme, logout, doLogin, doRegister, openShow, renderShows, setBoardSeason,
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
   toggleFormat, saveCutoff, finalizeShow, toggleBans, unban, runEdge, bootPlayer,
+  searchMembers, addMember, toggleRoster, setRosterMember,
   switchToBracket, switchToLeague,
 });
 
