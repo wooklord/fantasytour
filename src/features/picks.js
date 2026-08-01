@@ -206,6 +206,11 @@ export async function renderShowDetail(show){
     show.permalink ? `<a href="${CARTON_SITE_BASE}/${esc(show.permalink)}" target="_blank" rel="noopener">The Carton</a>` : "The Carton"
   }.</p>` : "";
   const { order: brkOrder, label: brkLabel } = breakdownSlotInfo(show.format);
+  // Only surface the explainer when it's actually relevant — a closer-family
+  // pick is currently sitting on provisional off-slot points because the
+  // encore (or the show) hasn't confirmed it yet. Keeps the note out of the
+  // way once nothing's ambiguous, so it doesn't read as boilerplate.
+  const hasUndetermined = (scores||[]).some(sc => (sc.breakdown||[]).some(b => (b.reason||"").includes("slot undetermined")));
   const scoreHtml = (scores||[]).map(sc => `
     <div class="panel" style="padding:12px">
       <div class="row"><b>${esc(pname[sc.player_id] || "?")}</b>
@@ -247,6 +252,7 @@ export async function renderShowDetail(show){
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
     ${pickBoard}
     <h2 style="margin:18px 4px 4px">Scores</h2>
+    ${hasUndetermined ? `<p class="muted" style="text-align:center;margin:0 4px 8px">Closer-type picks show off-slot points (if enabled) until the encore starts (or the show ends) — full points lock in once determined.</p>` : ""}
     ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet — they appear with the first song.</p>'}
     ${footerHtml()}`;
 }

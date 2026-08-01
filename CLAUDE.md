@@ -317,31 +317,66 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   ambiguously next to "show closer." Final vocabulary: **Set 1 Closer** (last of set
   1) / **Set 2 Closer** (last before encore) / **Show Closer** (final song of the
   night, encore included). Keep all three — a wide array of bets is intentional.
-- **Best-result-across-replays scoring (CONFIRMED rule).** A pick scores the best
-  result the song achieved across all its appearances in a show. If a song plays in
-  the wrong slot first (+1 partial) and later plays again in the picked slot, the
-  score upgrades to the full slot value — it replaces the partial, it does not add to
-  it. Best result never downgrades if a later appearance is wrong-slot. The finalize
-  snapshot freezes whatever the best result is at finalization. This matters because
-  songs repeat (reprises and sandwiches).
-- **Verify repeated-song / sandwich handling** during the scoring rewrite. Sandwiches
-  (A > B > A) mean the same song holds two positions, so it gets multiple shots at
-  matching a slot. Confirm the scorer evaluates every appearance, not just the first.
-- **`slotImpossible` conflates two different things** — design item, not yet built.
-  It currently means only "this slot doesn't structurally exist for this show" (no
-  set 2 at a one-setter, no encore at all) — and that check is correct as-is;
-  `set1_closer`/`set2_opener` are each keyed on their OWN set being empty, which is
-  the right symmetry (don't "fix" this into checking the other set — that would
-  mark `set1_closer` permanently impossible on every one-set show, a real
-  regression on finalized data, not just wording). The thing actually missing is a
-  separate concept: "this slot isn't determinable YET." Set 1 Closer is unknowable
-  until set 2 starts; Set 2 Closer and Show Closer are unknowable until the show
-  truly ends. Add a distinct `slotNotYetDetermined` alongside `slotImpossible` for
-  this. Pairs with the already-queued rule that closers only get labeled post-show,
-  never in live toasts — same underlying ambiguity, one for toast wording, one for
-  breakdown reason text. Low stakes: breakdown reason strings freeze at finalize
-  (see the Postgres gotcha below), so this only ever affects what a player sees
-  mid-show, never the final record.
+- **Scoring is fresh-off-the-current-snapshot, not merged against history (fixed
+  after a real incident).** The original design scored every pass, then kept
+  whichever of {this pass, the row already in `scores`} had more points — meant to
+  let a wrong-slot partial upgrade to a full match on replay (sandwiches: A > B >
+  A). In production (Boston, Citizens House of Blues, 2026-07-31) this instead
+  froze a wrong result permanently: a live pass caught Shatter as the apparent
+  Set 2 Closer from a 5-song snapshot (`+2 closer — exact`), and once the real
+  closer (Voice of Them All, two songs later) appeared, every later pass —
+  including finalize's own closing pass — recomputed the correct, lower value but
+  lost to the stale higher one already in the DB. Fixed in `scoring.js`/`index.ts`:
+  the merge-against-persisted-row is gone. Every pass scores fresh off the full
+  current `setlist_songs` snapshot, which is monotonic for every slot type except
+  the closer family (a fresh pass never needs "history" — `encore`/`cover_call`/
+  `debut_call`/`second_song` already check "any appearance so far," so a later
+  reprise upgrades automatically with no merge needed at all). Sandwiches (A > B >
+  A) are still handled correctly this way — confirmed by `test/scoring.test.mjs`
+  fixtures pulled from real shows with genuine sandwiches (Rocking The Docks,
+  GratefulFest, Levitt Pavilion).
+- **`slotDetermined` — Set 1 Closer / Set 2 Closer / Show Closer only score once
+  there's real evidence the relevant set/show is over** (this is the
+  `slotNotYetDetermined` gap this file used to flag as "not yet built" — it's
+  built now, in `deriveSlotFacts`). Each resolves as early as the data allows,
+  not just at finalize — the near-real-time requirement matters here since a
+  show can go for hours before an admin manually finalizes it or `autoFinalize`
+  fires the next morning:
+  - **Set 1 Closer**: determined the instant anything plays after set 1 — a set 2
+    song, or (if the show skips set 2 entirely) the encore starting.
+  - **Set 2 Closer** (`closer` slot key; display label "Set 2 Closer"): determined
+    the instant the encore starts — a second encore break doesn't change who
+    closed the last set.
+  - **Show Closer**: no reliable in-show signal exists (another encore break is
+    always possible until the show truly ends) — resolves only at finalize
+    (`isFinal` passed into `deriveSlotFacts`/`scorePicks`).
+  Until determined, a picked song that's already played scores **consolation
+  credit** (partial points, if `cfg.partial_credit` is on) with reason `"played —
+  slot undetermined"` — never a premature exact or wrong-slot verdict. This also
+  aligns scoring with the already-existing toast rule (closers never named live,
+  only after the fact) — before this fix, scoring was quietly ahead of what
+  toasts were willing to claim. Player-facing copy: `picks.js`'s show-detail view
+  surfaces "Closer-type picks show off-slot points (if enabled) until the encore
+  starts (or the show ends) — full points lock in once determined." directly
+  under the Scores header, but only when a visible breakdown row is actually in
+  that state — deliberately not shown as permanent boilerplate.
+  - **`slotImpossible` is untouched and still means only** "this slot doesn't
+    structurally exist for this show" (no set 2 at a one-setter, no encore at
+    all) — correct as-is, don't fold `slotDetermined` into it. Note this doesn't
+    fix the same not-yet-vs-impossible ambiguity for the plain `encore` slot type
+    itself (picking a song for the Encore slot before any encore has happened
+    reads as `slotImpossible.encore === true`, i.e. "no encore this show," when
+    it may just not have happened yet) — out of scope for this pass, since
+    `encore` isn't positional the way the three closers are and a wrong-slot
+    label there is far lower-stakes; revisit if it causes real confusion.
+  - **Already-finalized shows may still carry the old bug's frozen results** —
+    the fix only changes scoring going forward. Repair path: `reopen` (wipes that
+    league's `scores` for the show, flips `league_shows.status` back to `live`)
+    then `finalize` (re-scores clean under the corrected logic, since post-fix
+    the only pass that ever freezes a closer-family slot is the finalize pass
+    itself). Boston 7/31 itself has **not** been repaired yet as of this fix
+    landing — do that via reopen+finalize once it's safe to (i.e. not while
+    another show is live).
 - **Duplicates stay OFF by default.** Add a warning tooltip on that admin toggle
   noting the consequence: with duplicates allowed, on a one-song encore a song picked
   for both Encore and Show Closer scores both slots — usually a free double.

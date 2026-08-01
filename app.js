@@ -1142,6 +1142,7 @@ Save anyway?`)) return;
     }).join("");
     const attribution = (setlist || []).length ? `<p class="muted" style="text-align:center">Setlist data from ${show.permalink ? `<a href="${CARTON_SITE_BASE}/${esc(show.permalink)}" target="_blank" rel="noopener">The Carton</a>` : "The Carton"}.</p>` : "";
     const { order: brkOrder, label: brkLabel } = breakdownSlotInfo(show.format);
+    const hasUndetermined = (scores || []).some((sc) => (sc.breakdown || []).some((b) => (b.reason || "").includes("slot undetermined")));
     const scoreHtml = (scores || []).map((sc) => `
     <div class="panel" style="padding:12px">
       <div class="row"><b>${esc(pname[sc.player_id] || "?")}</b>
@@ -1181,6 +1182,7 @@ Save anyway?`)) return;
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
     ${pickBoard}
     <h2 style="margin:18px 4px 4px">Scores</h2>
+    ${hasUndetermined ? `<p class="muted" style="text-align:center;margin:0 4px 8px">Closer-type picks show off-slot points (if enabled) until the encore starts (or the show ends) \u2014 full points lock in once determined.</p>` : ""}
     ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet \u2014 they appear with the first song.</p>'}
     ${footerHtml()}`;
   }

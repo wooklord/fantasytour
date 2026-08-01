@@ -1,8 +1,8 @@
 // Fixture-based unit tests for the pure scoring module (supabase/functions/
 // carton-sync/scoring.js). Runs under plain Node — no Deno, no Supabase, no
 // network. Fixtures are real setlists pulled from The Carton's API so the
-// sandwich/replay scenarios are grounded in shows that actually happened,
-// not invented data.
+// sandwich/closer-determinacy scenarios are grounded in shows that actually
+// happened, not invented data.
 //
 //   node test/scoring.test.mjs
 
@@ -41,10 +41,30 @@ const rockingDocks = [
 ];
 
 // ---------------------------------------------------------------
+// Fixture: Citizens House of Blues, Boston MA — 2026-07-31 (real production
+// incident). Shatter(5) looked like the closer from a 5-song snapshot; the
+// real Set 2 Closer is Voice of Them All(7), confirmed once the encore
+// (Smile, 8) starts. The old merge-against-history logic latched Shatter's
+// mid-show "closer — exact" permanently; this is the regression test.
+// ---------------------------------------------------------------
+const bostonHOB = [
+  { position: 1, setnumber: "1", is_encore: false, songname: "Woah There", is_cover: false, footnote: null },
+  { position: 2, setnumber: "1", is_encore: false, songname: "Peace Upon Us", is_cover: false, footnote: null },
+  { position: 3, setnumber: "1", is_encore: false, songname: "Interior People", is_cover: true, footnote: "King Gizzard & the Lizard Wizard cover" },
+  { position: 4, setnumber: "1", is_encore: false, songname: "City Lights", is_cover: false, footnote: null },
+  { position: 5, setnumber: "1", is_encore: false, songname: "Shatter", is_cover: false, footnote: null },
+  { position: 6, setnumber: "1", is_encore: false, songname: "Hungry Like The Wolf", is_cover: true, footnote: "Duran Duran cover, LTP 12/28/24 (160 show gap)" },
+  { position: 7, setnumber: "1", is_encore: false, songname: "Voice of Them All", is_cover: false, footnote: null },
+  { position: 8, setnumber: "e", is_encore: true, songname: "Smile", is_cover: false, footnote: null },
+];
+
+// ---------------------------------------------------------------
 // Fixture: GratefulFest, Garrettsville OH — 2026-07-24 (one-set festival)
 // https://thecarton.net/setlists/eggy-july-24-2026-gratefulfest-garrettsville-oh-usa.html
-// Real one-set show; also has its own sandwich (Shatter wraps Smile) and
-// ends on the second Shatter, so "closer" resolves to it.
+// Real one-set show with no encore at all; also has its own sandwich
+// (Shatter wraps Smile) and ends on the second Shatter, so "closer" resolves
+// to it once we're treating this as the finished show (no encore ever came,
+// so there's no earlier structural signal — only finalize confirms it).
 // ---------------------------------------------------------------
 const gratefulFest = [
   { position: 1, setnumber: "1", is_encore: false, songname: "Woah There", is_cover: false, footnote: null },
@@ -63,7 +83,7 @@ const gratefulFest = [
 // https://thecarton.net/setlists/eggy-july-11-2026-levitt-pavilion-for-the-performing-arts-westport-ct-usa.html
 // Shadow opens set 2 (position 10) AND closes the show in the encore
 // (position 21) — real encore-vs-show-closer distinction, and a real
-// wrong-slot-then-right-slot replay that isn't the same song/slot as the
+// wrong-slot-then-right-slot resolution that isn't the same song/slot as the
 // Rocking The Docks sandwich above.
 // ---------------------------------------------------------------
 const levittPavilion = [
@@ -129,63 +149,79 @@ const oneSetCapableCfg = {
 };
 
 // =================================================================
-// 1. Sandwich / best-result-across-replays upgrade path
-//    Reflections > Shatter > Reflections (Rocking The Docks, Set 1 Closer)
+// 1. Set 1 Closer determinacy — Reflections sandwich, Rocking The Docks.
+//    Determined only once something plays after set 1 (set 2 or the
+//    encore starting) — NOT just because "the last song we've seen so far
+//    in set 1 hasn't changed in a while."
 // =================================================================
 {
   const picks = [{ slot: "set1_closer", songname: "Reflections" }];
 
-  // Pass 1: only positions 1–7 known (set 1 not over yet — Shatter is the
-  // most recent song). A "Set 1 Closer" pick of Reflections has been played
-  // (position 6) but isn't the current end of set 1, so it's a wrong-slot
-  // partial, not a miss.
-  const partial = rockingDocks.slice(0, 7);
-  const factsPass1 = deriveSlotFacts(partial);
-  const pass1 = scorePicks({ picks, songs: partial, slotFacts: factsPass1, cfg: standardCfg, format: "standard", prevBreakdown: null });
-  check("sandwich pass 1: hit", pass1.breakdown[0].hit, true);
-  check("sandwich pass 1: partial points", pass1.breakdown[0].points, 1);
-  // set1_closer's "impossible" flag is keyed on set1 being empty (correct —
-  // it mirrors set2_opener's own set2-empty check for the OTHER set), not on
-  // whether set 2 has started. Set 1 is non-empty here, so this is the
-  // ordinary "played, wrong slot" wording, not "slot not played".
-  check("sandwich pass 1: reason", pass1.breakdown[0].reason, "played, wrong slot");
+  // Pass 1: only positions 1–7 known (Shatter is the most recent song).
+  // Reflections has been played (position 6) but set 1 clearly isn't over
+  // yet — undetermined, consolation credit only.
+  const p1 = rockingDocks.slice(0, 7);
+  const pass1 = scorePicks({ picks, songs: p1, slotFacts: deriveSlotFacts(p1), cfg: standardCfg, format: "standard" });
+  check("set1 closer pass 1: hit (played)", pass1.breakdown[0].hit, true);
+  check("set1 closer pass 1: consolation points only", pass1.breakdown[0].points, 1);
+  check("set1 closer pass 1: reason", pass1.breakdown[0].reason, "played — slot undetermined");
 
-  // Pass 2: full set 1 (through position 8) — Reflections reprises and IS
-  // now the true Set 1 Closer. Merging against pass 1's breakdown must
-  // upgrade the partial to the full slot value, not add to it.
-  const full = rockingDocks.slice(0, 8);
-  const factsPass2 = deriveSlotFacts(full);
-  const pass2 = scorePicks({ picks, songs: full, slotFacts: factsPass2, cfg: standardCfg, format: "standard", prevBreakdown: pass1.breakdown });
-  check("sandwich pass 2: hit", pass2.breakdown[0].hit, true);
-  check("sandwich pass 2: upgraded to full slot value (not additive)", pass2.breakdown[0].points, 2);
-  check("sandwich pass 2: reason", pass2.breakdown[0].reason, "set1_closer — exact");
+  // Pass 2: through position 8 (the second Reflections) — this LOOKS like
+  // "all of set 1" and is exactly the snapshot the old code would have
+  // scored as an exact closer match. Nothing has played after it yet
+  // though, so it must still read as undetermined, not exact — this is the
+  // regression case for the class of bug the Boston incident exposed.
+  const p2 = rockingDocks.slice(0, 8);
+  const pass2 = scorePicks({ picks, songs: p2, slotFacts: deriveSlotFacts(p2), cfg: standardCfg, format: "standard" });
+  check("set1 closer pass 2 (naive 'full set 1'): still undetermined, no premature exact", pass2.breakdown[0].points, 1);
+  check("set1 closer pass 2: reason still undetermined", pass2.breakdown[0].reason, "played — slot undetermined");
+
+  // Pass 3: through position 9 (Soak Up The Sun opens set 2) — now there's
+  // real evidence set 1 is over, so the second Reflections is confirmed as
+  // the true Set 1 Closer.
+  const p3 = rockingDocks.slice(0, 9);
+  const pass3 = scorePicks({ picks, songs: p3, slotFacts: deriveSlotFacts(p3), cfg: standardCfg, format: "standard" });
+  check("set1 closer pass 3: now determined, exact", pass3.breakdown[0].points, 2);
+  check("set1 closer pass 3: reason", pass3.breakdown[0].reason, "set1_closer — exact");
 }
 
 // =================================================================
-// 2. Best-result never downgrades, even if a later pass's fresh
-//    computation alone would be worse (adversarial, not narrative).
+// 2. Regression test for the actual Boston 7/31/2026 incident: a mid-show
+//    snapshot must never freeze a "closer — exact" claim that a later,
+//    more complete pass would contradict.
 // =================================================================
 {
   const picks = [{ slot: "closer", songname: "Shatter" }];
-  const full = rockingDocks.slice(0, 8); // Shatter is mid-set-1 here, not the closer — a fresh miss/partial
-  const facts = deriveSlotFacts(full);
-  const fakeBetterPrev = [{ slot: "closer", songname: "Shatter", hit: true, points: 2, reason: "closer — exact" }];
-  const merged = scorePicks({ picks, songs: full, slotFacts: facts, cfg: standardCfg, format: "standard", prevBreakdown: fakeBetterPrev });
-  check("never-downgrade: keeps the higher previous result", merged.breakdown[0].points, 2);
-  check("never-downgrade: keeps hit=true", merged.breakdown[0].hit, true);
+
+  // Mid-show: only positions 1–5 known. Shatter is the most recent song,
+  // but the encore hasn't started, so Set 2 Closer can't be confirmed —
+  // consolation only, clearly labeled as provisional.
+  const mid = bostonHOB.slice(0, 5);
+  const midPass = scorePicks({ picks, songs: mid, slotFacts: deriveSlotFacts(mid), cfg: standardCfg, format: "standard" });
+  check("Boston incident, mid-show: consolation only", midPass.breakdown[0].points, 1);
+  check("Boston incident, mid-show: reason", midPass.breakdown[0].reason, "played — slot undetermined");
+
+  // Full show, encore included: Voice of Them All (position 7) is the real
+  // Set 2 Closer. Every pass scores fresh off the current snapshot — there
+  // is no persisted "best result" to latch the wrong mid-show guess in.
+  const fullPass = scorePicks({ picks, songs: bostonHOB, slotFacts: deriveSlotFacts(bostonHOB), cfg: standardCfg, format: "standard" });
+  check("Boston incident, full show: correctly demoted, no stale exact", fullPass.breakdown[0].points, 1);
+  check("Boston incident, full show: reason", fullPass.breakdown[0].reason, "played, wrong slot");
 }
 
 // =================================================================
-// 3. One-set/festival show — config section resolution
+// 3. One-set/festival show, no encore ever played — config section
+//    resolution, and Closer only resolves once we know it's the finished
+//    show (no earlier structural signal exists when there's no encore).
 // =================================================================
 {
-  const facts = deriveSlotFacts(gratefulFest);
+  const facts = deriveSlotFacts(gratefulFest, true); // isFinal: no encore ever came
   const picks = [
     { slot: "opener", songname: "Woah There" },
     { slot: "closer", songname: "Shatter" }, // resolves via cfg.oneset, not cfg.slots
     { slot: "cover1", songname: "Time Loves A Hero" },
   ];
-  const result = scorePicks({ picks, songs: gratefulFest, slotFacts: facts, cfg: oneSetCapableCfg, format: "one_set", prevBreakdown: null });
+  const result = scorePicks({ picks, songs: gratefulFest, slotFacts: facts, cfg: oneSetCapableCfg, format: "one_set" });
   check("one-set: opener exact", [result.breakdown[0].hit, result.breakdown[0].points], [true, 2]);
   check("one-set: closer exact (Shatter's 2nd, final occurrence)", [result.breakdown[1].hit, result.breakdown[1].points], [true, 2]);
   check("one-set: cover pick exact", [result.breakdown[2].hit, result.breakdown[2].points], [true, 2]);
@@ -199,7 +235,9 @@ const oneSetCapableCfg = {
 
 // =================================================================
 // 4. Repeated song, wrong-slot then correct-slot (not the same
-//    song/slot as the sandwich above) — Shadow/Encore, Levitt Pavilion
+//    song/slot as the sandwiches above) — Shadow/Encore, Levitt Pavilion.
+//    "encore" isn't a closer-family slot, so it's always determined — a
+//    fresh pass naturally reflects a later reprise with no gating needed.
 // =================================================================
 {
   const picks = [{ slot: "encore", songname: "Shadow" }];
@@ -207,30 +245,29 @@ const oneSetCapableCfg = {
   // Pass 1: Shadow has just opened set 2 (position 10) — played, but no
   // encore has happened yet.
   const partial = levittPavilion.slice(0, 10);
-  const factsPass1 = deriveSlotFacts(partial);
-  const pass1 = scorePicks({ picks, songs: partial, slotFacts: factsPass1, cfg: standardCfg, format: "standard", prevBreakdown: null });
+  const pass1 = scorePicks({ picks, songs: partial, slotFacts: deriveSlotFacts(partial), cfg: standardCfg, format: "standard" });
   check("wrong-then-right pass 1: hit (played, not yet encore)", pass1.breakdown[0].hit, true);
   check("wrong-then-right pass 1: partial only", pass1.breakdown[0].points, 1);
 
   // Pass 2: full show — Shadow reprises in the actual encore.
-  const factsPass2 = deriveSlotFacts(levittPavilion);
-  const pass2 = scorePicks({ picks, songs: levittPavilion, slotFacts: factsPass2, cfg: standardCfg, format: "standard", prevBreakdown: pass1.breakdown });
+  const pass2 = scorePicks({ picks, songs: levittPavilion, slotFacts: deriveSlotFacts(levittPavilion), cfg: standardCfg, format: "standard" });
   check("wrong-then-right pass 2: upgraded to full encore value", pass2.breakdown[0].points, 2);
   check("wrong-then-right pass 2: reason", pass2.breakdown[0].reason, "encore — exact");
 }
 
 // =================================================================
-// 5. Encore vs. show-closer distinction — Smile vs. Shadow, Levitt Pavilion
-//    Smile is in the encore but isn't last; Shadow is both.
+// 5. Encore vs. show-closer distinction — Smile vs. Shadow, Levitt Pavilion.
+//    Smile is in the encore but isn't last; Shadow is both. Show Closer has
+//    no early signal, so this only resolves once isFinal is true.
 // =================================================================
 {
-  const facts = deriveSlotFacts(levittPavilion);
+  const facts = deriveSlotFacts(levittPavilion, true);
 
   const smilePicks = [
     { slot: "encore", songname: "Smile" },
     { slot: "show_closer", songname: "Smile" },
   ];
-  const smile = scorePicks({ picks: smilePicks, songs: levittPavilion, slotFacts: facts, cfg: standardCfg, format: "standard", prevBreakdown: null });
+  const smile = scorePicks({ picks: smilePicks, songs: levittPavilion, slotFacts: facts, cfg: standardCfg, format: "standard" });
   check("Smile → Encore: exact hit", [smile.breakdown[0].hit, smile.breakdown[0].points], [true, 2]);
   check("Smile → Show Closer: played but wrong slot (Shadow closes, not Smile)", [smile.breakdown[1].hit, smile.breakdown[1].points, smile.breakdown[1].reason], [true, 1, "played, wrong slot"]);
 
@@ -238,18 +275,31 @@ const oneSetCapableCfg = {
     { slot: "encore", songname: "Shadow" },
     { slot: "show_closer", songname: "Shadow" },
   ];
-  const shadow = scorePicks({ picks: shadowPicks, songs: levittPavilion, slotFacts: facts, cfg: standardCfg, format: "standard", prevBreakdown: null });
+  const shadow = scorePicks({ picks: shadowPicks, songs: levittPavilion, slotFacts: facts, cfg: standardCfg, format: "standard" });
   check("Shadow → Encore: exact hit", [shadow.breakdown[0].hit, shadow.breakdown[0].points], [true, 2]);
   check("Shadow → Show Closer: also an exact hit (it's the literal last song)", [shadow.breakdown[1].hit, shadow.breakdown[1].points], [true, 3]);
+}
+
+// =================================================================
+// 5b. Show Closer mid-show: no early signal exists at all (unlike Set 1/
+//     Set 2 Closer) — even with the encore well underway, it stays
+//     undetermined until isFinal.
+// =================================================================
+{
+  const picks = [{ slot: "show_closer", songname: "Smile" }];
+  const facts = deriveSlotFacts(levittPavilion, false); // encore has started, but not final
+  const result = scorePicks({ picks, songs: levittPavilion, slotFacts: facts, cfg: standardCfg, format: "standard" });
+  check("show closer mid-encore: still undetermined", result.breakdown[0].points, 1);
+  check("show closer mid-encore: reason", result.breakdown[0].reason, "played — slot undetermined");
 }
 
 // =================================================================
 // 6. A pick that never plays
 // =================================================================
 {
-  const facts = deriveSlotFacts(levittPavilion);
+  const facts = deriveSlotFacts(levittPavilion, true);
   const picks = [{ slot: "opener", songname: "Distraction" }]; // not in this setlist at all
-  const result = scorePicks({ picks, songs: levittPavilion, slotFacts: facts, cfg: standardCfg, format: "standard", prevBreakdown: null });
+  const result = scorePicks({ picks, songs: levittPavilion, slotFacts: facts, cfg: standardCfg, format: "standard" });
   check("never played: miss", [result.breakdown[0].hit, result.breakdown[0].points, result.breakdown[0].reason], [false, 0, "not played"]);
 }
 

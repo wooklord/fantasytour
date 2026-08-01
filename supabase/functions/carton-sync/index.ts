@@ -9,12 +9,17 @@
 //     scoring fetches each show's setlist ONCE and scores every bracket of
 //     every league against that bracket's own config — Official reads the
 //     frozen season_rosters snapshot (never the live opt-in flag), Casual
-//     scores whoever picked (no seasons, no roster gate). Best-result-
-//     across-replays: a pick's score is the best result across every
-//     scoring pass, so a correct-slot replay upgrades an earlier wrong-slot
-//     partial (never adds to it) and a later ambiguous pass can never
-//     downgrade it — finalize just stops passing, freezing whatever's best.
-//     Carries forward the v6 batch (Cover Pick, Any Debut, "slot not
+//     scores whoever picked (no seasons, no roster gate). Every pass scores
+//     fresh off the current setlist snapshot (no merge against a previously-
+//     stored result — see scoring.js for why that used to latch a wrong
+//     positional slot in permanently). Set 1 Closer / Set 2 Closer / Show
+//     Closer are the exception: each is `slotNotYetDetermined` until there's
+//     real structural evidence the relevant set/show is over (Set 1 Closer:
+//     set 2 or the encore starts; Set 2 Closer: the encore starts; Show
+//     Closer: only at finalize, no earlier signal exists), and until then a
+//     played pick in one of those slots gets consolation credit and an
+//     honest "undetermined" label instead of a premature exact/wrong-slot
+//     verdict. Carries forward the v6 batch (Cover Pick, Any Debut, "slot not
 //     played" wording). Reopen un-finalizes a show, wipes that league's
 //     scores for it (a genuine correction needs a clean re-score, not a
 //     merge against wrong data), resets winner_sent, and announces.
@@ -306,7 +311,7 @@ async function autoFinalize() {
   let n = 0;
   for (const r of rows) {
     if (r.show.showdate >= cut) continue; // not old enough to auto-close yet
-    await scoreShow(r.show, [r]).catch(() => {}); // one last score against the final setlist
+    await scoreShow(r.show, [r], true).catch(() => {}); // one last score against the final setlist
     await supa.from("league_shows").update({ status: "final" })
       .eq("league_id", r.league_id).eq("show_id", r.show_id);
     n++;
@@ -453,8 +458,11 @@ async function scoreShows() {
 }
 
 // One setlist fetch for the whole show, then every bracket of every league
-// that has it active gets scored against the same shared setlist.
-async function scoreShow(show: any, leagueShowRows: any[]) {
+// that has it active gets scored against the same shared setlist. `isFinal`
+// must be true when this call is the closing pass of a finalize (manual or
+// auto) — it's the fallback signal deriveSlotFacts uses for Show Closer (and
+// Set 1/Set 2 Closer on the rare show that never gives an earlier signal).
+async function scoreShow(show: any, leagueShowRows: any[], isFinal = false) {
   const rows = await carton(`/setlists/showdate/${show.showdate}.json`);
   const mine = rows.filter((r: any) => Number(r.show_id) === Number(show.id));
   const use = mine.length ? mine : rows;
@@ -491,7 +499,7 @@ async function scoreShow(show: any, leagueShowRows: any[]) {
 
   // ---- derive show-level structural facts — global, computed once, shared
   //      by every bracket's scoring below (pure logic lives in scoring.js) ----
-  const slotFacts = deriveSlotFacts(songs);
+  const slotFacts = deriveSlotFacts(songs, isFinal);
   const { set2, encore, played, slotSong, slotImpossible, anyDebut } = slotFacts;
 
   // ---- announce genuinely new songs, once per LEAGUE (not once per bracket
@@ -579,10 +587,11 @@ async function scoreBracket(ctx: { show: any; lsRow: any; bracket: any; songs: a
   for (const [playerId, ppicks] of Object.entries(byPlayer)) {
     const prev = prevScore.get(playerId);
     // All the actual scoring — slot matching, partial credit, bonuses,
-    // wildcards, best-result-across-replays — lives in scoring.js as pure
+    // wildcards, closer-family determinacy — lives in scoring.js as pure
     // data-in/data-out logic; this loop only handles the DB read/write.
+    // `prev` is used only below, to skip a write when nothing changed.
     const { breakdown, total } = scorePicks({
-      picks: ppicks, songs, slotFacts, cfg, format: lsRow.format, prevBreakdown: prev?.breakdown,
+      picks: ppicks, songs, slotFacts, cfg, format: lsRow.format,
     });
 
     if (!prev || prev.points !== total || JSON.stringify(prev.breakdown) !== JSON.stringify(breakdown)) {
@@ -650,7 +659,7 @@ async function finalizeShow(name: string, pin: string, leagueId: number, showId:
   if (!lsRow) return { ok: false, error: "show not found for this league" };
   const { data: show } = await supa.from("shows").select("*").eq("id", showId).single();
   if (!show) return { ok: false, error: "show not found" };
-  await scoreShow(show, [lsRow]).catch(() => {}); // best effort — a missing/stale setlist shouldn't block finalizing
+  await scoreShow(show, [lsRow], true).catch(() => {}); // best effort — a missing/stale setlist shouldn't block finalizing
   await supa.from("league_shows").update({ status: "final" })
     .eq("league_id", leagueId).eq("show_id", showId);
   await announcements();
