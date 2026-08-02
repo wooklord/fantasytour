@@ -5,6 +5,8 @@ import { fetchShows } from "../core/leagueShows.js";
 import { clearTimersFor } from "../core/format.js";
 import { trophy, winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
+import { currentBracket } from "../core/switcher.js";
+import { computeStandings, rankStandings, TIEBREAK_LABELS } from "../core/tiebreak.js";
 
 // Bound to the standings-select onchange (see renderBoard below) — replaces the
 // original inline `boardSeason=this.value; renderBoard();` now that boardSeason
@@ -19,7 +21,7 @@ export async function renderBoard(){
     rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId }),
   ]);
   const pname = Object.fromEntries((sc||[]).map(s => [s.player_id, s.player_name]));
-  const showById = Object.fromEntries((allShows||[]).map(sh => [sh.id, sh]));
+  const showsById = Object.fromEntries((allShows||[]).map(sh => [sh.id, sh]));
   const today = new Date().toLocaleDateString('sv');
   if (state.boardSeason === null){
     const cur = (seasons||[]).find(se => se.start_date <= today && today <= se.end_date)
@@ -27,29 +29,22 @@ export async function renderBoard(){
     state.boardSeason = cur ? String(cur.id) : "all";
   }
   const season = (seasons||[]).find(se => String(se.id) === state.boardSeason);
-  const inScope = row => {
-    if (!season) return true;
-    const sh = showById[row.show_id]; if (!sh) return false;
-    return sh.showdate >= season.start_date && sh.showdate <= season.end_date;
-  };
-  const T = {};
-  for (const row of (sc||[])){
-    const t = (T[row.player_id] ??= { career:0, scoped:0, shows:0, high:0, highShow:null, wins:0 });
-    t.career += row.points;
-    if (inScope(row)){
-      t.scoped += row.points; t.shows++;
-      if (row.points > t.high){ t.high = row.points; t.highShow = showById[row.show_id]; }
-    }
+
+  // The configured tiebreaker stack is Official-season-only — "fewest
+  // zeros" needs a per-player roster join date, which only exists once
+  // there IS a season. Casual and All time still get the baseline fix
+  // (equal points share a placing, not an arbitrary order) via an empty
+  // stack — see tiebreak.js's rankStandings.
+  const tiebreakers = (currentBracket()?.bracket_kind === "official" && season) ? (state.cfg?.tiebreakers || []) : [];
+  let rosterJoinDates = {};
+  if (tiebreakers.length){
+    const roster = await rpc("get_season_roster", { p_name:state.session.name, p_pin:state.session.pin, p_season_id: season.id });
+    rosterJoinDates = Object.fromEntries((roster||[]).map(r => [r.player_id, String(r.added_at).slice(0,10)]));
   }
-  // wins: every top scorer of each finalized show in scope
-  const byShow = {};
-  for (const row of (sc||[])) if (inScope(row) && showById[row.show_id]?.status === "final")
-    (byShow[row.show_id] ??= []).push(row);
-  for (const arr of Object.values(byShow)){
-    const mx = Math.max(...arr.map(x => x.points));
-    if (mx > 0) for (const x of arr) if (x.points === mx) T[x.player_id].wins++;
-  }
-  const rows = Object.entries(T).sort((a,b) => b[1].scoped - a[1].scoped || b[1].career - a[1].career);
+
+  const T = computeStandings({ scoreRows: sc||[], showsById, season, rosterJoinDates });
+  const order = rankStandings(T, p => season ? p.scoped : p.career, tiebreakers);
+  const rows = order.map(o => [o.id, T[o.id]]);
   const opts = [...(seasons||[]).map(se =>
       `<option value="${se.id}" ${state.boardSeason===String(se.id)?"selected":""}>${esc(se.name)}</option>`),
     `<option value="all" ${state.boardSeason==="all"?"selected":""}>All time</option>`].join("");
@@ -69,9 +64,15 @@ export async function renderBoard(){
           style="margin-left:auto;background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.82rem">${opts}</select></div>
       ${podium}
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
-      ${rows.map(([id,r],i) => `<tr class="${id===state.session.id?"me":""}">
-        <td class="rank">${i+1}</td><td>${esc(pname[id]||"?")}</td>
-        <td class="pts">${season ? r.scoped : r.career}</td></tr>`).join("")
+      ${order.map(o => {
+        const r = T[o.id];
+        const note = o.resolvedBy
+          ? `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_LABELS[o.resolvedBy])}</div>`
+          : o.tied ? `<div class="muted" style="font-size:.72rem">tied — no further tiebreaker</div>` : "";
+        return `<tr class="${o.id===state.session.id?"me":""}">
+        <td class="rank">${o.rank}</td><td>${esc(pname[o.id]||"?")}${note}</td>
+        <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
+      }).join("")
         || '<tr><td colspan="3" class="muted">No scores yet — pick some songs.</td></tr>'}
       </table></div>
     </div>

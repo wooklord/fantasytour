@@ -7,6 +7,8 @@ import { toast } from "../core/toast.js";
 import { loadConfig, loadSongs } from "../core/session.js";
 import { markTab } from "../core/layout.js";
 import { settingsPanelHtml, wireSettingsPanel } from "./settings.js";
+import { currentBracket } from "../core/switcher.js";
+import { TIEBREAK_LABELS } from "../core/tiebreak.js";
 
 // Seasons only ever belong to a league's Official bracket, and the season
 // editor has to keep working regardless of which bracket the switcher
@@ -55,6 +57,14 @@ export async function renderAdmin(){
       <div id="seasonrows">${(seasonsA||[]).map(seasonRow).join("")}</div>
       <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
     </div>
+    ${currentBracket()?.bracket_kind === "official" ? `
+    <div class="panel"><h2>Season tiebreakers</h2>
+      <p class="muted">Applies only to Official's season standings, when a season ends with players tied on points. Tried in order — the first layer that separates two players decides. Leave all "None", or exhaust every layer without a difference, and they share the placing — same as a per-show tie.</p>
+      <div class="grid2">
+        ${[0,1,2].map(i => tiebreakerSelectRow(i, (cfg.tiebreakers||[])[i] || "")).join("")}
+      </div>
+      <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros — any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins — per-show ties still share the crown. Highest single-show score.</p>
+    </div>` : ""}
     <div class="panel"><h2>Game rules — standard shows</h2>
       <p class="muted">Slotted picks (position matters):</p>
       <div id="slots">${(cfg.slots||[]).map(sl => adminSlotRow(sl)).join("")}</div>
@@ -311,6 +321,30 @@ export function readSlots(containerId){
     return { key, type, label: l.value.trim(), points: Number(p.value) };
   }).filter(sl => sl.type && sl.label);
 }
+// Only rendered on the Official bracket (see renderAdmin) — three ordered
+// slots rather than a drag-reorderable list, matching this codebase's
+// existing <select>-based config-panel style.
+function tiebreakerSelectRow(idx, current){
+  const opts = ["", ...Object.keys(TIEBREAK_LABELS)].map(k =>
+    `<option value="${k}" ${k===current?"selected":""}>${k ? esc(TIEBREAK_LABELS[k]) : "None"}</option>`).join("");
+  return `<div class="field"><label>${["1st","2nd","3rd"][idx]} tiebreaker</label><select id="tb-${idx}">${opts}</select></div>`;
+}
+// undefined (not [] ) when the picker isn't on the page at all (viewing
+// Casual, which has no seasons) — saveConfig then omits the key entirely
+// rather than writing a meaningless tiebreakers field onto Casual's config.
+// A duplicate pick across the three slots is silently deduped to its first
+// (higher-priority) position rather than rejected — unlike the slot-type
+// dupe check, there's no ambiguous game state to guard against here.
+function readTiebreakers(){
+  const els = [0,1,2].map(i => $("#tb-"+i));
+  if (!els[0]) return undefined;
+  const seen = new Set(), list = [];
+  for (const el of els){
+    const v = el.value;
+    if (v && !seen.has(v)){ seen.add(v); list.push(v); }
+  }
+  return list;
+}
 export async function saveConfig(){
   $("#cfg-err").textContent = "";
   const slots = readSlots('slots'), slots1 = readSlots('slots1');
@@ -320,6 +354,7 @@ export async function saveConfig(){
       $("#cfg-err").textContent = "Each slot type (except Cover pick) can only be used once per section."; return;
     }
   }
+  const tiebreakers = readTiebreakers();
   const data = {
     slots,
     flat_picks: Number($("#c-flat").value), flat_points: Number($("#c-flatpts").value),
@@ -329,6 +364,7 @@ export async function saveConfig(){
     bonuses: { cover: Number($("#c-bcover").value), debut: Number($("#c-bdebut").value), perfect: Number($("#c-bperfect").value), jamchart: 0 },
     wildcards: { debut: $("#c-wcdebut").value === "true" },
     oneset: { slots: slots1, flat_picks: Number($("#c1-flat").value), flat_points: Number($("#c1-flatpts").value) },
+    ...(tiebreakers !== undefined ? { tiebreakers } : {}),
   };
   try{
     await rpc("admin_update_config", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_data:data });

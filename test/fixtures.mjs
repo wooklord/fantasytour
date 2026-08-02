@@ -62,7 +62,7 @@ export function makeFixtures(){
       { id: 501, bracket_id: OFFICIAL_ID, name: "Past Season", start_date: "2026-01-01", end_date: "2026-01-31", roster_locked_at: null },
     ],
     season_rosters: [
-      { season_id: 501, player_id: "p1" },
+      { season_id: 501, player_id: "p1", added_at: "2026-01-01T00:00:00Z" },
     ],
     players_public: [
       { id: "p1", name: "Wooklord", created_at: "2026-01-01" },

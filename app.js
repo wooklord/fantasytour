@@ -378,13 +378,110 @@
     }, 1e3));
   }
 
+  // src/core/tiebreak.js
+  var TIEBREAK_LABELS = {
+    fewest_zeros: "Fewest zeros",
+    most_wins: "Most wins",
+    highest_single_show: "Highest single-show score"
+  };
+  function computeStandings({ scoreRows, showsById, season, rosterJoinDates = {} }) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+    const inScope = (row) => {
+      if (!season) return true;
+      const sh = showsById[row.show_id];
+      return !!sh && sh.showdate >= season.start_date && sh.showdate <= season.end_date;
+    };
+    const T = {};
+    for (const row of scoreRows) {
+      const t = (_b = T[_a = row.player_id]) != null ? _b : T[_a] = { career: 0, scoped: 0, shows: 0, high: 0, highShow: null, wins: 0, zeros: 0 };
+      t.career += row.points;
+      if (inScope(row)) {
+        t.scoped += row.points;
+        t.shows++;
+        if (row.points > t.high) {
+          t.high = row.points;
+          t.highShow = showsById[row.show_id] || null;
+        }
+      }
+    }
+    const byShow = {};
+    for (const row of scoreRows) if (inScope(row) && ((_c = showsById[row.show_id]) == null ? void 0 : _c.status) === "final")
+      ((_e = byShow[_d = row.show_id]) != null ? _e : byShow[_d] = []).push(row);
+    for (const arr of Object.values(byShow)) {
+      const mx = Math.max(...arr.map((x) => x.points));
+      if (mx > 0) {
+        for (const x of arr) if (x.points === mx) T[x.player_id].wins++;
+      }
+    }
+    if (season) {
+      const byPlayerShow = {};
+      for (const row of scoreRows) ((_g = byPlayerShow[_f = row.player_id]) != null ? _g : byPlayerShow[_f] = {})[row.show_id] = ((_h = byPlayerShow[row.player_id][row.show_id]) != null ? _h : 0) + row.points;
+      for (const playerId of Object.keys(T)) {
+        const joinDate = rosterJoinDates[playerId] || season.start_date;
+        const lo = joinDate > season.start_date ? joinDate : season.start_date;
+        let zeros = 0;
+        for (const [showId, sh] of Object.entries(showsById)) {
+          if (sh.status !== "final") continue;
+          if (sh.showdate < lo || sh.showdate > season.end_date) continue;
+          const pts = (_j = (_i = byPlayerShow[playerId]) == null ? void 0 : _i[showId]) != null ? _j : 0;
+          if (pts === 0) zeros++;
+        }
+        T[playerId].zeros = zeros;
+      }
+    }
+    return T;
+  }
+  function layerValue(player, layer) {
+    if (layer === "fewest_zeros") return -player.zeros;
+    if (layer === "most_wins") return player.wins;
+    if (layer === "highest_single_show") return player.high;
+    throw new Error("Unknown tiebreaker layer: " + layer);
+  }
+  function groupBy(ids, valueOf) {
+    const byValue = /* @__PURE__ */ new Map();
+    for (const id of ids) {
+      const v = valueOf(id);
+      if (!byValue.has(v)) byValue.set(v, []);
+      byValue.get(v).push(id);
+    }
+    return [...byValue.keys()].sort((a, b) => b - a).map((v) => byValue.get(v));
+  }
+  function resolveGroup(ids, players, tiebreakers, idx) {
+    if (idx >= tiebreakers.length) return [{ ids, resolvedBy: null }];
+    const layer = tiebreakers[idx];
+    const out = [];
+    for (const group of groupBy(ids, (id) => layerValue(players[id], layer))) {
+      if (group.length === 1) out.push({ ids: group, resolvedBy: layer });
+      else out.push(...resolveGroup(group, players, tiebreakers, idx + 1));
+    }
+    return out;
+  }
+  function rankStandings(players, primaryMetric, tiebreakers = []) {
+    const byPoints = groupBy(Object.keys(players), (id) => primaryMetric(players[id]));
+    const groups = [];
+    for (const ids of byPoints) {
+      if (ids.length === 1 || !tiebreakers.length) {
+        groups.push({ ids, resolvedBy: null });
+      } else {
+        groups.push(...resolveGroup(ids, players, tiebreakers, 0));
+      }
+    }
+    let rank = 1;
+    const result = [];
+    for (const g of groups) {
+      for (const id of g.ids) result.push({ id, rank, points: primaryMetric(players[id]), tied: g.ids.length > 1, resolvedBy: g.resolvedBy });
+      rank += g.ids.length;
+    }
+    return result;
+  }
+
   // src/features/standings.js
   function setBoardSeason(v) {
     state.boardSeason = v;
     renderBoard();
   }
   async function renderBoard() {
-    var _a, _b, _c, _d, _e;
+    var _a, _b;
     clearTimersFor("board");
     state.tab = "board";
     markTab();
@@ -394,42 +491,22 @@
       rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId })
     ]);
     const pname = Object.fromEntries((sc || []).map((s) => [s.player_id, s.player_name]));
-    const showById = Object.fromEntries((allShows || []).map((sh) => [sh.id, sh]));
+    const showsById = Object.fromEntries((allShows || []).map((sh) => [sh.id, sh]));
     const today = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
     if (state.boardSeason === null) {
       const cur = (seasons || []).find((se) => se.start_date <= today && today <= se.end_date) || (seasons || []).slice(-1)[0];
       state.boardSeason = cur ? String(cur.id) : "all";
     }
     const season = (seasons || []).find((se) => String(se.id) === state.boardSeason);
-    const inScope = (row) => {
-      if (!season) return true;
-      const sh = showById[row.show_id];
-      if (!sh) return false;
-      return sh.showdate >= season.start_date && sh.showdate <= season.end_date;
-    };
-    const T = {};
-    for (const row of sc || []) {
-      const t = (_b = T[_a = row.player_id]) != null ? _b : T[_a] = { career: 0, scoped: 0, shows: 0, high: 0, highShow: null, wins: 0 };
-      t.career += row.points;
-      if (inScope(row)) {
-        t.scoped += row.points;
-        t.shows++;
-        if (row.points > t.high) {
-          t.high = row.points;
-          t.highShow = showById[row.show_id];
-        }
-      }
+    const tiebreakers = ((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" && season ? ((_b = state.cfg) == null ? void 0 : _b.tiebreakers) || [] : [];
+    let rosterJoinDates = {};
+    if (tiebreakers.length) {
+      const roster = await rpc("get_season_roster", { p_name: state.session.name, p_pin: state.session.pin, p_season_id: season.id });
+      rosterJoinDates = Object.fromEntries((roster || []).map((r) => [r.player_id, String(r.added_at).slice(0, 10)]));
     }
-    const byShow = {};
-    for (const row of sc || []) if (inScope(row) && ((_c = showById[row.show_id]) == null ? void 0 : _c.status) === "final")
-      ((_e = byShow[_d = row.show_id]) != null ? _e : byShow[_d] = []).push(row);
-    for (const arr of Object.values(byShow)) {
-      const mx = Math.max(...arr.map((x) => x.points));
-      if (mx > 0) {
-        for (const x of arr) if (x.points === mx) T[x.player_id].wins++;
-      }
-    }
-    const rows = Object.entries(T).sort((a, b) => b[1].scoped - a[1].scoped || b[1].career - a[1].career);
+    const T = computeStandings({ scoreRows: sc || [], showsById, season, rosterJoinDates });
+    const order = rankStandings(T, (p) => season ? p.scoped : p.career, tiebreakers);
+    const rows = order.map((o) => [o.id, T[o.id]]);
     const opts = [
       ...(seasons || []).map((se) => `<option value="${se.id}" ${state.boardSeason === String(se.id) ? "selected" : ""}>${esc(se.name)}</option>`),
       `<option value="all" ${state.boardSeason === "all" ? "selected" : ""}>All time</option>`
@@ -449,9 +526,13 @@
           style="margin-left:auto;background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.82rem">${opts}</select></div>
       ${podium}
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
-      ${rows.map(([id, r], i) => `<tr class="${id === state.session.id ? "me" : ""}">
-        <td class="rank">${i + 1}</td><td>${esc(pname[id] || "?")}</td>
-        <td class="pts">${season ? r.scoped : r.career}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">No scores yet \u2014 pick some songs.</td></tr>'}
+      ${order.map((o) => {
+      const r = T[o.id];
+      const note = o.resolvedBy ? `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_LABELS[o.resolvedBy])}</div>` : o.tied ? `<div class="muted" style="font-size:.72rem">tied \u2014 no further tiebreaker</div>` : "";
+      return `<tr class="${o.id === state.session.id ? "me" : ""}">
+        <td class="rank">${o.rank}</td><td>${esc(pname[o.id] || "?")}${note}</td>
+        <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
+    }).join("") || '<tr><td colspan="3" class="muted">No scores yet \u2014 pick some songs.</td></tr>'}
       </table></div>
     </div>
     <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">\xB7 ${scopeName}</span></h2>
@@ -502,7 +583,7 @@
     return (_a = state.leagues.find((l) => l.league_id === state.currentLeagueId && l.bracket_kind === "official")) == null ? void 0 : _a.bracket_id;
   }
   async function renderAdmin() {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     clearTimersFor("admin");
     state.tab = "admin";
     markTab();
@@ -542,6 +623,14 @@
       <div id="seasonrows">${(seasonsA || []).map(seasonRow).join("")}</div>
       <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
     </div>
+    ${((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" ? `
+    <div class="panel"><h2>Season tiebreakers</h2>
+      <p class="muted">Applies only to Official's season standings, when a season ends with players tied on points. Tried in order \u2014 the first layer that separates two players decides. Leave all "None", or exhaust every layer without a difference, and they share the placing \u2014 same as a per-show tie.</p>
+      <div class="grid2">
+        ${[0, 1, 2].map((i) => tiebreakerSelectRow(i, (cfg.tiebreakers || [])[i] || "")).join("")}
+      </div>
+      <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros \u2014 any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins \u2014 per-show ties still share the crown. Highest single-show score.</p>
+    </div>` : ""}
     <div class="panel"><h2>Game rules \u2014 standard shows</h2>
       <p class="muted">Slotted picks (position matters):</p>
       <div id="slots">${(cfg.slots || []).map((sl) => adminSlotRow(sl)).join("")}</div>
@@ -558,7 +647,7 @@
         <div class="field"><label>Allow duplicate songs across picks</label>
           <select id="c-dupes"><option value="false" ${!cfg.allow_duplicates ? "selected" : ""}>No</option><option value="true" ${cfg.allow_duplicates ? "selected" : ""}>Yes</option></select></div>
         <div class="field"><label>Wildcard: "Any Debut" (hits if any debut is played)</label>
-          <select id="c-wcdebut"><option value="true" ${((_b = (_a = cfg.wildcards) == null ? void 0 : _a.debut) != null ? _b : true) ? "selected" : ""}>Players may pick it</option><option value="false" ${((_d = (_c = cfg.wildcards) == null ? void 0 : _c.debut) != null ? _d : true) ? "" : "selected"}>Off</option></select></div>
+          <select id="c-wcdebut"><option value="true" ${((_c = (_b = cfg.wildcards) == null ? void 0 : _b.debut) != null ? _c : true) ? "selected" : ""}>Players may pick it</option><option value="false" ${((_e = (_d = cfg.wildcards) == null ? void 0 : _d.debut) != null ? _e : true) ? "" : "selected"}>Off</option></select></div>
       </div>
     </div>
     <div class="panel"><h2>Game rules \u2014 one-set shows</h2>
@@ -822,6 +911,23 @@ OK = remove + ban \xB7 Cancel = remove only`);
       return { key, type, label: l.value.trim(), points: Number(p.value) };
     }).filter((sl) => sl.type && sl.label);
   }
+  function tiebreakerSelectRow(idx, current) {
+    const opts = ["", ...Object.keys(TIEBREAK_LABELS)].map((k) => `<option value="${k}" ${k === current ? "selected" : ""}>${k ? esc(TIEBREAK_LABELS[k]) : "None"}</option>`).join("");
+    return `<div class="field"><label>${["1st", "2nd", "3rd"][idx]} tiebreaker</label><select id="tb-${idx}">${opts}</select></div>`;
+  }
+  function readTiebreakers() {
+    const els = [0, 1, 2].map((i) => $("#tb-" + i));
+    if (!els[0]) return void 0;
+    const seen = /* @__PURE__ */ new Set(), list = [];
+    for (const el of els) {
+      const v = el.value;
+      if (v && !seen.has(v)) {
+        seen.add(v);
+        list.push(v);
+      }
+    }
+    return list;
+  }
   async function saveConfig() {
     $("#cfg-err").textContent = "";
     const slots = readSlots("slots"), slots1 = readSlots("slots1");
@@ -832,6 +938,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
         return;
       }
     }
+    const tiebreakers = readTiebreakers();
     const data = {
       slots,
       flat_picks: Number($("#c-flat").value),
@@ -842,7 +949,8 @@ OK = remove + ban \xB7 Cancel = remove only`);
       voting_override: $("#c-override").value,
       bonuses: { cover: Number($("#c-bcover").value), debut: Number($("#c-bdebut").value), perfect: Number($("#c-bperfect").value), jamchart: 0 },
       wildcards: { debut: $("#c-wcdebut").value === "true" },
-      oneset: { slots: slots1, flat_picks: Number($("#c1-flat").value), flat_points: Number($("#c1-flatpts").value) }
+      oneset: { slots: slots1, flat_picks: Number($("#c1-flat").value), flat_points: Number($("#c1-flatpts").value) },
+      ...tiebreakers !== void 0 ? { tiebreakers } : {}
     };
     try {
       await rpc("admin_update_config", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_data: data });

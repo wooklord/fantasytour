@@ -267,7 +267,8 @@ async function activateSeasons() {
     if (!bracket) continue;
     const { data: members } = await supa.from("league_members").select("player_id")
       .eq("league_id", bracket.league_id).eq("official_opt_in", true).eq("banned", false);
-    const rows = (members ?? []).map((m: any) => ({ season_id: se.id, player_id: m.player_id }));
+    const joinedAt = new Date().toISOString();
+    const rows = (members ?? []).map((m: any) => ({ season_id: se.id, player_id: m.player_id, added_at: joinedAt }));
     if (rows.length) await supa.from("season_rosters").insert(rows);
     await supa.from("seasons").update({ roster_locked_at: new Date().toISOString() }).eq("id", se.id);
     activated++;
