@@ -69,6 +69,15 @@ function layerValue(player, layer){
   throw new Error("Unknown tiebreaker layer: " + layer);
 }
 
+// The player's own value in its natural (non-inverted) units, for display —
+// "fewest zeros (1)" should read as 1 zero, not layerValue's -1.
+function displayValue(player, layer){
+  if (layer === "fewest_zeros") return player.zeros;
+  if (layer === "most_wins") return player.wins;
+  if (layer === "highest_single_show") return player.high;
+  throw new Error("Unknown tiebreaker layer: " + layer);
+}
+
 function groupBy(ids, valueOf){
   const byValue = new Map();
   for (const id of ids){
@@ -83,13 +92,24 @@ function groupBy(ids, valueOf){
 // still-tied subgroup, never one already resolved to a singleton. Reaching
 // the end of the stack with a group >1 is "exhausted stack = shared
 // placing" — no further resolution, resolvedBy stays null.
-function resolveGroup(ids, players, tiebreakers, idx){
-  if (idx >= tiebreakers.length) return [{ ids, resolvedBy: null }];
+//
+// `path` accumulates one {layer, value} entry per layer the CURRENT group
+// was actually subjected to, on the way down from the top of the stack.
+// Every id inside `ids` shares the same value at every layer already in
+// `path` — that's exactly why groupBy still has them together at this
+// depth — so the path can be built once per group rather than per id, and
+// handed out unchanged to whichever singleton/exhausted-tied group it ends
+// up labeling. This is what keeps a player who broke free at layer 1 from
+// ever being stamped with a layer-2 value they were never actually measured
+// against.
+function resolveGroup(ids, players, tiebreakers, idx, path){
+  if (idx >= tiebreakers.length) return [{ ids, resolvedBy: null, path }];
   const layer = tiebreakers[idx];
   const out = [];
   for (const group of groupBy(ids, id => layerValue(players[id], layer))){
-    if (group.length === 1) out.push({ ids: group, resolvedBy: layer });
-    else out.push(...resolveGroup(group, players, tiebreakers, idx + 1));
+    const newPath = [...path, { layer, value: displayValue(players[group[0]], layer) }];
+    if (group.length === 1) out.push({ ids: group, resolvedBy: layer, path: newPath });
+    else out.push(...resolveGroup(group, players, tiebreakers, idx + 1, newPath));
   }
   return out;
 }
@@ -99,24 +119,28 @@ function resolveGroup(ids, players, tiebreakers, idx){
 // array, 0-3 of 'fewest_zeros'|'most_wins'|'highest_single_show' — an empty
 // array means equal-points players simply share a placing (no arbitrary
 // order), same as a per-show tie.
-// Returns: [{ id, rank, points, tied, resolvedBy }] in display order.
+// Returns: [{ id, rank, points, tied, resolvedBy, layers }] in display order.
 // `tied` is true for any player whose final group still has >1 member.
 // `resolvedBy` names the layer that separated this player from the group it
-// was tied with, or null if none was needed (or none was configured/left).
+// was tied with, or null if none was needed (stack empty, or exhausted
+// without separating them). `layers` is the full [{layer, value}] history of
+// every layer that group was actually measured on, cumulative down the
+// stack — not just the one that resolved it — so a player who broke free at
+// layer 1 never carries a layer-2/3 entry they were never subjected to.
 export function rankStandings(players, primaryMetric, tiebreakers = []){
   const byPoints = groupBy(Object.keys(players), id => primaryMetric(players[id]));
   const groups = [];
   for (const ids of byPoints){
     if (ids.length === 1 || !tiebreakers.length){
-      groups.push({ ids, resolvedBy: null });
+      groups.push({ ids, resolvedBy: null, path: [] });
     } else {
-      groups.push(...resolveGroup(ids, players, tiebreakers, 0));
+      groups.push(...resolveGroup(ids, players, tiebreakers, 0, []));
     }
   }
   let rank = 1;
   const result = [];
   for (const g of groups){
-    for (const id of g.ids) result.push({ id, rank, points: primaryMetric(players[id]), tied: g.ids.length > 1, resolvedBy: g.resolvedBy });
+    for (const id of g.ids) result.push({ id, rank, points: primaryMetric(players[id]), tied: g.ids.length > 1, resolvedBy: g.resolvedBy, layers: g.path });
     rank += g.ids.length;
   }
   return result;

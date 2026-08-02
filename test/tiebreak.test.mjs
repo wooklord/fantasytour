@@ -110,6 +110,44 @@ function check(label, actual, expected) {
   check("p2 likewise resolved by most_wins", [byId.p2.rank, byId.p2.tied, byId.p2.resolvedBy], [2, false, "most_wins"]);
   check("p3/p4 exhaust the whole stack (wins AND high both tied) — shared placing", [byId.p3.rank, byId.p3.tied, byId.p3.resolvedBy], [3, true, null]);
   check("p3/p4 share the same rank", byId.p3.rank, byId.p4.rank);
+
+  // Cumulative per-layer labels: p1/p2 both carry fewest_zeros (the layer
+  // that grouped them together before most_wins split them) — a player
+  // never carries a layer entry their group wasn't actually subjected to.
+  check("p1 carries both layers it was measured on, with its OWN values", byId.p1.layers, [{ layer: "fewest_zeros", value: 0 }, { layer: "most_wins", value: 3 }]);
+  check("p2 carries the same two layers, its own (losing) values", byId.p2.layers, [{ layer: "fewest_zeros", value: 0 }, { layer: "most_wins", value: 1 }]);
+  // p3/p4 exhaust every layer in the stack — all three show up, including
+  // the untried-by-p1/p2 highest_single_show, since p3/p4's tie survived
+  // that far.
+  check("p3 carries all three exhausted layers", byId.p3.layers, [{ layer: "fewest_zeros", value: 1 }, { layer: "most_wins", value: 2 }, { layer: "highest_single_show", value: 20 }]);
+  check("p4 carries the identical exhausted-layer history", byId.p4.layers, byId.p3.layers);
+}
+
+// =================================================================
+// 5b. Real-world regression: the exact 3-way tie from the retroactive
+//     dry-run against the just-ended "Test" season (Budman/Kobeybeef/
+//     WookLord, all 2 pts). Locks in the literal expected output the dev
+//     specified after seeing the "looks like a badge" problem with a
+//     single resolvedBy label: labels must be cumulative down the stack,
+//     with each player's OWN value, and a player who broke free at layer 1
+//     (Budman, on zeros) must NOT carry a layer-2 (wins) entry — he was
+//     never measured on it.
+// =================================================================
+{
+  const players = {
+    budman: { scoped: 2, zeros: 1, wins: 0, high: 1 },
+    kobeybeef: { scoped: 2, zeros: 2, wins: 1, high: 2 },
+    wooklord: { scoped: 2, zeros: 2, wins: 0, high: 2 },
+  };
+  const stack = ["fewest_zeros", "most_wins", "highest_single_show"];
+  const order = rankStandings(players, p => p.scoped, stack);
+  const byId = Object.fromEntries(order.map(o => [o.id, o]));
+
+  check("Budman resolves at layer 1 (fewest zeros) — no wins entry at all", byId.budman.layers, [{ layer: "fewest_zeros", value: 1 }]);
+  check("Budman ranks ahead of the other two", byId.budman.rank, 1);
+  check("Kobeybeef: tied on zeros with WookLord, then separated by wins — both layers shown", byId.kobeybeef.layers, [{ layer: "fewest_zeros", value: 2 }, { layer: "most_wins", value: 1 }]);
+  check("WookLord: same two layers, its own (losing) wins value — not a bare demotion", byId.wooklord.layers, [{ layer: "fewest_zeros", value: 2 }, { layer: "most_wins", value: 0 }]);
+  check("Kobeybeef ranks ahead of WookLord", byId.kobeybeef.rank < byId.wooklord.rank, true);
 }
 
 // =================================================================

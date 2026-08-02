@@ -437,6 +437,12 @@
     if (layer === "highest_single_show") return player.high;
     throw new Error("Unknown tiebreaker layer: " + layer);
   }
+  function displayValue(player, layer) {
+    if (layer === "fewest_zeros") return player.zeros;
+    if (layer === "most_wins") return player.wins;
+    if (layer === "highest_single_show") return player.high;
+    throw new Error("Unknown tiebreaker layer: " + layer);
+  }
   function groupBy(ids, valueOf) {
     const byValue = /* @__PURE__ */ new Map();
     for (const id of ids) {
@@ -446,13 +452,14 @@
     }
     return [...byValue.keys()].sort((a, b) => b - a).map((v) => byValue.get(v));
   }
-  function resolveGroup(ids, players, tiebreakers, idx) {
-    if (idx >= tiebreakers.length) return [{ ids, resolvedBy: null }];
+  function resolveGroup(ids, players, tiebreakers, idx, path) {
+    if (idx >= tiebreakers.length) return [{ ids, resolvedBy: null, path }];
     const layer = tiebreakers[idx];
     const out = [];
     for (const group of groupBy(ids, (id) => layerValue(players[id], layer))) {
-      if (group.length === 1) out.push({ ids: group, resolvedBy: layer });
-      else out.push(...resolveGroup(group, players, tiebreakers, idx + 1));
+      const newPath = [...path, { layer, value: displayValue(players[group[0]], layer) }];
+      if (group.length === 1) out.push({ ids: group, resolvedBy: layer, path: newPath });
+      else out.push(...resolveGroup(group, players, tiebreakers, idx + 1, newPath));
     }
     return out;
   }
@@ -461,15 +468,15 @@
     const groups = [];
     for (const ids of byPoints) {
       if (ids.length === 1 || !tiebreakers.length) {
-        groups.push({ ids, resolvedBy: null });
+        groups.push({ ids, resolvedBy: null, path: [] });
       } else {
-        groups.push(...resolveGroup(ids, players, tiebreakers, 0));
+        groups.push(...resolveGroup(ids, players, tiebreakers, 0, []));
       }
     }
     let rank = 1;
     const result = [];
     for (const g of groups) {
-      for (const id of g.ids) result.push({ id, rank, points: primaryMetric(players[id]), tied: g.ids.length > 1, resolvedBy: g.resolvedBy });
+      for (const id of g.ids) result.push({ id, rank, points: primaryMetric(players[id]), tied: g.ids.length > 1, resolvedBy: g.resolvedBy, layers: g.path });
       rank += g.ids.length;
     }
     return result;
@@ -512,12 +519,12 @@
       `<option value="all" ${state.boardSeason === "all" ? "selected" : ""}>All time</option>`
     ].join("");
     const scopeName = season ? esc(season.name) : "All time";
-    const podOrder = [1, 0, 2].filter((i) => rows[i]);
-    const podium = rows.length ? `<div class="podium">${podOrder.map((i) => {
-      const [pid, r] = rows[i];
-      return `<div class="pod ${i === 0 ? "first" : ""}">${trophy(i === 0 ? 118 : 82, ["gold", "silver", "bronze"][i])}
-      <b>${esc(pname[pid] || "?")}</b><span class="podpts">${r.scoped} pts</span></div>`;
-    }).join("")}</div>` : "";
+    const podBox = (o, tier, big) => `<div class="pod ${big ? "first" : ""}">${trophy(big ? 118 : 82, tier)}
+      <b>${esc(pname[o.id] || "?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
+    const gold = order.filter((o) => o.rank === 1);
+    const silver = order.filter((o) => o.rank === 2);
+    const bronze = order.filter((o) => o.rank === 3);
+    const podium = order.length ? `<div class="podium">${silver.map((o) => podBox(o, "silver", false)).join("")}${gold.map((o) => podBox(o, "gold", true)).join("")}${bronze.map((o) => podBox(o, "bronze", false)).join("")}</div>` : "";
     const statRows = rows.filter(([, r]) => r.shows > 0).sort((a, b) => b[1].scoped / b[1].shows - a[1].scoped / a[1].shows);
     $("#main").innerHTML = `
     <div class="panel">
@@ -528,9 +535,10 @@
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map((o) => {
       const r = T[o.id];
-      const note = o.resolvedBy ? `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_LABELS[o.resolvedBy])}</div>` : o.tied ? `<div class="muted" style="font-size:.72rem">tied \u2014 no further tiebreaker</div>` : "";
+      const layerLines = (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_LABELS[l.layer])} (${l.value})</div>`).join("");
+      const tiedLine = o.tied ? `<div class="muted" style="font-size:.72rem">tied \u2014 no further tiebreaker</div>` : "";
       return `<tr class="${o.id === state.session.id ? "me" : ""}">
-        <td class="rank">${o.rank}</td><td>${esc(pname[o.id] || "?")}${note}</td>
+        <td class="rank">${o.rank}</td><td>${esc(pname[o.id] || "?")}${layerLines}${tiedLine}</td>
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
     }).join("") || '<tr><td colspan="3" class="muted">No scores yet \u2014 pick some songs.</td></tr>'}
       </table></div>

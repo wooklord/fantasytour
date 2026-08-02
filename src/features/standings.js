@@ -49,12 +49,18 @@ export async function renderBoard(){
       `<option value="${se.id}" ${state.boardSeason===String(se.id)?"selected":""}>${esc(se.name)}</option>`),
     `<option value="all" ${state.boardSeason==="all"?"selected":""}>All time</option>`].join("");
   const scopeName = season ? esc(season.name) : "All time";
-  const podOrder = [1,0,2].filter(i => rows[i]);
-  const podium = rows.length ? `<div class="podium">${podOrder.map(i => {
-    const [pid, r] = rows[i];
-    return `<div class="pod ${i===0?"first":""}">${trophy(i===0?118:82, ["gold","silver","bronze"][i])}
-      <b>${esc(pname[pid]||"?")}</b><span class="podpts">${r.scoped} pts</span></div>`;
-  }).join("")}</div>` : "";
+  // Medal color follows the resolver's actual rank, not array position — a
+  // tie for 1st (this tiebreaker system's whole reason to exist) means two
+  // or three golds and silver going unused, not one arbitrarily crowned
+  // gold and the other demoted to silver.
+  const podBox = (o, tier, big) => `<div class="pod ${big?"first":""}">${trophy(big?118:82, tier)}
+      <b>${esc(pname[o.id]||"?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
+  const gold = order.filter(o => o.rank === 1);
+  const silver = order.filter(o => o.rank === 2);
+  const bronze = order.filter(o => o.rank === 3);
+  const podium = order.length
+    ? `<div class="podium">${silver.map(o => podBox(o,"silver",false)).join("")}${gold.map(o => podBox(o,"gold",true)).join("")}${bronze.map(o => podBox(o,"bronze",false)).join("")}</div>`
+    : "";
   const statRows = rows.filter(([,r]) => r.shows > 0)
     .sort((a,b) => b[1].scoped/b[1].shows - a[1].scoped/a[1].shows);
   $("#main").innerHTML = `
@@ -66,11 +72,18 @@ export async function renderBoard(){
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map(o => {
         const r = T[o.id];
-        const note = o.resolvedBy
-          ? `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_LABELS[o.resolvedBy])}</div>`
-          : o.tied ? `<div class="muted" style="font-size:.72rem">tied — no further tiebreaker</div>` : "";
+        // One line per layer the player's group actually went through
+        // (cumulative down the stack, not just whichever one resolved
+        // them), each with their own value — that's what keeps this from
+        // reading as a badge: "fewest zeros (2)" for the player who LOST
+        // that layer looks identical in form to a winner's line, and the
+        // number is what actually explains the placement.
+        const layerLines = (o.layers||[])
+          .map(l => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_LABELS[l.layer])} (${l.value})</div>`)
+          .join("");
+        const tiedLine = o.tied ? `<div class="muted" style="font-size:.72rem">tied — no further tiebreaker</div>` : "";
         return `<tr class="${o.id===state.session.id?"me":""}">
-        <td class="rank">${o.rank}</td><td>${esc(pname[o.id]||"?")}${note}</td>
+        <td class="rank">${o.rank}</td><td>${esc(pname[o.id]||"?")}${layerLines}${tiedLine}</td>
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
       }).join("")
         || '<tr><td colspan="3" class="muted">No scores yet — pick some songs.</td></tr>'}
