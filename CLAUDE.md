@@ -156,6 +156,26 @@ assertions rather than staying invisible the way a diff-only check would have).
   could only leak an account's own hash back to someone who already fully
   controls it), but it's not what the `service_role`-only grant was supposed to
   mean — check for this same gap on any future internal-only helper.
+- **Case-insensitive login was never actually the bug — `_auth_player` has
+  compared on `lower(name)` since the original schema.sql.** A real player
+  ended up with duplicate accounts (`Carmanjesse` / `CARMANJESSE`) and
+  couldn't reliably log into either, which read as "login is case-sensitive."
+  It isn't, and never was. The actual defect: `players.name` had a plain
+  (case-sensitive) `unique` constraint, so `register_player`'s duplicate
+  check — which relies entirely on that constraint's `unique_violation` — let
+  a case-variant of an existing name insert as a second row instead of
+  failing. Once two rows share a lowered name, `_auth_player`'s
+  `select ... into pl from players where lower(name) = lower(trim(p_name))`
+  doesn't error on the extra match (PL/pgSQL's `SELECT INTO` silently keeps
+  the first row returned and discards the rest, no `STRICT`) — so login
+  becomes nondeterministic against whichever row's PIN gets checked, not
+  literally case-sensitive. Fixed in `sql/stage_e_case_insensitive_auth.sql`
+  by replacing the constraint with a case-insensitive unique index on
+  `lower(name)`: once at most one row can exist per lowered name, the
+  existing `lower(name)` comparisons in `_auth_player` (and the existing
+  `lower(...)` handling already correct in both `banned_names` and
+  `global_banned_names`) are correct on their own — no query logic changed,
+  only the constraint that was supposed to make duplicates impossible.
 - **Open question, not yet addressed: PIN-guessing surface at scale.** `login`
   is a public, unrated RPC endpoint that accepts a name + a 4–8 digit PIN, and
   nothing rate-limits guesses against it. Fine at today's scale (~10
