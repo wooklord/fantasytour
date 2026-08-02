@@ -176,6 +176,16 @@ assertions rather than staying invisible the way a diff-only check would have).
   `lower(...)` handling already correct in both `banned_names` and
   `global_banned_names`) are correct on their own — no query logic changed,
   only the constraint that was supposed to make duplicates impossible.
+- **Standings tiebreaker ranking uses competition ranking (rank += group
+  size), which makes rank 2 mathematically unreachable whenever exactly two
+  players share rank 1** — the next occupied rank is always 3, never 2
+  (`src/core/tiebreak.js`'s `rankStandings`). Non-obvious and worth having
+  written down: `src/features/standings.js`'s podium-arrangement code has to
+  pull a 2-way tie's "runner-up" (the player centered between the two
+  elevated golds) from whoever holds rank 3, not rank 2 — a literal `silver`
+  group is always empty in that shape, by construction, not by bug. The
+  medal color rendered there still just follows the player's real resolved
+  rank (bronze in practice) — nothing is hardcoded to display as "silver."
 - **Open question, not yet addressed: PIN-guessing surface at scale.** `login`
   is a public, unrated RPC endpoint that accepts a name + a 4–8 digit PIN, and
   nothing rate-limits guesses against it. Fine at today's scale (~10

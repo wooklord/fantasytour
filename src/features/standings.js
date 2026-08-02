@@ -49,17 +49,64 @@ export async function renderBoard(){
       `<option value="${se.id}" ${state.boardSeason===String(se.id)?"selected":""}>${esc(se.name)}</option>`),
     `<option value="all" ${state.boardSeason==="all"?"selected":""}>All time</option>`].join("");
   const scopeName = season ? esc(season.name) : "All time";
-  // Medal color follows the resolver's actual rank, not array position — a
-  // tie for 1st (this tiebreaker system's whole reason to exist) means two
-  // or three golds and silver going unused, not one arbitrarily crowned
-  // gold and the other demoted to silver.
-  const podBox = (o, tier, big) => `<div class="pod ${big?"first":""}">${trophy(big?118:82, tier)}
+  // Medal COLOR always follows resolved rank, independent of position — a
+  // tie for 1st means two or three golds (silver simply unused), never one
+  // arbitrarily crowned gold and the other demoted to silver.
+  const tierFor = o => o.rank === 1 ? "gold" : o.rank === 2 ? "silver" : "bronze";
+  // .podium is align-items:flex-end with .pod.first only bumping trophy/
+  // name size (styles.css) — there's no absolute positioning or flex
+  // `order` trick, so "elevated" is purely "this box is taller than its
+  // neighbors while every box's bottom lines up." That means big=true can
+  // go on ANY position (left/center/right) and the flex layout renders the
+  // intended shape on its own — no per-position CSS needed here.
+  const podBox = (o, big) => `<div class="pod ${big?"first":""}">${trophy(big?118:82, tierFor(o))}
       <b>${esc(pname[o.id]||"?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
   const gold = order.filter(o => o.rank === 1);
   const silver = order.filter(o => o.rank === 2);
   const bronze = order.filter(o => o.rank === 3);
+  // Arrangement encodes RANK; colors (above) encode ties. The two are
+  // independent — gold/silver/bronze and gold/silver/silver use the exact
+  // same shape below, only tierFor's colors differ.
+  let left = [], center = [], right = [];
+  if (gold.length >= 3){
+    // 3+-way tie for 1st: no single top to elevate over the others, and
+    // structurally nothing to flank with either (the next real rank starts
+    // past however many are tied, so silver/bronze are empty regardless).
+    // Show every tied player, all level — deliberately uncapped even at 4+,
+    // since capping would silently drop someone who genuinely tied for the
+    // top score, exactly what this whole tiebreaker feature exists to never
+    // do. The standings table above is unaffected either way.
+    center = gold;
+  } else if (gold.length === 2){
+    // Two-way tie for 1st: both flank, both elevated. Whoever holds the
+    // next rank down (if anyone — two players total means nobody does)
+    // sits centered at normal height as the runner-up. Competition ranking
+    // (rank += group size) means rank 2 is mathematically unreachable
+    // whenever exactly 2 players share rank 1 — the next occupied rank is
+    // always 3 — so `silver` is always empty here and the real runner-up
+    // is whoever's in `bronze`. Combining both keeps this correct without
+    // hardcoding that assumption; tierFor colors them by their real rank
+    // regardless (bronze in practice, never a hardcoded "silver").
+    left = [gold[0]]; right = [gold[1]];
+    center = [...silver, ...bronze];
+  } else {
+    // Solo 1st: centered, elevated. Flanked by the next-ranked players,
+    // best-to-worst, alternating left/right/left/right… For exactly two
+    // flank candidates this IS "rank 2 left, rank 3 right" (or "both
+    // silvers, one each side" when there's no bronze) — the alternation
+    // just happens to reduce to that. Uncapped past two: a tier with 3+
+    // members renders every one of them rather than arbitrarily dropping
+    // the extras, same reasoning as the 3+-gold case above. .podium is
+    // already flex-wrap:wrap (styles.css), so anything past what fits one
+    // row wraps to a second line instead of squeezing or being hidden.
+    center = gold;
+    const flank = [...silver, ...bronze];
+    left = flank.filter((_, i) => i % 2 === 0);
+    right = flank.filter((_, i) => i % 2 === 1);
+  }
+  const elevated = new Set(gold.length <= 2 ? gold.map(o => o.id) : []);
   const podium = order.length
-    ? `<div class="podium">${silver.map(o => podBox(o,"silver",false)).join("")}${gold.map(o => podBox(o,"gold",true)).join("")}${bronze.map(o => podBox(o,"bronze",false)).join("")}</div>`
+    ? `<div class="podium">${[...left, ...center, ...right].map(o => podBox(o, elevated.has(o.id))).join("")}</div>`
     : "";
   const statRows = rows.filter(([,r]) => r.shows > 0)
     .sort((a,b) => b[1].scoped/b[1].shows - a[1].scoped/a[1].shows);

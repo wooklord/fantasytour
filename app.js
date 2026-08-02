@@ -523,12 +523,27 @@
       `<option value="all" ${state.boardSeason === "all" ? "selected" : ""}>All time</option>`
     ].join("");
     const scopeName = season ? esc(season.name) : "All time";
-    const podBox = (o, tier, big) => `<div class="pod ${big ? "first" : ""}">${trophy(big ? 118 : 82, tier)}
+    const tierFor = (o) => o.rank === 1 ? "gold" : o.rank === 2 ? "silver" : "bronze";
+    const podBox = (o, big) => `<div class="pod ${big ? "first" : ""}">${trophy(big ? 118 : 82, tierFor(o))}
       <b>${esc(pname[o.id] || "?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
     const gold = order.filter((o) => o.rank === 1);
     const silver = order.filter((o) => o.rank === 2);
     const bronze = order.filter((o) => o.rank === 3);
-    const podium = order.length ? `<div class="podium">${silver.map((o) => podBox(o, "silver", false)).join("")}${gold.map((o) => podBox(o, "gold", true)).join("")}${bronze.map((o) => podBox(o, "bronze", false)).join("")}</div>` : "";
+    let left = [], center = [], right = [];
+    if (gold.length >= 3) {
+      center = gold;
+    } else if (gold.length === 2) {
+      left = [gold[0]];
+      right = [gold[1]];
+      center = [...silver, ...bronze];
+    } else {
+      center = gold;
+      const flank = [...silver, ...bronze];
+      left = flank.filter((_, i) => i % 2 === 0);
+      right = flank.filter((_, i) => i % 2 === 1);
+    }
+    const elevated = new Set(gold.length <= 2 ? gold.map((o) => o.id) : []);
+    const podium = order.length ? `<div class="podium">${[...left, ...center, ...right].map((o) => podBox(o, elevated.has(o.id))).join("")}</div>` : "";
     const statRows = rows.filter(([, r]) => r.shows > 0).sort((a, b) => b[1].scoped / b[1].shows - a[1].scoped / a[1].shows);
     $("#main").innerHTML = `
     <div class="panel">
