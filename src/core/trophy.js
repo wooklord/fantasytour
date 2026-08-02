@@ -12,3 +12,13 @@ function medalEgg(kind){
   return `<g transform="translate(50,39)"><path d="M0,-11 C5.4,-11 8.6,-4.4 8.6,2.2 C8.6,8.2 4.8,11 0,11 C-4.8,11 -8.6,8.2 -8.6,2.2 C-8.6,-4.4 -5.4,-11 0,-11 Z" fill="${fill}" stroke="${edge}" stroke-width="1.6"/><ellipse cx="-2.8" cy="-3.6" rx="2" ry="3.4" fill="#FFFFFF" opacity=".8" transform="rotate(-14 -2.8 -3.6)"/></g>`;
 }
 export const trophy = (px, medal) => TROPHY_SVG.replace(/__S__/g, px).replace("__MEDAL__", medalEgg(medal));
+
+// Casual's podium swaps the trophy graphic for a plain rank numeral —
+// same box footprint (px matches trophy's big/small sizing exactly) and
+// the same medal palette, just no laurel wreath since Casual has no
+// seasons/tiebreakers for it to signify. Colored by tier so the numeral
+// still visually reads as gold/silver/bronze the way the trophy did.
+export function rankNumeral(px, tier, rank){
+  const [fill] = MEDALS[tier] || MEDALS.gold;
+  return `<div style="width:${px}px;height:${px}px;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:800;font-variation-settings:'SOFT' 60,'WONK' 1;font-size:${Math.round(px*0.62)}px;line-height:1;color:${fill}">${rank}</div>`;
+}

@@ -4,8 +4,9 @@ import { state } from "../core/state.js";
 import { fetchShow } from "../core/leagueShows.js";
 import { CARTON_SITE_BASE } from "../core/config.js";
 import { fmtDate, fmtCutoff, countdown, clearTimers, clearTimersFor, showState } from "../core/format.js";
-import { winBadge } from "../core/trophy.js";
+import { trophy, winBadge } from "../core/trophy.js";
 import { toast } from "../core/toast.js";
+import { currentBracket } from "../core/switcher.js";
 
 export const isWildcard = v => (v||"").trim().toLowerCase() === "any debut";
 
@@ -249,6 +250,7 @@ export async function renderShowDetail(show){
         <p class="muted">${top} points${champs.length>1?" apiece":""}</p></div>`;
     })()}
     <div class="panel"><h2>${esc(show.venue||"")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
+      ${currentBracket()?.bracket_kind === "official" ? `<div class="row" style="justify-content:center;gap:10px;margin:4px 0 12px">${trophy(26)}<span style="font-family:'Fraunces',serif;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--yolk);font-size:.85rem">Official</span>${trophy(26)}</div>` : ""}
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
     ${pickBoard}
     <h2 style="margin:18px 4px 4px">Scores</h2>

@@ -3,7 +3,7 @@ import { rpc } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
 import { fetchShows } from "../core/leagueShows.js";
 import { clearTimersFor } from "../core/format.js";
-import { trophy, winBadge } from "../core/trophy.js";
+import { trophy, rankNumeral, winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
 import { currentBracket } from "../core/switcher.js";
 import { computeStandings, rankStandings, TIEBREAK_SHORT_LABELS } from "../core/tiebreak.js";
@@ -49,6 +49,7 @@ export async function renderBoard(){
       `<option value="${se.id}" ${state.boardSeason===String(se.id)?"selected":""}>${esc(se.name)}</option>`),
     `<option value="all" ${state.boardSeason==="all"?"selected":""}>All time</option>`].join("");
   const scopeName = season ? esc(season.name) : "All time";
+  const isOfficial = currentBracket()?.bracket_kind === "official";
   // Medal COLOR always follows resolved rank, independent of position — a
   // tie for 1st means two or three golds (silver simply unused), never one
   // arbitrarily crowned gold and the other demoted to silver.
@@ -58,9 +59,13 @@ export async function renderBoard(){
   // `order` trick, so "elevated" is purely "this box is taller than its
   // neighbors while every box's bottom lines up." That means big=true can
   // go on ANY position (left/center/right) and the flex layout renders the
-  // intended shape on its own — no per-position CSS needed here.
-  const podBox = (o, big) => `<div class="pod ${big?"first":""}">${trophy(big?118:82, tierFor(o))}
-      <b>${esc(pname[o.id]||"?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
+  // intended shape on its own — no per-position CSS needed here. Casual has
+  // no seasons/tiebreakers to signify, so it gets a plain rank numeral in
+  // the same spot instead of the trophy graphic — same rank/tier/
+  // arrangement logic throughout, only what renders inside the box differs.
+  const podBox = (o, big) => `<div class="pod ${big?"first":""}">${
+      isOfficial ? trophy(big?118:82, tierFor(o)) : rankNumeral(big?118:82, tierFor(o), o.rank)
+    }<b>${esc(pname[o.id]||"?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
   const gold = order.filter(o => o.rank === 1);
   const silver = order.filter(o => o.rank === 2);
   const bronze = order.filter(o => o.rank === 3);
@@ -112,7 +117,7 @@ export async function renderBoard(){
     .sort((a,b) => b[1].scoped/b[1].shows - a[1].scoped/a[1].shows);
   $("#main").innerHTML = `
     <div class="panel">
-      <div class="row"><h2 style="margin:0">Standings</h2>
+      <div class="row"><h2 style="margin:0">${isOfficial ? "Official Standings" : "Standings"}</h2>
         <select onchange="setBoardSeason(this.value)"
           style="margin-left:auto;background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.82rem">${opts}</select></div>
       ${podium}

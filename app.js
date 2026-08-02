@@ -292,6 +292,10 @@
     return `<g transform="translate(50,39)"><path d="M0,-11 C5.4,-11 8.6,-4.4 8.6,2.2 C8.6,8.2 4.8,11 0,11 C-4.8,11 -8.6,8.2 -8.6,2.2 C-8.6,-4.4 -5.4,-11 0,-11 Z" fill="${fill}" stroke="${edge}" stroke-width="1.6"/><ellipse cx="-2.8" cy="-3.6" rx="2" ry="3.4" fill="#FFFFFF" opacity=".8" transform="rotate(-14 -2.8 -3.6)"/></g>`;
   }
   var trophy = (px, medal) => TROPHY_SVG.replace(/__S__/g, px).replace("__MEDAL__", medalEgg(medal));
+  function rankNumeral(px, tier, rank) {
+    const [fill] = MEDALS[tier] || MEDALS.gold;
+    return `<div style="width:${px}px;height:${px}px;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:800;font-variation-settings:'SOFT' 60,'WONK' 1;font-size:${Math.round(px * 0.62)}px;line-height:1;color:${fill}">${rank}</div>`;
+  }
 
   // src/features/shows.js
   async function renderShows() {
@@ -492,7 +496,7 @@
     renderBoard();
   }
   async function renderBoard() {
-    var _a, _b;
+    var _a, _b, _c;
     clearTimersFor("board");
     state.tab = "board";
     markTab();
@@ -523,9 +527,9 @@
       `<option value="all" ${state.boardSeason === "all" ? "selected" : ""}>All time</option>`
     ].join("");
     const scopeName = season ? esc(season.name) : "All time";
+    const isOfficial = ((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official";
     const tierFor = (o) => o.rank === 1 ? "gold" : o.rank === 2 ? "silver" : "bronze";
-    const podBox = (o, big) => `<div class="pod ${big ? "first" : ""}">${trophy(big ? 118 : 82, tierFor(o))}
-      <b>${esc(pname[o.id] || "?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
+    const podBox = (o, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? 118 : 82, tierFor(o)) : rankNumeral(big ? 118 : 82, tierFor(o), o.rank)}<b>${esc(pname[o.id] || "?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
     const gold = order.filter((o) => o.rank === 1);
     const silver = order.filter((o) => o.rank === 2);
     const bronze = order.filter((o) => o.rank === 3);
@@ -547,7 +551,7 @@
     const statRows = rows.filter(([, r]) => r.shows > 0).sort((a, b) => b[1].scoped / b[1].shows - a[1].scoped / a[1].shows);
     $("#main").innerHTML = `
     <div class="panel">
-      <div class="row"><h2 style="margin:0">Standings</h2>
+      <div class="row"><h2 style="margin:0">${isOfficial ? "Official Standings" : "Standings"}</h2>
         <select onchange="setBoardSeason(this.value)"
           style="margin-left:auto;background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.82rem">${opts}</select></div>
       ${podium}
@@ -1254,7 +1258,7 @@ Save anyway?`)) return;
     }
   }
   async function renderShowDetail(show) {
-    var _a, _b;
+    var _a, _b, _c;
     clearTimers();
     const [{ data: setlist }, picks, scores] = await Promise.all([
       db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
@@ -1313,6 +1317,7 @@ Save anyway?`)) return;
         <p class="muted">${top} points${champs.length > 1 ? " apiece" : ""}</p></div>`;
     })()}
     <div class="panel"><h2>${esc(show.venue || "")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
+      ${((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official" ? `<div class="row" style="justify-content:center;gap:10px;margin:4px 0 12px">${trophy(26)}<span style="font-family:'Fraunces',serif;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--yolk);font-size:.85rem">Official</span>${trophy(26)}</div>` : ""}
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
     ${pickBoard}
     <h2 style="margin:18px 4px 4px">Scores</h2>
