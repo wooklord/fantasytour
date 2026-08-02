@@ -1391,8 +1391,10 @@ Save anyway?`)) return;
     }
     $("#main").innerHTML = `<div class="panel" style="margin-top:30px">
     <h2>You're not in a league yet</h2>
-    <p class="muted">Ask a league admin to add you \u2014 they'll need your player name (${esc(state.session.name)}).</p>
-    ${names.length ? `<p class="muted">Leagues currently running: ${names.map(esc).join(", ")}.</p>` : ""}
+    <p class="muted">An admin has to add you before you can play \u2014 you don't need to do anything else.</p>
+    <p style="color:var(--coral);font-weight:600;margin:10px 0;padding:10px;border:1px solid var(--coral);border-radius:8px">
+      Don't register again \u2014 a second account can't be merged with this one.</p>
+    <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell a league admin your name is <b>${esc(state.session.name)}</b> and ask them to add you.</p>
     <button class="btn ghost" onclick="logout()">Log out</button>
   </div>`;
   }

@@ -27,10 +27,17 @@ async function renderNoLeague(){
     const { data } = await db.from("leagues").select("name").order("name");
     names = (data||[]).map(l => l.name);
   }catch(e){ /* fall through to the generic copy below */ }
+  // A real player once re-registered here three times, thinking a fresh
+  // account would fix "not in a league yet" — each attempt just made the
+  // eventual case-insensitive-login cleanup worse. The don't-re-register
+  // warning is styled as its own callout (not buried in the muted prose
+  // above it) specifically because burying it is what let that happen.
   $("#main").innerHTML = `<div class="panel" style="margin-top:30px">
     <h2>You're not in a league yet</h2>
-    <p class="muted">Ask a league admin to add you — they'll need your player name (${esc(state.session.name)}).</p>
-    ${names.length ? `<p class="muted">Leagues currently running: ${names.map(esc).join(", ")}.</p>` : ""}
+    <p class="muted">An admin has to add you before you can play — you don't need to do anything else.</p>
+    <p style="color:var(--coral);font-weight:600;margin:10px 0;padding:10px;border:1px solid var(--coral);border-radius:8px">
+      Don't register again — a second account can't be merged with this one.</p>
+    <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell a league admin your name is <b>${esc(state.session.name)}</b> and ask them to add you.</p>
     <button class="btn ghost" onclick="logout()">Log out</button>
   </div>`;
 }
