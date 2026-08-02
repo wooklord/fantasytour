@@ -7,6 +7,20 @@
   --glow1:#2A2058; --glow2:rgba(255,107,94,.10);
   color-scheme:dark;
   --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  /* Theme-INVARIANT "always looks like paper" colors — deliberately NOT
+     redefined under html[data-theme="light"] below. --cream/--ink flip
+     per theme by design (they mean "readable foreground on the app's own
+     background", which is correct for body text, buttons, form fields —
+     anything sitting on --indigo/--panel/--pit). But a few components
+     (.sheet, .savebtn, .toast, .acc-list) are meant to always look like a
+     physical cream paper card with dark ink on it, regardless of which
+     app theme is active, and they used to read --cream/--ink as if those
+     literally meant "cream" and "ink" — true only in the dark-theme
+     default, where light theme repurposes them for the opposite roles.
+     The result: the pick-sheet "paper" rendered as a dark card with light
+     text in light theme. Use --paper/--paper-ink for anything that must
+     stay paper-colored in both themes. */
+  --paper:#FFF3DC; --paper-ink:#2B2140; --paper-ink-soft:#5A4E78;
 }
 html[data-theme="light"]{
   --indigo:#F4ECD9; --pit:#EDE3CC; --panel:#FDF8EC; --panel2:#F1E7CF;
@@ -122,20 +136,20 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .arow-btns button{background:var(--panel2);color:var(--cream);border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:.82rem;font-weight:600}
 
 /* ---------- the setlist card (signature) ---------- */
-.sheet{position:relative;background:var(--cream);color:var(--ink);border-radius:6px;padding:26px 22px 22px;margin:22px 6px;box-shadow:0 14px 40px rgba(0,0,0,.5), 0 2px 0 rgba(0,0,0,.2);transform:rotate(-.5deg)}
+.sheet{position:relative;background:var(--paper);color:var(--paper-ink);border-radius:6px;padding:26px 22px 22px;margin:22px 6px;box-shadow:0 14px 40px rgba(0,0,0,.5), 0 2px 0 rgba(0,0,0,.2);transform:rotate(-.5deg)}
 .sheet::before,.sheet::after{content:'';position:absolute;width:86px;height:26px;background:rgba(120,120,128,.55);top:-12px;transform:rotate(-4deg);left:14%;box-shadow:inset 0 0 6px rgba(0,0,0,.25)}
 .sheet::after{left:auto;right:12%;transform:rotate(5deg)}
 .sheet h2{font-size:1.5rem;font-variation-settings:'SOFT' 100,'WONK' 1;margin-bottom:2px;overflow-wrap:anywhere}
-.sheet .sub{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);margin-bottom:16px;text-transform:uppercase;letter-spacing:1px;overflow-wrap:anywhere}
+.sheet .sub{font-family:var(--mono);font-size:.78rem;color:var(--paper-ink-soft);margin-bottom:16px;text-transform:uppercase;letter-spacing:1px;overflow-wrap:anywhere}
 .slotline{display:flex;align-items:baseline;gap:10px;margin:14px 0}
 .slotline label{font-family:'Fraunces',serif;font-weight:700;font-size:1rem;min-width:86px}
-.slotline .pts{font-family:var(--mono);font-size:.7rem;color:var(--ink-soft);border:1px solid var(--ink-soft);border-radius:999px;padding:1px 7px;white-space:nowrap}
-.slotline input{flex:1;min-width:0;background:transparent;border:none;border-bottom:2px dashed var(--ink-soft);color:var(--ink);padding:4px 2px;font-size:1rem;font-family:'Outfit'}
+.slotline .pts{font-family:var(--mono);font-size:.7rem;color:var(--paper-ink-soft);border:1px solid var(--paper-ink-soft);border-radius:999px;padding:1px 7px;white-space:nowrap}
+.slotline input{flex:1;min-width:0;background:transparent;border:none;border-bottom:2px dashed var(--paper-ink-soft);color:var(--paper-ink);padding:4px 2px;font-size:1rem;font-family:'Outfit'}
 .slotline input:focus{outline:none;border-bottom-color:var(--yolk-deep);border-bottom-style:solid}
-.sheet .divider{border-top:1px solid rgba(43,33,64,.2);margin:18px 0 6px;padding-top:10px;font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:1px;text-transform:uppercase}
-.savebtn{width:100%;margin-top:18px;background:var(--ink);color:var(--cream);border:none;border-radius:10px;padding:14px;font-size:1.05rem;font-weight:700;font-family:'Fraunces',serif;letter-spacing:.5px}
+.sheet .divider{border-top:1px solid rgba(43,33,64,.2);margin:18px 0 6px;padding-top:10px;font-family:var(--mono);font-size:.72rem;color:var(--paper-ink-soft);letter-spacing:1px;text-transform:uppercase}
+.savebtn{width:100%;margin-top:18px;background:var(--paper-ink);color:var(--paper);border:none;border-radius:10px;padding:14px;font-size:1.05rem;font-weight:700;font-family:'Fraunces',serif;letter-spacing:.5px}
 .savebtn:disabled{opacity:.45}
-.countbig{font-family:var(--mono);text-align:center;margin:6px 0 0;font-size:.85rem;color:var(--ink-soft)}
+.countbig{font-family:var(--mono);text-align:center;margin:6px 0 0;font-size:.85rem;color:var(--paper-ink-soft)}
 .countbig b{color:var(--coral)}
 
 /* ---------- leaderboard ---------- */
@@ -180,14 +194,14 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 
 /* ---------- toasts ---------- */
 #toasts{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:99;width:min(92vw,420px);display:flex;flex-direction:column;gap:8px}
-.toast{background:var(--cream);color:var(--ink);border-radius:12px;padding:12px 14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.5);border-left:6px solid var(--yolk);animation:drop .35s cubic-bezier(.2,1.4,.4,1)}
+.toast{background:var(--paper);color:var(--paper-ink);border-radius:12px;padding:12px 14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.5);border-left:6px solid var(--yolk);animation:drop .35s cubic-bezier(.2,1.4,.4,1)}
 .toast.score{border-left-color:var(--mint)}
 @keyframes drop{from{transform:translateY(-16px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 .autocomplete{position:relative}
-.acc-list{position:absolute;top:100%;left:0;right:0;background:var(--cream);border-radius:0 0 10px 10px;box-shadow:0 12px 28px rgba(0,0,0,.35);z-index:30;max-height:210px;overflow:auto}
-.acc-list div{padding:9px 12px;color:var(--ink);font-size:.92rem;border-bottom:1px solid rgba(43,33,64,.08);cursor:pointer}
-.acc-list div small{color:var(--ink-soft);font-family:var(--mono);float:right}
+.acc-list{position:absolute;top:100%;left:0;right:0;background:var(--paper);border-radius:0 0 10px 10px;box-shadow:0 12px 28px rgba(0,0,0,.35);z-index:30;max-height:210px;overflow:auto}
+.acc-list div{padding:9px 12px;color:var(--paper-ink);font-size:.92rem;border-bottom:1px solid rgba(43,33,64,.08);cursor:pointer}
+.acc-list div small{color:var(--paper-ink-soft);font-family:var(--mono);float:right}
 .acc-list div:hover,.acc-list div.sel{background:var(--yolk);color:#221A0A}
 .hidden{display:none!important}
 
@@ -196,9 +210,12 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
    .muted's dim secondary-text treatment. Calm (full-contrast ink, matching
    the surrounding .sheet paper card), not alarming (no coral/red) — it's an
    explanation, not an error. Always sits on the cream .sheet paper
-   regardless of app theme, so it uses --ink (the sheet's own text color),
-   not a --cream/--coral variable that's cream-on-cream in dark mode. */
-.ineligible-reason{font-size:1.05rem;line-height:1.5;color:var(--ink);text-align:center;margin:18px 0}
+   regardless of app theme, so it uses --paper-ink (the sheet's own,
+   theme-invariant text color) — NOT --ink, which despite the name is a
+   theme-flipping variable repurposed as light-theme's foreground color and
+   would go cream-on-cream there; that exact mismatch is what --paper-ink
+   was introduced to fix (see :root in this file). */
+.ineligible-reason{font-size:1.05rem;line-height:1.5;color:var(--paper-ink);text-align:center;margin:18px 0}
 .noticebox{background:var(--panel);border:1px solid var(--yolk);border-radius:14px;padding:14px 16px;margin:14px 0;font-size:.95rem;line-height:1.5}
 
 /* ---------- settings / credits ---------- */
