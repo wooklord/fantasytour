@@ -10,6 +10,13 @@ export const TIEBREAK_LABELS = {
   highest_single_show: "Highest single-show score",
 };
 
+// Standings-row display only, where space is tight — the admin config
+// picker keeps the fuller wording above.
+export const TIEBREAK_SHORT_LABELS = {
+  ...TIEBREAK_LABELS,
+  highest_single_show: "High Score",
+};
+
 // scoreRows: [{player_id, show_id, points}] — every score row for the
 // bracket, unfiltered (career needs everything; scoped/wins/high/zeros are
 // filtered internally against `season`).

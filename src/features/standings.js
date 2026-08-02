@@ -6,7 +6,7 @@ import { clearTimersFor } from "../core/format.js";
 import { trophy, winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
 import { currentBracket } from "../core/switcher.js";
-import { computeStandings, rankStandings, TIEBREAK_LABELS } from "../core/tiebreak.js";
+import { computeStandings, rankStandings, TIEBREAK_SHORT_LABELS } from "../core/tiebreak.js";
 
 // Bound to the standings-select onchange (see renderBoard below) — replaces the
 // original inline `boardSeason=this.value; renderBoard();` now that boardSeason
@@ -77,13 +77,14 @@ export async function renderBoard(){
         // them), each with their own value — that's what keeps this from
         // reading as a badge: "fewest zeros (2)" for the player who LOST
         // that layer looks identical in form to a winner's line, and the
-        // number is what actually explains the placement.
+        // number is what actually explains the placement. No separate
+        // "tied" line: when the stack exhausts, the last layer's values
+        // are already equal on every tied row — that IS the tie, visibly.
         const layerLines = (o.layers||[])
-          .map(l => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_LABELS[l.layer])} (${l.value})</div>`)
+          .map(l => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`)
           .join("");
-        const tiedLine = o.tied ? `<div class="muted" style="font-size:.72rem">tied — no further tiebreaker</div>` : "";
         return `<tr class="${o.id===state.session.id?"me":""}">
-        <td class="rank">${o.rank}</td><td>${esc(pname[o.id]||"?")}${layerLines}${tiedLine}</td>
+        <td class="rank">${o.rank}</td><td>${esc(pname[o.id]||"?")}${layerLines}</td>
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
       }).join("")
         || '<tr><td colspan="3" class="muted">No scores yet — pick some songs.</td></tr>'}

@@ -384,6 +384,10 @@
     most_wins: "Most wins",
     highest_single_show: "Highest single-show score"
   };
+  var TIEBREAK_SHORT_LABELS = {
+    ...TIEBREAK_LABELS,
+    highest_single_show: "High Score"
+  };
   function computeStandings({ scoreRows, showsById, season, rosterJoinDates = {} }) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
     const inScope = (row) => {
@@ -535,10 +539,9 @@
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map((o) => {
       const r = T[o.id];
-      const layerLines = (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_LABELS[l.layer])} (${l.value})</div>`).join("");
-      const tiedLine = o.tied ? `<div class="muted" style="font-size:.72rem">tied \u2014 no further tiebreaker</div>` : "";
+      const layerLines = (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`).join("");
       return `<tr class="${o.id === state.session.id ? "me" : ""}">
-        <td class="rank">${o.rank}</td><td>${esc(pname[o.id] || "?")}${layerLines}${tiedLine}</td>
+        <td class="rank">${o.rank}</td><td>${esc(pname[o.id] || "?")}${layerLines}</td>
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
     }).join("") || '<tr><td colspan="3" class="muted">No scores yet \u2014 pick some songs.</td></tr>'}
       </table></div>
