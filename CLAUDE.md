@@ -259,8 +259,10 @@ pile; podium version has the medal egg inside.
   that league's scores for the show, resets `league_shows.status = 'live'` and
   `winner_sent = null` so the corrected winner re-announces, and fires a "scores
   reopened" Discord notice. Pairs with "correct The Carton before finalizing"
-  workflow (a friend of the dev can edit setlists on The Carton). Frontend wiring
-  (a button that calls this action) is a Stage C2 item.
+  workflow (a friend of the dev can edit setlists on The Carton). Frontend wiring is
+  **also done** — a "Reopen" button in admin.js's Shows & cutoffs panel, next to
+  Finalize on any show with `status === 'final'`; smoke-tested against the real
+  Boston 7/31 show (see the closer-family scoring fix note above).
 - **Slot labels in setlists & notifications**: setlist view shows all slot labels
   ("Laurel — Opener"); live toasts tag ONLY unambiguous-when-they-happen slots
   (opener, set2_opener, encore) + debut. Closer/show_closer are positional so only
@@ -268,6 +270,22 @@ pile; podium version has the medal egg inside.
 - **Discord notification logic rework**: broadcast (not personal) + per-league in 2.0.
   Needs a design pass (public non-voter shaming vs. neutral counts; dedupe with
   in-app toasts; per-league channels + per-league webhooks + Discord roles).
+- **Season game-numbering cap, deliberately deferred**: `shows.js`'s per-show "Game
+  N" circle (chronological position within the season) is computed only from what
+  `renderShows()` already fetches for display — unbounded future + last 2 days,
+  plus the 12 most-recent past shows (the `.limit(12)` on the `past` query). A
+  season with more than 12 already-played shows would get this **wrong, not
+  missing**: the earliest shows age out of that 12-show window and drop out of the
+  fetch entirely, so the shows that DO come through get renumbered from 1 as if the
+  dropped ones never existed (a season's real Game 4 would render as "Game 1" once
+  Games 1-3 fall out of the window) — every visible show still gets a number, it's
+  just shifted low by however many earlier shows are missing. Not fixing this now:
+  no season has come close to 12 already-played shows at this scale, and the
+  interim fix if one ever does is just bumping `.limit(12)` a bit to cover it. A
+  real fix means separating the fetch bound from the render bound — that one `12`
+  currently does both jobs (how many past shows the Recent panel displays, AND the
+  universe of shows game-numbering counts from), so a display-driven bump for UX
+  reasons silently changes numbering correctness too, and vice versa.
 
 ---
 

@@ -17,7 +17,25 @@ export async function renderShows(){
     rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId }),
   ]);
   const seasonOf = d => (seas||[]).find(se => se.start_date <= d && d <= se.end_date);
+  const labelOf = d => seasonOf(d)?.name || null;
   const isOfficial = currentBracket()?.bracket_kind === "official";
+  // Game number = chronological position within the season, computed once
+  // across every show this call actually fetched (up ∪ past) — so the same
+  // show carries the same number whether it's rendered in Upcoming or
+  // Recent, and a number never shifts as the season progresses (every show
+  // in the season counts, not just already-played ones). Scoped to what's
+  // fetched here (unbounded future + last 2 days, plus the 12 most recent
+  // past shows) — fine at this app's scale, where a season's shows
+  // practically always fall inside that window, but a season with more
+  // already-played shows than the "past" fetch's 12-show cap would
+  // undercount its earliest games.
+  const gameNumberOf = {};
+  for (const se of (seas||[])){
+    [...(up||[]), ...(past||[])]
+      .filter(sh => se.start_date <= sh.showdate && sh.showdate <= se.end_date)
+      .sort((a,b) => a.showdate.localeCompare(b.showdate))
+      .forEach((sh, i) => { gameNumberOf[sh.id] = i + 1; });
+  }
   const isRecent = s => s.showdate < todayStr || s.status === "final";
   const upcoming = (up||[]).filter(s => !isRecent(s));
   const justPlayed = (up||[]).filter(isRecent);
@@ -39,7 +57,10 @@ export async function renderShows(){
   // Official-without-a-covering-season is visible up front (greyed row),
   // not just discovered after tapping Pick — but the Pick button and the
   // existing "tap through, see the reason, link to Casual" flow stay as-is.
-  const row = s => {
+  // gameNumber/seasonLast are omitted for the "Just played" list below,
+  // which renders via a bare row() call outside withSeasons() and stays
+  // un-sectioned by design — no season header there either.
+  const row = (s, { gameNumber, seasonLast } = {}) => {
     const st = showState(s);
     const cls = { open:"open", live:"live", locked:"locked", final:"final", played:"final" }[st] || "";
     const cd = st === "open" ? countdown(s.cutoff_at) : null;
@@ -47,8 +68,8 @@ export async function renderShows(){
     const win = st === "final" && winners[s.id]
       ? ` <span style="color:var(--yolk);font-size:.82rem">${winBadge(36)} ${winners[s.id].names.map(esc).join(" & ")} · ${winners[s.id].points}</span>` : "";
     const noSeason = isOfficial && !seasonOf(s.showdate);
-    return `<div class="showrow${noSeason ? " unavailable" : ""}">
-      <div class="date">${fmtDate(s.showdate)}</div>
+    return `<div class="showrow${noSeason ? " unavailable" : ""}${seasonLast ? " season-last" : ""}">
+      <div class="date"><span>${fmtDate(s.showdate)}</span>${gameNumber ? `<span class="gamenum">${gameNumber}</span>` : ""}</div>
       <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
         <div class="loc">${esc(s.city||"")}${s.state?", "+esc(s.state):""}
           <span class="pill ${cls}" data-cd="${st==='open'?s.cutoff_at:''}">${txt}</span>${win}</div></div>
@@ -65,12 +86,18 @@ export async function renderShows(){
   // matched from before the gap).
   const withSeasons = list => {
     let last;
-    return list.map(sh => {
-      const se = seasonOf(sh.showdate);
-      const label = se ? se.name : null;
+    return list.map((sh, i) => {
+      const label = labelOf(sh.showdate);
       const brk = (label && label !== last) ? `<div class="season-break">Season: ${esc(label)}</div>` : "";
+      // "Last of this season's group" = the very next row (in whatever
+      // order this list is already in — chronological or reversed, doesn't
+      // matter) belongs to a different season or none, or there is no next
+      // row. Marks where the closing .season-end rule goes.
+      const nextLabel = list[i+1] ? labelOf(list[i+1].showdate) : null;
+      const seasonLast = label && label !== nextLabel;
       last = label;
-      return brk + row(sh);
+      return brk + row(sh, { gameNumber: label ? gameNumberOf[sh.id] : null, seasonLast })
+        + (seasonLast ? '<div class="season-end"></div>' : "");
     }).join("");
   };
   // Roster/opt-in ineligibility (as opposed to "no season covers this show")

@@ -110,7 +110,14 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .showrow{display:flex;gap:12px;align-items:center;padding:13px 4px;border-bottom:1px dashed var(--dash)}
 .showrow:last-child{border-bottom:none}
 .showrow.unavailable{opacity:.5}
-.showrow .date{font-family:var(--mono);color:var(--yolk);font-size:.85rem;min-width:74px}
+/* A season's last show keeps this row's own dashed border-bottom unless
+   something removes it — :last-child only fires when this row is truly
+   the panel's last element, which it usually isn't once .season-end
+   follows it. .season-last beats plain .showrow on specificity alone
+   (two classes vs. one), so this doesn't depend on declaration order the
+   way a same-specificity rule (like :last-child) would. */
+.showrow.season-last{border-bottom:none}
+.showrow .date{font-family:var(--mono);color:var(--yolk);font-size:.85rem;min-width:74px;display:flex;flex-direction:column;align-items:flex-start;gap:5px}
 .showrow .v{flex:1;min-width:0}
 /* Venue/city text comes from The Carton's API and its length is out of our
    control — a long name with no spaces (one real bug already shipped this
@@ -119,7 +126,19 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .showrow .v .venue{font-weight:600;overflow-wrap:anywhere}
 .showrow .v .loc{font-size:.82rem;color:var(--cream-dim);overflow-wrap:anywhere}
 .showrow button{background:var(--panel2);color:var(--cream);border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:.82rem;font-weight:600;flex:none}
+/* Game-number sequence marker — lives in the (otherwise mostly-empty)
+   vertical space under the date rather than competing with the venue name
+   or the "locks in" pill for horizontal room; a "Game N" text label tried
+   first and measurably lost that fight at phone width. */
+.showrow .gamenum{flex:none;width:20px;height:20px;border-radius:50%;border:1px solid var(--line2);color:var(--cream-dim);font-family:var(--mono);font-size:.68rem;display:flex;align-items:center;justify-content:center}
 .season-break{font-family:'Fraunces',serif;font-weight:700;font-size:1.05rem;color:var(--mint);border-bottom:1px solid var(--line);padding:14px 2px 6px;margin-top:8px}
+/* Bottom-of-season marker — a standalone sibling element after the last
+   show, mirroring how .season-break marks the top as its own element
+   rather than a modifier on the first row. Same weight/color as
+   .season-break's own rule (not its mint TEXT color) — deliberately
+   nothing heavier or colored differently; the two are meant to read as a
+   matched pair. */
+.season-end{border-top:1px solid var(--line);margin:10px 2px 2px}
 
 /* ---------- admin show row (Shows & cutoffs panel) ----------
    Stacked, not a single flex row like .showrow: the admin row packs a
