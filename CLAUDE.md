@@ -222,6 +222,13 @@ assertions rather than staying invisible the way a diff-only check would have).
   nothing rate-limits guesses against it. Fine at today's scale (~10
   Ambassadors), but worth thinking through deliberately before the ~50-person
   Facebook league joins — a bigger, less-trusted pool. Not solved in Stage C2a.
+- **Open question, not yet addressed: no self-service PIN management.** A
+  player can't change their own PIN, and there's no forgot-PIN path — the only
+  recovery today is an admin running SQL directly against `pin_hash`. Fine at
+  ~10 Ambassadors who can just text the dev; a real problem once the
+  ~50-person Facebook league joins and most of them aren't a text away. Pairs
+  with the PIN-guessing concern above — both are the auth model not scaling
+  past a small, personally-known group, not two unrelated gaps.
 - **Known gap: auth rejections from `reopen`/`cutoff_changed`/`finalize` return
   HTTP 500**, same as any other internal error (the handler's single `catch`
   turns every thrown error — "wrong PIN," "not authorized," a genuine bug —
@@ -574,11 +581,13 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   frontend must not even present a fillable Official pick sheet in either case —
   show the reason and point the player at Casual instead. Casual is unaffected:
   no seasons, no opt-in, always votable.
-- **Admin warning: no season covering upcoming shows.** The league-admin panel
-  needs a visible warning when an Official bracket has no season covering
-  upcoming shows. Since submission is now blocked (not silently unscored) in that
-  case, forgetting to create a season closes Official entirely — this warning is
-  the mitigation.
+- **Admin warning: no season covering upcoming shows — built.** `admin.js`'s
+  Seasons panel shows a warning (compact M/D dates, no cap on the list) for any
+  upcoming show the Official bracket's seasons don't cover, rendered outside
+  that panel's collapsible body so it's visible even when the section itself is
+  collapsed. Since submission is blocked (not silently unscored) in that case,
+  forgetting to create a season closes Official entirely — this warning is the
+  mitigation.
 - **Opt-in override.** League admins can add or remove a player from a running
   Official season's `season_rosters` directly, including someone who opted out
   before activation. Removal keeps that player's existing scores frozen and just
@@ -595,18 +604,20 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   format toggle, and (in 2.0) the Official opt-out mechanic. Important because 2.0
   delegates leagues to admins who didn't build the game. Write the slot definitions
   once and surface them in both the player and admin surfaces.
-- **Standings default season selection (replaces current behavior).** Rules in
-  priority order:
+- **Standings default season selection — built.** `src/features/standings.js`'s
+  `renderBoard()` implements this priority order:
   1. If a season is currently active (today inside its date range) → default to
      that season.
   2. Else if a season ended within the last 7 days → default to that just-finished
      season (grace period, so people can savor the result).
   3. Else → default to All time.
-  If a new season starts during another's grace period, the new active season wins.
-  Note: current code falls back to the most recent season when none is active, which
-  leaves stale finished boards showing indefinitely between tours — this replaces
-  that. In 2.0 this rule generalizes for free: Casual has no seasons, so it always
-  lands on All time, which is correct since Casual is a perpetual tally.
+  If a new season starts during another's grace period, the new active season wins
+  (checked first, so it always beats the grace-period branch). Replaced the old
+  fallback-to-most-recently-created-season behavior, which left stale finished
+  boards showing indefinitely between tours. In 2.0 this rule generalizes for
+  free: Casual has no seasons, so it always lands on All time, which is correct
+  since Casual is a perpetual tally. Covered by a regression check in
+  `test/scenario.test.mjs`.
 - **`players_public` no longer carries admin status** (Stage A drops `is_admin` and
   recreates the view without it). The current `loadPlayers()` reads `p.is_admin` from
   this view to show the ★ marker; in 2.0 that has to come from
@@ -641,6 +652,22 @@ the edge function/SQL seed) rather than hardcoded inline.
 - Cron: the scoring function runs on a schedule; the schedule SQL embeds the anon key
   in an Authorization header — if the key ever rotates, the cron header needs updating
   too (two places: frontend constants + cron header).
+- **Local preview: `npm run dev`** (rebuilds via `build.mjs` then serves via
+  `serve.mjs`) — one command, so there's no separate "did I rebuild?" step and no
+  way to be looking at a stale `app.js`. Fixed at `http://localhost:8080/`,
+  always with `Cache-Control: no-store` (and `Pragma`/`Expires` to match) on
+  every response, no flag to remember. Prints the LAN URL too (`http://<your
+  IP>:8080/`) for checking on a phone on the same network. Before starting a
+  second one, check whether it's already running: `netstat -ano | findstr :8080`
+  — `serve.mjs` also fails loudly with that exact command if the port's taken,
+  instead of a second server silently coming up alongside a stale one (this
+  project has accumulated stray preview servers, and once eight orphaned Claude
+  Code processes, from exactly that). Stop a stale one with
+  `powershell -Command "Stop-Process -Id <pid> -Force"`.
+  **On mobile, open a new private/incognito tab, not an existing regular one** —
+  a tab that was already open (or opened earlier in the session) can keep
+  showing an old bundle even though the server itself is never caching; a fresh
+  private tab guarantees the load actually hits the server.
 
 ## Tone / working style the dev prefers
 

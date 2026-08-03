@@ -22,9 +22,18 @@
 # correct credentials here: reopen flips a future show to 'live' and nulls
 # winner_sent; finalize marks a show that hasn't happened yet as 'final' and
 # may fire a nonsense winner announcement to the real Discord channel.
+#
+# Setup: copy auth-verify.creds.ps1.example to auth-verify.creds.ps1 (same
+# folder) and fill in your real name/PIN there. That file is gitignored —
+# this script only ever holds the placeholder-free logic, so a real PIN
+# can't end up committed by accident.
 
-$name = "NAME"   # <-- fill in your real Ambassadors admin name
-$pin  = "PIN"    # <-- fill in your real PIN
+$credsFile = Join-Path $PSScriptRoot "auth-verify.creds.ps1"
+if (-not (Test-Path $credsFile)) {
+  Write-Error "Missing $credsFile — copy auth-verify.creds.ps1.example to auth-verify.creds.ps1 and fill in your real Ambassadors admin name/PIN before running this script."
+  exit 1
+}
+. $credsFile
 
 $url  = "https://zdfhglvjxquvkjyvophz.supabase.co/functions/v1/carton-sync"
 $anon = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo"

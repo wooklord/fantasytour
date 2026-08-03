@@ -1,0 +1,6 @@
+# Copy this file to auth-verify.creds.ps1 (gitignored, right alongside this
+# one) and fill in your real Ambassadors admin name/PIN. auth-verify.ps1
+# sources that file and refuses to run without it, so a real PIN never ends
+# up in the tracked script.
+$name = "NAME"
+$pin  = "PIN"

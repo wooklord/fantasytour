@@ -12,6 +12,7 @@ supabase/.temp/
 .env.local
 *.secret
 service_role*.txt
+test/auth-verify.creds.ps1
 # os / editor
 .DS_Store
 Thumbs.db
