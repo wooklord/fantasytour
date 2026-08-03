@@ -8,6 +8,7 @@ export function makeFixtures(){
   // already-locked regardless of what the test intends to exercise.
   const now = Date.now();
   const iso = (offsetMin) => new Date(now + offsetMin*60000).toISOString();
+  const day = (offsetDays) => new Date(now + offsetDays*864e5).toISOString().slice(0,10);
 
   const defCfg = {
     slots: [
@@ -42,9 +43,16 @@ export function makeFixtures(){
       { songname: "Space Oddity", times_played: 3, is_original: false },
     ],
     // Global, stripped down — cutoff_at/format/status moved to league_shows.
+    // Relative to the real wall clock (day()), same reasoning as iso() above —
+    // a hardcoded showdate ages past admin's 7-day sync lookback and shows.js's
+    // recent/upcoming split as real time passes, even though cutoff_at was
+    // already correctly relative. This bit the fixture once for real: show 2
+    // silently fell out of admin's Shows & cutoffs list once "today" moved far
+    // enough past its old hardcoded date, breaking a Reopen-button assertion
+    // that had nothing to do with dates at all.
     shows: [
-      { id: 1, showdate: "2026-07-27", venue: "The Barn", city: "Woodstock", state: "NY" },
-      { id: 2, showdate: "2026-07-20", venue: "Old Mill", city: "Hudson", state: "NY" },
+      { id: 1, showdate: day(0), venue: "The Barn", city: "Woodstock", state: "NY" },
+      { id: 2, showdate: day(-5), venue: "Old Mill", city: "Hudson", state: "NY" },
     ],
     league_shows: [
       { league_id: LEAGUE_ID, show_id: 1, cutoff_at: iso(60), format: "standard", status: "upcoming",
@@ -52,7 +60,7 @@ export function makeFixtures(){
       { league_id: LEAGUE_ID, show_id: 2, cutoff_at: iso(-7*24*60), format: "standard", status: "final",
         remind_sent: iso(-7*24*60-70), lock_sent: iso(-7*24*60-60), winner_sent: iso(-7*24*60-10) },
     ],
-    // One past season (well outside show 1's date, 2026-07-27) so it doesn't
+    // One past season (well outside show 1's date — see day(0) above) so it doesn't
     // disturb the existing "no season covers this show" Official-ineligible
     // assertion — its only job here is giving the season-roster admin UI
     // something real to list/toggle. season_rosters has one member on it, so

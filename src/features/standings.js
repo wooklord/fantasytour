@@ -23,9 +23,20 @@ export async function renderBoard(){
   const pname = Object.fromEntries((sc||[]).map(s => [s.player_id, s.player_name]));
   const showsById = Object.fromEntries((allShows||[]).map(sh => [sh.id, sh]));
   const today = new Date().toLocaleDateString('sv');
+  // Default season priority: (1) a currently-active season wins outright —
+  // this also covers "a new season starts during another's grace period",
+  // since active is always checked first; (2) else the most recently-ended
+  // season, but only within a 7-day grace window (so people can savor the
+  // result) — NOT unconditionally the latest-created season, which is the
+  // stale-board behavior this replaces; (3) else All time, so a tour gap
+  // longer than a week doesn't keep showing a long-finished season forever.
   if (state.boardSeason === null){
-    const cur = (seasons||[]).find(se => se.start_date <= today && today <= se.end_date)
-      || (seasons||[]).slice(-1)[0];
+    const active = (seasons||[]).find(se => se.start_date <= today && today <= se.end_date);
+    const graceFloor = new Date(Date.now() - 7*864e5).toISOString().slice(0,10);
+    const recentlyEnded = (seasons||[])
+      .filter(se => se.end_date < today && se.end_date >= graceFloor)
+      .reduce((best, se) => (!best || se.end_date > best.end_date) ? se : best, null);
+    const cur = active || recentlyEnded;
     state.boardSeason = cur ? String(cur.id) : "all";
   }
   const season = (seasons||[]).find(se => String(se.id) === state.boardSeason);

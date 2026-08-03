@@ -69,6 +69,17 @@ async function runMode(mode){
     rpcFns.includes("get_bracket_scores"),
     `rpc calls: ${JSON.stringify(rpcFns)}`);
 
+  // Regression for the standings default-season bug: the fixture's only
+  // season ("Past Season") ended 2026-01-31, long before the 7-day grace
+  // window relative to the real wall clock this harness runs against — so
+  // the default must fall through to All time, NOT stay pinned on that
+  // long-finished season forever (the old `.slice(-1)[0]` fallback this
+  // replaced would have picked it unconditionally, with no grace check at all).
+  const standings = byLabel(log, "standings");
+  check("standings defaults to All time once the only season's grace period has long since passed",
+    standings && /<option value="all" selected/.test(standings.html) && /· All time/.test(standings.html),
+    `standings html: ${standings?.html}`);
+
   const admin = byLabel(log, "admin");
   check("admin tab renders admin content for a league admin",
     admin && /Seasons|Master switch/.test(admin.html),
@@ -88,6 +99,10 @@ async function runMode(mode){
 
   check("Seasons panel has a manage-roster control per saved season",
     admin && /manage roster/.test(admin.html),
+    `admin html: ${admin?.html}`);
+
+  check("Shows & cutoffs offers Reopen for the finalized fixture show (show 2), not Finalize",
+    admin && /reopenShow\(2,/.test(admin.html) && !/finalizeShow\(2,/.test(admin.html),
     `admin html: ${admin?.html}`);
 
   const memberSearch = byLabel(log, "member-search-results");

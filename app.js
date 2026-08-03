@@ -545,7 +545,10 @@
     const showsById = Object.fromEntries((allShows || []).map((sh) => [sh.id, sh]));
     const today = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
     if (state.boardSeason === null) {
-      const cur = (seasons || []).find((se) => se.start_date <= today && today <= se.end_date) || (seasons || []).slice(-1)[0];
+      const active = (seasons || []).find((se) => se.start_date <= today && today <= se.end_date);
+      const graceFloor = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+      const recentlyEnded = (seasons || []).filter((se) => se.end_date < today && se.end_date >= graceFloor).reduce((best, se) => !best || se.end_date > best.end_date ? se : best, null);
+      const cur = active || recentlyEnded;
       state.boardSeason = cur ? String(cur.id) : "all";
     }
     const season = (seasons || []).find((se) => String(se.id) === state.boardSeason);
@@ -774,6 +777,7 @@
         <div class="arow-btns">
           <button onclick="saveCutoff(${sh.id}, this)">Change cutoff</button>
           ${sh.status !== "final" && sh.cutoff_at && new Date(sh.cutoff_at) < /* @__PURE__ */ new Date() ? '<button onclick="finalizeShow(' + sh.id + ', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ""}
+          ${sh.status === "final" ? '<button onclick="reopenShow(' + sh.id + ', this)" style="border-color:var(--coral);color:var(--coral)">Reopen</button>' : ""}
         </div>
       </div>`).join("") || '<p class="muted">No shows \u2014 sync first.</p>'}
     `)}
@@ -1083,6 +1087,20 @@ OK = remove + ban \xB7 Cancel = remove only`);
       toast(esc(e.message));
       btn.disabled = false;
       btn.textContent = "Finalize";
+    }
+  }
+  async function reopenShow(showId, btn) {
+    if (!confirm("Reopen this show? This league's scores for it are wiped and it goes back to live so scoring can run again \u2014 use this after correcting the setlist on The Carton, then Finalize once it's right.")) return;
+    btn.disabled = true;
+    btn.textContent = "\u2026";
+    try {
+      await edgeFn("reopen", { p_name: state.session.name, p_pin: state.session.pin, league_id: state.currentLeagueId, show_id: showId });
+      toast("Show reopened", "score");
+      renderAdmin();
+    } catch (e) {
+      toast(esc(e.message));
+      btn.disabled = false;
+      btn.textContent = "Reopen";
     }
   }
   async function runEdge(action, btn) {
@@ -1541,6 +1559,7 @@ Save anyway?`)) return;
     toggleFormat,
     saveCutoff,
     finalizeShow,
+    reopenShow,
     toggleBans,
     unban,
     runEdge,

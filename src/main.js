@@ -9,7 +9,7 @@ import { renderShows } from "./features/shows.js";
 import { setBoardSeason } from "./features/standings.js";
 import {
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
-  toggleFormat, saveCutoff, finalizeShow, toggleBans, unban, runEdge, bootPlayer,
+  toggleFormat, saveCutoff, finalizeShow, reopenShow, toggleBans, unban, runEdge, bootPlayer,
   searchMembers, addMember, toggleRoster, setRosterMember, toggleSection,
 } from "./features/admin.js";
 
@@ -18,7 +18,7 @@ import {
 Object.assign(window, {
   toggleTheme, logout, doLogin, doRegister, openShow, renderShows, setBoardSeason,
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
-  toggleFormat, saveCutoff, finalizeShow, toggleBans, unban, runEdge, bootPlayer,
+  toggleFormat, saveCutoff, finalizeShow, reopenShow, toggleBans, unban, runEdge, bootPlayer,
   searchMembers, addMember, toggleRoster, setRosterMember, toggleSection,
   switchToBracket, switchToLeague,
 });

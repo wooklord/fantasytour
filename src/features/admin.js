@@ -154,6 +154,7 @@ export async function renderAdmin(){
         <div class="arow-btns">
           <button onclick="saveCutoff(${sh.id}, this)">Change cutoff</button>
           ${sh.status!=='final' && sh.cutoff_at && new Date(sh.cutoff_at) < new Date() ? '<button onclick="finalizeShow('+sh.id+', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ''}
+          ${sh.status==='final' ? '<button onclick="reopenShow('+sh.id+', this)" style="border-color:var(--coral);color:var(--coral)">Reopen</button>' : ''}
         </div>
       </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
     `)}
@@ -433,6 +434,23 @@ export async function finalizeShow(showId, btn){
     toast("Show finalized 🏁", "score");
     renderAdmin();
   }catch(e){ toast(esc(e.message)); btn.disabled = false; btn.textContent = "Finalize"; }
+}
+// Un-finalizes a show so a correction to The Carton's setlist can be
+// re-scored — pairs with the "fix the setlist on The Carton, then Reopen,
+// then Finalize again" workflow (CLAUDE.md). The edge function's `reopen`
+// action does the actual work (wipes this league's scores for the show,
+// resets league_shows.status back to 'live' and winner_sent to null so the
+// corrected winner re-announces); this is just the frontend wiring that was
+// missing — the action itself has been authenticated and deployed since
+// Stage C1.
+export async function reopenShow(showId, btn){
+  if (!confirm("Reopen this show? This league's scores for it are wiped and it goes back to live so scoring can run again — use this after correcting the setlist on The Carton, then Finalize once it's right.")) return;
+  btn.disabled = true; btn.textContent = "…";
+  try{
+    await edgeFn("reopen", { p_name:state.session.name, p_pin:state.session.pin, league_id:state.currentLeagueId, show_id:showId });
+    toast("Show reopened", "score");
+    renderAdmin();
+  }catch(e){ toast(esc(e.message)); btn.disabled = false; btn.textContent = "Reopen"; }
 }
 export async function runEdge(action, btn){
   btn.disabled = true; const old = btn.textContent; btn.textContent = "…";
