@@ -166,9 +166,17 @@ const STATE_TZ: Record<string, string> = {
   AK:"America/Anchorage", HI:"Pacific/Honolulu",
   ON:"America/Toronto", QC:"America/Toronto", BC:"America/Vancouver", AB:"America/Edmonton",
 };
-function venueTz(state: string | null): string {
+// No fallback — null means the state genuinely didn't map, which callers
+// that persist this (syncShows, for the admin panel's venue-local display)
+// need to know explicitly rather than silently inheriting a guessed zone.
+function resolveVenueTz(state: string | null): string | null {
   const key = (state ?? "").trim().toUpperCase();
-  return STATE_TZ[key] ?? STATE_TZ[key.slice(0, 2)] ?? "America/New_York";
+  return STATE_TZ[key] ?? STATE_TZ[key.slice(0, 2)] ?? null;
+}
+// venueCutoffISO (below) always needs SOME zone to compute a default
+// cutoff, so it keeps the old fallback-to-Eastern behavior via this wrapper.
+function venueTz(state: string | null): string {
+  return resolveVenueTz(state) ?? "America/New_York";
 }
 
 // "6 PM local at the venue on <showdate>" as a UTC timestamp, DST-aware.
@@ -202,6 +210,11 @@ async function syncShows() {
       // it — upsert (not insert-ignore) means a later sync always carries a
       // corrected permalink forward instead of leaving a stale, 404-ing one.
       permalink: r.permalink ?? null,
+      // Resolved once here (not duplicated into the frontend) so the admin
+      // panel can read a venue's real IANA zone as data. Null when `state`
+      // doesn't map — self-heals on a later sync if the state gets
+      // corrected or STATE_TZ gains a mapping, same as permalink above.
+      timezone: resolveVenueTz(r.state ?? null),
     }));
   for (const s of incoming) {
     await supa.from("shows").upsert(s, { onConflict: "id" });

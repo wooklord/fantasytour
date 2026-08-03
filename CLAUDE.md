@@ -126,6 +126,28 @@ assertions rather than staying invisible the way a diff-only check would have).
   stored-at-score-time things don't.
 - **The single global config** currently lives in a `game_config` table (id=1). In 2.0
   this becomes per-bracket `brackets.config`.
+- **`shows.timezone`** (added via `sql/add_shows_timezone.sql`) holds each venue's
+  resolved IANA zone, computed once server-side at sync time by the edge function's
+  `resolveVenueTz(state)` (a null-capable sibling of the existing `venueTz`, which
+  keeps its old fallback-to-Eastern behavior for computing default cutoffs — a
+  different job than persisting a fact). **Null means the state genuinely didn't
+  map** — not "assume Eastern." This exists specifically so the admin panel's Shows
+  & cutoffs UI can display and edit cutoffs in real venue-local time (state→zone
+  lookup was already duplicated once and almost got duplicated a second time into
+  the frontend; this column is the single source of truth instead) — see
+  `src/core/venueTime.js` for the conversion helpers and `admin.js`'s cutoff row for
+  how a null falls back to device-local time with an explicit "timezone unknown"
+  caveat, never a silently-guessed zone. Self-heals on the next sync if a venue's
+  `state` gets corrected or `STATE_TZ` gains a mapping, same as `permalink`.
+  **Adding this column didn't backfill existing rows**: `syncShows` only upserts
+  shows inside its rolling 200-show/14-day fetch window — the same bound that
+  already limits permalink corrections (below) — so any show that had already
+  aged out of that window before this column existed stayed null and will never
+  be touched by a normal sync. Fixed once via `sql/backfill_shows_timezone.sql`
+  (computes the zone from `state` directly, same mapping, for whatever's still
+  null). Worth remembering for any *future* column added to `shows` the same
+  way: the fix needs its own one-shot backfill, adding the column alone won't
+  reach shows already outside the window.
 - Realtime only pushes tables in the `supabase_realtime` publication. `shows` and
   `scores` are in it; adding a table to realtime requires
   `alter publication supabase_realtime add table <t>`.

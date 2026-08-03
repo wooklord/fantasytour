@@ -9,6 +9,7 @@ import { markTab } from "../core/layout.js";
 import { settingsPanelHtml, wireSettingsPanel } from "./settings.js";
 import { currentBracket } from "../core/switcher.js";
 import { TIEBREAK_LABELS } from "../core/tiebreak.js";
+import { venueLocalInputValue, venueLocalToUTC, venueLocalTimeDisplay, venueAbbrev, hasDstTransition } from "../core/venueTime.js";
 
 // Seasons only ever belong to a league's Official bracket, and the season
 // editor has to keep working regardless of which bracket the switcher
@@ -151,10 +152,21 @@ export async function renderAdmin(){
       <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments. Saves both rule sections above, whether or not they're currently expanded.</p>
     </div>
     ${collapsible("shows", "Shows & cutoffs", `
-      <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
-      ${(shows||[]).map(sh => `<div class="arow">
+      <p class="muted">Cutoffs below are shown and edited in each show's OWN venue-local time, not your device's — that's the point: setting cutoffs for shows across the country in your own local time is how you'd shift one by three hours without noticing. Shows with no known venue timezone fall back to your device time (marked). Sync defaults new shows to 6 PM venue-local.</p>
+      ${(shows||[]).map(sh => {
+        const tz = sh.timezone || null;
+        const inputVal = !sh.cutoff_at ? ""
+          : tz ? venueLocalInputValue(sh.cutoff_at, tz)
+          : new Date(new Date(sh.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16);
+        const readout = !sh.cutoff_at ? "" : tz
+          ? `<p class="muted" style="margin:4px 0">Venue time: <b style="color:var(--cream)">${venueLocalTimeDisplay(sh.cutoff_at, tz)} ${esc(venueAbbrev(sh.cutoff_at, tz))}</b>${
+              hasDstTransition(inputVal, tz) ? ' <span style="color:var(--coral)">⚠ DST changes on this date — double-check this time</span>' : ""
+            }</p>`
+          : `<p class="muted" style="margin:4px 0"><span style="color:var(--coral)">Venue timezone unknown — showing your device time instead</span></p>`;
+        return `<div class="arow">
         <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue||"TBA")}</span></div>
-        <input class="cutoff-in" type="datetime-local" step="900" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16) : ""}">
+        ${readout}
+        <input class="cutoff-in" type="datetime-local" step="900" data-show="${sh.id}" data-tz="${tz||''}" value="${inputVal}">
         <div class="switcher" style="margin-bottom:8px" title="pick sheet format">
           <button class="linkbtn switcher-btn${sh.format!=='one_set'?" on":""}" onclick="toggleFormat(${sh.id}, 'standard')">2 set</button>
           <button class="linkbtn switcher-btn${sh.format==='one_set'?" on":""}" onclick="toggleFormat(${sh.id}, 'one_set')">1 set</button>
@@ -164,7 +176,8 @@ export async function renderAdmin(){
           ${sh.status!=='final' && sh.cutoff_at && new Date(sh.cutoff_at) < new Date() ? '<button onclick="finalizeShow('+sh.id+', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ''}
           ${sh.status==='final' ? '<button onclick="reopenShow('+sh.id+', this)" style="border-color:var(--coral);color:var(--coral)">Reopen</button>' : ''}
         </div>
-      </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
+      </div>`;
+      }).join("") || '<p class="muted">No shows — sync first.</p>'}
     `)}
     ${collapsible("members", "Members", `
       <div class="field"><label>Add a member</label>
@@ -429,8 +442,15 @@ export async function saveConfig(){
 export async function saveCutoff(showId, btn){
   const input = document.querySelector(`input[data-show="${showId}"]`);
   if (!input.value) return;
+  // input.value is venue-local wall-clock text when a timezone is known
+  // (data-tz set) — must be interpreted as such, not as device-local, or
+  // saving would reintroduce exactly the silent-shift bug this panel exists
+  // to prevent. Falls back to the old device-local parse when the venue's
+  // timezone isn't known (matches what's actually displayed in that case).
+  const tz = input.dataset.tz;
+  const cutoffISO = tz ? venueLocalToUTC(input.value, tz) : new Date(input.value).toISOString();
   try{
-    await rpc("admin_set_cutoff", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_show_id:showId, p_cutoff:new Date(input.value).toISOString() });
+    await rpc("admin_set_cutoff", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_show_id:showId, p_cutoff:cutoffISO });
     btn.textContent = "✔"; setTimeout(() => btn.textContent = "Change cutoff", 1500);
   }catch(e){ toast(esc(e.message)); }
 }

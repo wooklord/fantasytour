@@ -661,6 +661,54 @@
     wireSettingsPanel();
   }
 
+  // src/core/venueTime.js
+  function offsetMinutesAt(ms, tz) {
+    var _a;
+    const val = ((_a = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" }).formatToParts(new Date(ms)).find((p) => p.type === "timeZoneName")) == null ? void 0 : _a.value) || "GMT+0";
+    const m = val.match(/GMT([+-]\d+)(?::(\d+))?/);
+    if (!m) return 0;
+    const h = parseInt(m[1], 10), min = parseInt(m[2] || "0", 10);
+    return h * 60 + (h < 0 ? -min : min);
+  }
+  function venueLocalInputValue(cutoffISO, tz) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).formatToParts(new Date(cutoffISO));
+    const get = (t) => {
+      var _a;
+      return (_a = parts.find((p) => p.type === t)) == null ? void 0 : _a.value;
+    };
+    let hh = get("hour");
+    if (hh === "24") hh = "00";
+    return `${get("year")}-${get("month")}-${get("day")}T${hh}:${get("minute")}`;
+  }
+  function venueLocalToUTC(naiveLocalStr, tz) {
+    const [datePart] = naiveLocalStr.split("T");
+    const noonUTC = Date.parse(`${datePart}T12:00:00Z`);
+    const offMin = offsetMinutesAt(noonUTC, tz);
+    const asIfUTC = Date.parse(`${naiveLocalStr}:00Z`);
+    return new Date(asIfUTC - offMin * 6e4).toISOString();
+  }
+  function venueLocalTimeDisplay(cutoffISO, tz) {
+    return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(cutoffISO));
+  }
+  function venueAbbrev(cutoffISO, tz) {
+    var _a;
+    return ((_a = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", timeZoneName: "short" }).formatToParts(new Date(cutoffISO)).find((p) => p.type === "timeZoneName")) == null ? void 0 : _a.value) || "";
+  }
+  function hasDstTransition(naiveLocalStr, tz) {
+    const [datePart] = naiveLocalStr.split("T");
+    const start = Date.parse(`${datePart}T00:00:00Z`);
+    const end = Date.parse(`${datePart}T23:59:00Z`);
+    return offsetMinutesAt(start, tz) !== offsetMinutesAt(end, tz);
+  }
+
   // src/features/admin.js
   function officialBracketId() {
     var _a;
@@ -780,10 +828,15 @@
       <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments. Saves both rule sections above, whether or not they're currently expanded.</p>
     </div>
     ${collapsible("shows", "Shows & cutoffs", `
-      <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
-      ${(shows || []).map((sh) => `<div class="arow">
+      <p class="muted">Cutoffs below are shown and edited in each show's OWN venue-local time, not your device's \u2014 that's the point: setting cutoffs for shows across the country in your own local time is how you'd shift one by three hours without noticing. Shows with no known venue timezone fall back to your device time (marked). Sync defaults new shows to 6 PM venue-local.</p>
+      ${(shows || []).map((sh) => {
+      const tz = sh.timezone || null;
+      const inputVal = !sh.cutoff_at ? "" : tz ? venueLocalInputValue(sh.cutoff_at, tz) : new Date(new Date(sh.cutoff_at).getTime() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
+      const readout = !sh.cutoff_at ? "" : tz ? `<p class="muted" style="margin:4px 0">Venue time: <b style="color:var(--cream)">${venueLocalTimeDisplay(sh.cutoff_at, tz)} ${esc(venueAbbrev(sh.cutoff_at, tz))}</b>${hasDstTransition(inputVal, tz) ? ' <span style="color:var(--coral)">\u26A0 DST changes on this date \u2014 double-check this time</span>' : ""}</p>` : `<p class="muted" style="margin:4px 0"><span style="color:var(--coral)">Venue timezone unknown \u2014 showing your device time instead</span></p>`;
+      return `<div class="arow">
         <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue || "TBA")}</span></div>
-        <input class="cutoff-in" type="datetime-local" step="900" data-show="${sh.id}" value="${sh.cutoff_at ? new Date(new Date(sh.cutoff_at).getTime() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : ""}">
+        ${readout}
+        <input class="cutoff-in" type="datetime-local" step="900" data-show="${sh.id}" data-tz="${tz || ""}" value="${inputVal}">
         <div class="switcher" style="margin-bottom:8px" title="pick sheet format">
           <button class="linkbtn switcher-btn${sh.format !== "one_set" ? " on" : ""}" onclick="toggleFormat(${sh.id}, 'standard')">2 set</button>
           <button class="linkbtn switcher-btn${sh.format === "one_set" ? " on" : ""}" onclick="toggleFormat(${sh.id}, 'one_set')">1 set</button>
@@ -793,7 +846,8 @@
           ${sh.status !== "final" && sh.cutoff_at && new Date(sh.cutoff_at) < /* @__PURE__ */ new Date() ? '<button onclick="finalizeShow(' + sh.id + ', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ""}
           ${sh.status === "final" ? '<button onclick="reopenShow(' + sh.id + ', this)" style="border-color:var(--coral);color:var(--coral)">Reopen</button>' : ""}
         </div>
-      </div>`).join("") || '<p class="muted">No shows \u2014 sync first.</p>'}
+      </div>`;
+    }).join("") || '<p class="muted">No shows \u2014 sync first.</p>'}
     `)}
     ${collapsible("members", "Members", `
       <div class="field"><label>Add a member</label>
@@ -1081,8 +1135,10 @@ OK = remove + ban \xB7 Cancel = remove only`);
   async function saveCutoff(showId, btn) {
     const input = document.querySelector(`input[data-show="${showId}"]`);
     if (!input.value) return;
+    const tz = input.dataset.tz;
+    const cutoffISO = tz ? venueLocalToUTC(input.value, tz) : new Date(input.value).toISOString();
     try {
-      await rpc("admin_set_cutoff", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_show_id: showId, p_cutoff: new Date(input.value).toISOString() });
+      await rpc("admin_set_cutoff", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_show_id: showId, p_cutoff: cutoffISO });
       btn.textContent = "\u2714";
       setTimeout(() => btn.textContent = "Change cutoff", 1500);
     } catch (e) {
