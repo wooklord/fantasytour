@@ -19,9 +19,18 @@ Sibling app: the "Ambassadors" tour-map PWA (separate project, same developer).
 
 ## Current architecture (pre-2.0)
 
-- **Frontend**: ONE self-contained file, `index.html` (~1100 lines) — all HTML, CSS,
-  and JS inline, no build step. Served as a static file from **GitHub Pages**.
-  This single-file design is currently load-bearing: it deploys by pushing the file.
+- **Frontend**: split into modules under `src/` (`src/core/` for shared
+  infra — state, Supabase client, theme, switcher, session, tiebreak, format,
+  layout, realtime, dom; `src/features/` for the tab-level screens — auth,
+  shows, picks, standings, admin, settings). `node build.mjs` (esbuild, no
+  config beyond that script) bundles `src/main.js` into `app.js` + `app.js.map`
+  at the repo root; `index.html` is now a thin ~50-line shell that loads
+  `app.js` as a plain `<script src="app.js">` (no `type="module"`,
+  no import maps). The old single-file monolith described below in some
+  older notes is retired — see Stage C2a. **The bundle is checked into git
+  and must be rebuilt (`npm run build` / `node build.mjs`) and committed
+  alongside every `src/` change** — GitHub Pages serves whatever `app.js`
+  is committed, it does not run a build step itself.
 - **Backend**: **Supabase** (Postgres + Row Level Security + Realtime + Edge Functions).
   - Auth is **name + PIN** (no email/magic-link — chosen for reliability on venue
     LTE and for a friendly closed community). Writes go through `SECURITY DEFINER`
@@ -203,7 +212,21 @@ assertions rather than staying invisible the way a diff-only check would have).
 
 ---
 
-## Current deployed feature set (pre-2.0), for context
+## Feature set frozen at the start of 2.0 (historical snapshot — NOT current)
+
+**This section is not maintained and does not describe the app's current
+behavior.** It's a frozen snapshot of the pre-2.0 feature set, written once
+before the rebuild began, and every rebuild stage since has moved the actual
+UI further away from it without this section being updated to match. It has
+already sent work down the wrong path twice: it described a collapsible
+sidebar that was never built, and (in an earlier draft) an admin show-row
+layout that only ever existed in a chat message, never in the repo. Treat
+any specific claim below — exact wording, layout details, which widget does
+what — as unverified until you've actually read the relevant source
+(`src/features/*.js`, `src/core/*.js`) or checked `git log`/`git blame` on
+it. For what's actually shipped in 2.0, the "THE 2.0 REBUILD" section below
+tracks each stage explicitly as done or not-started — that's the current
+source of truth, this isn't.
 
 Slot types (opener, set1_closer, set2_opener, closer, encore, show_closer,
 second_song, **cover_pick** [repeatable, catalog-restricted to covers]) + an
@@ -313,9 +336,11 @@ database, don't run it again. `stage_a_schema.sql` itself is fixed for any futur
 run (drop-and-recreate `seasons`, matching picks/scores).
 
 **Build sequence from here:**
-1. (Claude Code first jobs, BEFORE 2.0) Reorganize repo; split `index.html` into
-   modules WITH a build step; verify GitHub Pages deploy still works; recreate the
-   test harnesses. Get git history going.
+1. **Done.** (Claude Code first jobs, BEFORE 2.0) Reorganize repo; split
+   `index.html` into modules WITH a build step; verify GitHub Pages deploy
+   still works; recreate the test harnesses. Get git history going. — see
+   the Frontend bullet under "Current architecture" above for the resulting
+   shape (`src/`, `build.mjs` → `app.js`).
 2. **Stage A** — run `sql/stage_a_schema.sql`, verify counts. App goes dark here.
 3. **Stage B** — edge function v7: global sync, per-league `league_shows` overlays
    with auto-defaulted cutoffs, the **season-activation step** that writes the frozen
@@ -557,9 +582,20 @@ the edge function/SQL seed) rather than hardcoded inline.
 
 ## Deploy model
 
-- Frontend: commit + push → GitHub Pages serves it. (After the monolith split, a build
-  step will produce the deployable output — establish and document it.)
-- Edge function: `supabase functions deploy carton-sync`.
+- Frontend: `node build.mjs` (or `npm run build`) to rebuild `app.js`/`app.js.map`
+  from `src/`, commit the bundle alongside the source change, then push → GitHub
+  Pages serves whatever's committed. There is no CI build step — a `src/` edit
+  that isn't rebuilt+committed silently ships stale behavior.
+- Edge function: deploy via the Supabase CLI (`supabase`, v2.x) — install and
+  authenticate it if it isn't already, on whatever machine you're working from.
+  Project ref is `zdfhglvjxquvkjyvophz` (matches Credentials above; `supabase
+  projects list` confirms it once authenticated). Deploy with:
+  `supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz`
+  (the `--project-ref` is redundant once linked, but explicit is safer than
+  relying on link state). A "WARNING: Docker is not running" line is harmless —
+  the CLI falls back to uploading source directly instead of bundling in a
+  container; the deploy still succeeds and the printed `dashboard_url` /
+  `"message":"Deployed Functions."` confirms it.
 - SQL: run in the Supabase SQL editor (or via `supabase db` tooling).
 - Cron: the scoring function runs on a schedule; the schedule SQL embeds the anon key
   in an Authorization header — if the key ever rotates, the cron header needs updating
