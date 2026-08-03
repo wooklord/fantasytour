@@ -167,6 +167,11 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .pod{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.85rem}
 .pod .podpts{font-family:var(--mono);color:var(--yolk);font-size:.78rem}
 .pod.first b{font-size:1rem}
+/* standings.js shrinks the trophy/numeral px size on narrow viewports to
+   match — this just tightens the gap between boxes to go with it, so 3
+   boxes (even 2 elevated + 1 not) reliably fit one row on a real phone
+   instead of the third wrapping to its own line. */
+@media (max-width:420px){ .podium{gap:8px} }
 .lb{width:100%;border-collapse:collapse}
 .lb td,.lb th{padding:10px 8px;text-align:left;border-bottom:1px dashed var(--dash)}
 .lb th{font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--cream-dim);font-weight:600}

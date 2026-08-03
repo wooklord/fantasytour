@@ -54,6 +54,17 @@ export async function renderBoard(){
   // tie for 1st means two or three golds (silver simply unused), never one
   // arbitrarily crowned gold and the other demoted to silver.
   const tierFor = o => o.rank === 1 ? "gold" : o.rank === 2 ? "silver" : "bronze";
+  // A real narrow-phone bug: at the ORIGINAL fixed 118/82px sizing, two
+  // elevated (118px) boxes plus one normal (82px) box plus gaps genuinely
+  // doesn't fit a real phone's content width, so the third box wrapped to
+  // its own line — and because it then sat alone with no sibling box for
+  // visual comparison, it *read* as bigger than its rank-1 twin even
+  // though both were pixel-identical 118px (verified: this was purely a
+  // wrap-caused illusion, not a sizing bug). Shrinking both sizes on
+  // narrow viewports (paired with .podium's tighter gap there, styles.css)
+  // is what actually keeps 3 boxes on one row.
+  const narrow = window.matchMedia("(max-width:420px)").matches;
+  const bigPx = narrow ? 76 : 118, smallPx = narrow ? 54 : 82;
   // .podium is align-items:flex-end with .pod.first only bumping trophy/
   // name size (styles.css) — there's no absolute positioning or flex
   // `order` trick, so "elevated" is purely "this box is taller than its
@@ -64,11 +75,15 @@ export async function renderBoard(){
   // the same spot instead of the trophy graphic — same rank/tier/
   // arrangement logic throughout, only what renders inside the box differs.
   const podBox = (o, big) => `<div class="pod ${big?"first":""}">${
-      isOfficial ? trophy(big?118:82, tierFor(o)) : rankNumeral(big?118:82, tierFor(o), o.rank)
+      isOfficial ? trophy(big?bigPx:smallPx, tierFor(o)) : rankNumeral(big?bigPx:smallPx, tierFor(o), o.rank)
     }<b>${esc(pname[o.id]||"?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
   const gold = order.filter(o => o.rank === 1);
   const silver = order.filter(o => o.rank === 2);
   const bronze = order.filter(o => o.rank === 3);
+  // Elevation is a direct function of resolved rank and how many players
+  // hold rank 1 — nothing about a box's position in the concatenated
+  // left/center/right array or its index ever factors in, by construction.
+  const isElevated = o => o.rank === 1 && gold.length <= 2;
   // Arrangement encodes RANK; colors (above) encode ties. The two are
   // independent — gold/silver/bronze and gold/silver/silver use the exact
   // same shape below, only tierFor's colors differ.
@@ -109,10 +124,22 @@ export async function renderBoard(){
     left = flank.filter((_, i) => i % 2 === 0);
     right = flank.filter((_, i) => i % 2 === 1);
   }
-  const elevated = new Set(gold.length <= 2 ? gold.map(o => o.id) : []);
-  const podium = order.length
-    ? `<div class="podium">${[...left, ...center, ...right].map(o => podBox(o, elevated.has(o.id))).join("")}</div>`
-    : "";
+  // Placeholder empty state: before ANY non-zero score exists among these
+  // players (not just "before the first show finalizes" — a finalized
+  // show where everyone blanked leaves the exact same all-zero tie), the
+  // podium would otherwise crown an arbitrary-looking winner out of pure
+  // ties-at-zero. Bare trophies/numerals, no names, no points — signals
+  // "nothing decided yet" instead of pretending to rank anyone. Applies to
+  // Casual too (a numbered podium showing seven 1s is just as useless).
+  const hasAnyScore = order.some(o => o.points > 0);
+  const placeholderBox = (tier, rank, big) => `<div class="pod ${big?"first":""}">${
+      isOfficial ? trophy(big?bigPx:smallPx, tier) : rankNumeral(big?bigPx:smallPx, tier, rank)
+    }</div>`;
+  const podium = !order.length
+    ? ""
+    : !hasAnyScore
+    ? `<div class="podium">${placeholderBox("silver",2,false)}${placeholderBox("gold",1,true)}${placeholderBox("bronze",3,false)}</div>`
+    : `<div class="podium">${[...left, ...center, ...right].map(o => podBox(o, isElevated(o))).join("")}</div>`;
   const statRows = rows.filter(([,r]) => r.shows > 0)
     .sort((a,b) => b[1].scoped/b[1].shows - a[1].scoped/a[1].shows);
   $("#main").innerHTML = `

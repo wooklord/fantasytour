@@ -565,10 +565,13 @@
     const scopeName = season ? esc(season.name) : "All time";
     const isOfficial = ((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official";
     const tierFor = (o) => o.rank === 1 ? "gold" : o.rank === 2 ? "silver" : "bronze";
-    const podBox = (o, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? 118 : 82, tierFor(o)) : rankNumeral(big ? 118 : 82, tierFor(o), o.rank)}<b>${esc(pname[o.id] || "?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
+    const narrow = window.matchMedia("(max-width:420px)").matches;
+    const bigPx = narrow ? 76 : 118, smallPx = narrow ? 54 : 82;
+    const podBox = (o, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? bigPx : smallPx, tierFor(o)) : rankNumeral(big ? bigPx : smallPx, tierFor(o), o.rank)}<b>${esc(pname[o.id] || "?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
     const gold = order.filter((o) => o.rank === 1);
     const silver = order.filter((o) => o.rank === 2);
     const bronze = order.filter((o) => o.rank === 3);
+    const isElevated = (o) => o.rank === 1 && gold.length <= 2;
     let left = [], center = [], right = [];
     if (gold.length >= 3) {
       center = gold;
@@ -582,8 +585,9 @@
       left = flank.filter((_, i) => i % 2 === 0);
       right = flank.filter((_, i) => i % 2 === 1);
     }
-    const elevated = new Set(gold.length <= 2 ? gold.map((o) => o.id) : []);
-    const podium = order.length ? `<div class="podium">${[...left, ...center, ...right].map((o) => podBox(o, elevated.has(o.id))).join("")}</div>` : "";
+    const hasAnyScore = order.some((o) => o.points > 0);
+    const placeholderBox = (tier, rank, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? bigPx : smallPx, tier) : rankNumeral(big ? bigPx : smallPx, tier, rank)}</div>`;
+    const podium = !order.length ? "" : !hasAnyScore ? `<div class="podium">${placeholderBox("silver", 2, false)}${placeholderBox("gold", 1, true)}${placeholderBox("bronze", 3, false)}</div>` : `<div class="podium">${[...left, ...center, ...right].map((o) => podBox(o, isElevated(o))).join("")}</div>`;
     const statRows = rows.filter(([, r]) => r.shows > 0).sort((a, b) => b[1].scoped / b[1].shows - a[1].scoped / a[1].shows);
     $("#main").innerHTML = `
     <div class="panel">
