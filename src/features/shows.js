@@ -71,19 +71,24 @@ export async function renderShows(){
   // header or closing rule there either. gameNumber IS passed through
   // (see the call site) — a show's game number is intrinsic to it, not a
   // property of which list happens to be rendering it right now.
-  const row = (s, { gameNumber, seasonLast } = {}) => {
+  // resultOwnLine is also Just-played-only (see its call site): with that
+  // section capped to a single row, the winner trophy+names can afford its
+  // own line under city/pill instead of wrapping into them — not worth the
+  // same tradeoff in Recent/Upcoming, where it's one line among many.
+  const row = (s, { gameNumber, seasonLast, resultOwnLine } = {}) => {
     const st = showState(s);
     const cls = { open:"open", live:"live", locked:"locked", final:"final", played:"final" }[st] || "";
     const cd = st === "open" ? countdown(s.cutoff_at) : null;
     const txt = st === "final" ? "complete" : (st === "open" && cd ? "locks in " + cd : st);
-    const win = st === "final" && winners[s.id]
-      ? ` <span style="color:var(--yolk);font-size:.82rem">${winBadge(36)} ${winners[s.id].names.map(esc).join(" & ")} · ${winners[s.id].points}</span>` : "";
+    const winHtml = st === "final" && winners[s.id]
+      ? `<span style="color:var(--yolk);font-size:.82rem">${winBadge(36)} ${winners[s.id].names.map(esc).join(" & ")} · ${winners[s.id].points}</span>` : "";
     const noSeason = isOfficial && !seasonOf(s.showdate);
     return `<div class="showrow${noSeason ? " unavailable" : ""}${seasonLast ? " season-last" : ""}">
       <div class="date"><span>${fmtDate(s.showdate)}</span>${gameNumber ? `<span class="gamenum">${gameNumber}</span>` : ""}</div>
       <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
         <div class="loc">${esc(s.city||"")}${s.state?", "+esc(s.state):""}
-          <span class="pill ${cls}" data-cd="${st==='open'?s.cutoff_at:''}">${txt}</span>${win}</div></div>
+          <span class="pill ${cls}" data-cd="${st==='open'?s.cutoff_at:''}">${txt}</span>${resultOwnLine ? "" : (winHtml ? " "+winHtml : "")}</div>
+        ${resultOwnLine && winHtml ? `<div style="margin-top:4px">${winHtml}</div>` : ""}</div>
       <button onclick="openShow(${s.id})">${st==='open'?'Pick':'View'}</button>
     </div>`;
   };
@@ -128,7 +133,7 @@ export async function renderShows(){
   }
   $("#main").innerHTML = `
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
-    ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
+    ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null, resultOwnLine: true })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons(past||[]) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;
