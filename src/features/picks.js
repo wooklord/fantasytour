@@ -4,7 +4,7 @@ import { state } from "../core/state.js";
 import { fetchShow } from "../core/leagueShows.js";
 import { CARTON_SITE_BASE } from "../core/config.js";
 import { fmtDate, fmtCutoff, countdown, clearTimers, clearTimersFor, showState } from "../core/format.js";
-import { trophy, winBadge } from "../core/trophy.js";
+import { trophy, winBadge, laurelSpray } from "../core/trophy.js";
 import { toast } from "../core/toast.js";
 import { currentBracket } from "../core/switcher.js";
 
@@ -116,6 +116,7 @@ export async function renderPickSheet(show){
       <button class="savebtn" id="save">Lock 'em in</button>
       <div class="countbig">${state.cfg.voting_override==='open' ? 'Admin override — voting open' : `Locks ${fmtCutoff(show.cutoff_at)} · <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
+      ${currentBracket()?.bracket_kind === "official" ? laurelSpray() : ""}
     </div>
     ${footerHtml()}`;
   document.querySelectorAll(".slotline input").forEach(attachAutocomplete);

@@ -151,6 +151,16 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .savebtn:disabled{opacity:.45}
 .countbig{font-family:var(--mono);text-align:center;margin:6px 0 0;font-size:.85rem;color:var(--paper-ink-soft)}
 .countbig b{color:var(--coral)}
+/* Official-only sheet decoration — simply the last thing in .sheet, after
+   .err, in normal document flow. Nothing needs to wrap around it on
+   multiple sides (unlike earlier corner/margin drafts), so no absolute
+   positioning or reserved padding is needed — it just can't overlap
+   earlier content, since block layout stacks strictly top-to-bottom.
+   aspect-ratio matches the SVG's own viewBox (520/260) exactly, so
+   preserveAspectRatio="none" scales x/y uniformly at any width instead of
+   distorting the leaves at narrow phone widths. */
+.laurel-spray{width:100%;aspect-ratio:520/260;margin-top:10px}
+.laurel-spray svg{width:100%;height:100%;display:block;overflow:hidden}
 
 /* ---------- leaderboard ---------- */
 .podium{display:flex;gap:18px;justify-content:center;align-items:flex-end;margin:8px 0 16px;flex-wrap:wrap}

@@ -22,3 +22,56 @@ export function rankNumeral(px, tier, rank){
   const [fill] = MEDALS[tier] || MEDALS.gold;
   return `<div style="width:${px}px;height:${px}px;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:800;font-variation-settings:'SOFT' 60,'WONK' 1;font-size:${Math.round(px*0.62)}px;line-height:1;color:${fill}">${rank}</div>`;
 }
+
+// ---------- Official pick-sheet laurel spray ----------
+// Reuses the wreath's own leaf silhouette and green palette. Composition
+// (not the graphic) is modeled on a reference image: two branches
+// crossing bare-stemmed at the bottom center, sweeping up and outward,
+// leaflets appearing only after the crossing and shrinking toward the
+// tips. Built parametrically (not traced/embedded) so it scales cleanly
+// at any width.
+const SPRAY_LEAF = "M0,0 C3.2,-3.4 8.3,-3.4 10.6,0 C8.3,3.4 3.2,3.4 0,0 Z";
+const SPRAY_GREENS = ["#5B9E45", "#447A36", "#6FB457"];
+function sprayLeaf(x, y, rot, scale, fillIdx){
+  const fill = SPRAY_GREENS[fillIdx % SPRAY_GREENS.length];
+  return `<path d="${SPRAY_LEAF}" fill="${fill}" stroke="#1A2415" stroke-width="${(1.3/scale).toFixed(2)}" stroke-linejoin="round" transform="translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${rot.toFixed(1)}) scale(${scale.toFixed(2)})"/>`;
+}
+// One frond: bare stem from the crossing point (cx,cy) out to `bareT` (as
+// a fraction of the stem's length), then leaflets alternating off the
+// stem, largest right after the bare stretch and shrinking to the tip.
+// `crossAmt` starts the stem slightly on the OPPOSITE side of center so
+// the two fronds visibly cross in an X, matching the reference.
+function sprayFrond(cx, cy, side, W, H, crossAmt, count, baseScale, tipScale, bareT){
+  const pos = t => ({
+    x: cx + side * (-crossAmt + (W + crossAmt) * t),
+    y: cy - H * Math.pow(t, 0.6),
+  });
+  let leaves = "", stemD = "";
+  for (let i = 0; i <= 40; i++){
+    const t = i / 40, p = pos(t);
+    stemD += (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1) + " ";
+  }
+  for (let i = 0; i < count; i++){
+    const t = bareT + (i / (count - 1)) * (1 - bareT);
+    const p = pos(t), p2 = pos(Math.min(1, t + 0.01));
+    const tangentDeg = Math.atan2(p2.y - p.y, p2.x - p.x) * 180 / Math.PI;
+    const altSide = i % 2 === 0 ? 1 : -1;
+    const leafT = i / (count - 1);
+    const scale = baseScale + (tipScale - baseScale) * leafT;
+    leaves += sprayLeaf(p.x, p.y, tangentDeg + altSide * 66, scale, i);
+  }
+  const stem = `<path d="${stemD}" fill="none" stroke="#1A2415" stroke-width="3.8" stroke-linecap="round"/>`;
+  return stem + leaves;
+}
+// viewBox matches .laurel-spray's aspect-ratio (520/260, styles.css)
+// exactly, so preserveAspectRatio="none" scales x/y uniformly at any
+// width — a fixed pixel height here (rather than aspect-ratio-locked)
+// distorted the leaves at narrow phone widths in earlier drafts.
+export function laurelSpray(){
+  const cx = 260, cy = 250, W = 216, H = 224, crossAmt = 26;
+  const svg = `<svg viewBox="0 0 520 260" preserveAspectRatio="none">
+    ${sprayFrond(cx, cy, -1, W, H, crossAmt, 20, 5.6, 2.0, 0.14)}
+    ${sprayFrond(cx, cy, 1, W, H, crossAmt, 20, 5.6, 2.0, 0.14)}
+  </svg>`;
+  return `<div class="laurel-spray">${svg}</div>`;
+}
