@@ -569,18 +569,18 @@ run (drop-and-recreate `seasons`, matching picks/scores).
     by design (FB league admins manually verify signups via Facebook
     comments), so a parallel request-queue would duplicate
     `admin_add_league_member` for no real gain at this scale.
-- **Official gating must BLOCK pick submission, not silently skip scoring.** Two
-  distinct cases, each with its own error:
-  1. No season covers the show's date — check the SHOW's date, not today's,
-     since a future show inside a future season's range is legitimately votable
-     now.
-  2. The player isn't in that season's participant set — check `season_rosters`
-     if the season has activated (`roster_locked_at` set); otherwise fall back to
-     the live `official_opt_in` flag as the proxy (no snapshot exists yet).
-  Enforce this in the rewritten `submit_picks` RPC as the authoritative guard. The
-  frontend must not even present a fillable Official pick sheet in either case —
-  show the reason and point the player at Casual instead. Casual is unaffected:
-  no seasons, no opt-in, always votable.
+- **Official gating must BLOCK pick submission, not silently skip scoring —
+  built.** `sql/stage_c2a_rpcs.sql`'s `_official_gate` (called by both
+  `can_submit_picks` and `submit_picks`, one implementation) does both cases
+  exactly as specified: checked against the SHOW's date, not today's
+  (`_official_gate`'s `sh.showdate between start_date and end_date`, not
+  `current_date`); falls back to the live `official_opt_in` flag only when
+  `roster_locked_at is null` (season not yet activated), otherwise checks
+  `season_rosters`. `submit_picks` raises on `not gate.ok` — a real block, not a
+  silent skip. Frontend: `picks.js`'s `openShow()` calls `can_submit_picks` first
+  and renders `renderIneligible(show, gate.reason)` instead of the pick sheet
+  when blocked, pointing at Casual. Casual is unaffected (`_official_gate`
+  returns `ok:true` immediately for any non-official bracket).
 - **Admin warning: no season covering upcoming shows — built.** `admin.js`'s
   Seasons panel shows a warning (compact M/D dates, no cap on the list) for any
   upcoming show the Official bracket's seasons don't cover, rendered outside
@@ -588,12 +588,25 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   collapsed. Since submission is blocked (not silently unscored) in that case,
   forgetting to create a season closes Official entirely — this warning is the
   mitigation.
-- **Opt-in override.** League admins can add or remove a player from a running
-  Official season's `season_rosters` directly, including someone who opted out
-  before activation. Removal keeps that player's existing scores frozen and just
-  stops further accrual. No audit trail of when someone was added, and no
-  standings indicator for it — a mid-season addition is inherently handicapped by
-  the shows they missed, and the players will sort it out among themselves.
+- **Opt-in override — built, but one detail below has since changed.**
+  `admin_set_season_roster` (Stage C1, re-touched by Stage D) lets a league
+  admin add or remove any player from a running Official season's
+  `season_rosters` directly — no check against `official_opt_in` at all, so
+  this does cover someone who opted out before activation, as specified.
+  Removal is confirmed to only stop future accrual, not touch history: the
+  edge function's `scoreBracket` re-derives `allowedPlayerIds` from
+  `season_rosters` fresh on every pass and only upserts scores for players
+  currently in that set — there's no code path that deletes or rewrites a
+  removed player's already-written `scores` rows, so past points stay frozen
+  exactly as designed. **The "no audit trail" half of this note is now
+  false** — `sql/stage_d_tiebreakers.sql` added `season_rosters.added_at`,
+  stamped on every insert (both this override and the season-activation
+  snapshot), built for a different reason (the "fewest zeros" tiebreaker
+  needs a mid-season add's join date to scope zeros correctly) but a real
+  timestamp regardless. "No standings indicator for it" is still true,
+  though — `added_at` is only ever consumed as a scoring input
+  (`rosterJoinDates` in `standings.js`), never rendered anywhere a player or
+  admin would see it directly.
 - **Player tooltips on pick-sheet slots** — plain-language definitions so bets are
   informed. Especially the three closers (a player recently lost points picking Show
   Closer when they meant Set 2 Closer), the Any Debut wildcard, and Cover Pick's
@@ -618,11 +631,14 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   free: Casual has no seasons, so it always lands on All time, which is correct
   since Casual is a perpetual tally. Covered by a regression check in
   `test/scenario.test.mjs`.
-- **`players_public` no longer carries admin status** (Stage A drops `is_admin` and
-  recreates the view without it). The current `loadPlayers()` reads `p.is_admin` from
-  this view to show the ★ marker; in 2.0 that has to come from
-  `league_members.is_league_admin` (and `players.is_global_admin` for Global), scoped
-  per league.
+- **`players_public` no longer carries admin status — moot, not just done.**
+  This bullet described a migration TODO for `loadPlayers()`, which read
+  `p.is_admin` off `players_public` to show the ★ marker. That function no
+  longer exists anywhere in `src/` (confirmed — zero matches for either
+  `loadPlayers` or `is_admin`) — it wasn't migrated, it was replaced outright
+  by Stage C2b's `admin_list_members`/`loadMembers()` (see that bullet above),
+  which gets `is_league_admin` from `league_members` directly, exactly the
+  source this note called for. Nothing left to do here.
 
 ---
 
