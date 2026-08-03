@@ -51,12 +51,6 @@ export function venueLocalToUTC(naiveLocalStr, tz){
   return new Date(asIfUTC - offMin * 60000).toISOString();
 }
 
-// "6:00 PM" — the human-readable time, no zone abbreviation.
-export function venueLocalTimeDisplay(cutoffISO, tz){
-  return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true })
-    .format(new Date(cutoffISO));
-}
-
 // "PDT" / "EST" / etc. — resolved from the real IANA rules for this exact
 // date, so it's DST-correct without hardcoding transition dates anywhere.
 export function venueAbbrev(cutoffISO, tz){

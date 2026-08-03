@@ -8,7 +8,7 @@
 //   node test/venueTime.test.mjs
 
 import {
-  venueLocalInputValue, venueLocalToUTC, venueLocalTimeDisplay, venueAbbrev, hasDstTransition,
+  venueLocalInputValue, venueLocalToUTC, venueAbbrev, hasDstTransition,
 } from "../src/core/venueTime.js";
 
 const failures = [];
@@ -19,13 +19,12 @@ function check(label, actual, expected) {
 }
 
 // =================================================================
-// 1. UTC -> venue-local wall clock and display, DST-correct abbreviation.
+// 1. UTC -> venue-local wall clock, DST-correct abbreviation.
 // =================================================================
 {
   const summer = "2026-08-02T01:00:00.000Z"; // 2026-08-01 6:00 PM PDT
   check("summer UTC->venue-local wall clock (PDT, UTC-7)",
     venueLocalInputValue(summer, "America/Los_Angeles"), "2026-08-01T18:00");
-  check("summer time display", venueLocalTimeDisplay(summer, "America/Los_Angeles"), "6:00 PM");
   check("summer abbreviation is PDT, not PST", venueAbbrev(summer, "America/Los_Angeles"), "PDT");
 
   const winter = "2026-01-02T02:00:00.000Z"; // 2026-01-01 6:00 PM PST

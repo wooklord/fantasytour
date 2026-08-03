@@ -9,7 +9,7 @@ import { markTab } from "../core/layout.js";
 import { settingsPanelHtml, wireSettingsPanel } from "./settings.js";
 import { currentBracket } from "../core/switcher.js";
 import { TIEBREAK_LABELS } from "../core/tiebreak.js";
-import { venueLocalInputValue, venueLocalToUTC, venueLocalTimeDisplay, venueAbbrev, hasDstTransition } from "../core/venueTime.js";
+import { venueLocalInputValue, venueLocalToUTC, venueAbbrev, hasDstTransition } from "../core/venueTime.js";
 
 // Seasons only ever belong to a league's Official bracket, and the season
 // editor has to keep working regardless of which bracket the switcher
@@ -152,20 +152,23 @@ export async function renderAdmin(){
       <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments. Saves both rule sections above, whether or not they're currently expanded.</p>
     </div>
     ${collapsible("shows", "Shows & cutoffs", `
-      <p class="muted">Cutoffs below are shown and edited in each show's OWN venue-local time, not your device's — that's the point: setting cutoffs for shows across the country in your own local time is how you'd shift one by three hours without noticing. Shows with no known venue timezone fall back to your device time (marked). Sync defaults new shows to 6 PM venue-local.</p>
+      <p class="muted">Cutoffs are shown and edited in each show's venue-local time. New shows default to 6 PM venue-local.</p>
       ${(shows||[]).map(sh => {
         const tz = sh.timezone || null;
         const inputVal = !sh.cutoff_at ? ""
           : tz ? venueLocalInputValue(sh.cutoff_at, tz)
           : new Date(new Date(sh.cutoff_at).getTime()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16);
-        const readout = !sh.cutoff_at ? "" : tz
-          ? `<p class="muted" style="margin:4px 0">Venue time: <b style="color:var(--cream)">${venueLocalTimeDisplay(sh.cutoff_at, tz)} ${esc(venueAbbrev(sh.cutoff_at, tz))}</b>${
+        // The input already shows the time — this only needs to name the
+        // zone (and carry the caveats that add real information), not
+        // restate the value a second time.
+        const zoneLabel = !sh.cutoff_at ? "" : tz
+          ? `<div class="muted" style="font-size:.75rem;margin:8px 0 2px">Venue zone: <b style="color:var(--cream)">${esc(venueAbbrev(sh.cutoff_at, tz))}</b>${
               hasDstTransition(inputVal, tz) ? ' <span style="color:var(--coral)">⚠ DST changes on this date — double-check this time</span>' : ""
-            }</p>`
-          : `<p class="muted" style="margin:4px 0"><span style="color:var(--coral)">Venue timezone unknown — showing your device time instead</span></p>`;
+            }</div>`
+          : `<div class="muted" style="font-size:.75rem;margin:8px 0 2px"><span style="color:var(--coral)">Device time — venue timezone unknown</span></div>`;
         return `<div class="arow">
         <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue||"TBA")}</span></div>
-        ${readout}
+        ${zoneLabel}
         <input class="cutoff-in" type="datetime-local" step="900" data-show="${sh.id}" data-tz="${tz||''}" value="${inputVal}">
         <div class="switcher" style="margin-bottom:8px" title="pick sheet format">
           <button class="linkbtn switcher-btn${sh.format!=='one_set'?" on":""}" onclick="toggleFormat(${sh.id}, 'standard')">2 set</button>
