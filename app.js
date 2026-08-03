@@ -361,7 +361,7 @@
     }
     const isRecent = (s) => s.showdate < todayStr || s.status === "final";
     const upcoming = (up || []).filter((s) => !isRecent(s));
-    const justPlayed = (up || []).filter(isRecent);
+    const justPlayed = (up || []).filter(isRecent).sort((a, b) => b.showdate.localeCompare(a.showdate) || b.id - a.id).slice(0, 1);
     const finals = [...up || [], ...past || []].filter((s) => s.status === "final").map((s) => s.id);
     const winners = {};
     if (finals.length) {
@@ -416,7 +416,7 @@
     }
     $("#main").innerHTML = `
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
-    ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(row).join("")}</div>` : ""}
+    ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet \u2014 admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons(past || []) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;

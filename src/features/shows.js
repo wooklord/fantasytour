@@ -38,7 +38,16 @@ export async function renderShows(){
   }
   const isRecent = s => s.showdate < todayStr || s.status === "final";
   const upcoming = (up||[]).filter(s => !isRecent(s));
-  const justPlayed = (up||[]).filter(isRecent);
+  // "Just played" is the single most recently played show, not everything
+  // still inside the 2-day grace window — a two-night run or festival
+  // weekend can put more than one already-played show in that window, and
+  // the other one belongs in Recent, not doubled up here. `id` is Carton's
+  // own show_id (see schema.sql's comment on the column) — the closest
+  // thing to a same-day sequence this data has, so ties on showdate break
+  // on it rather than an invented rule.
+  const justPlayed = (up||[]).filter(isRecent)
+    .sort((a,b) => b.showdate.localeCompare(a.showdate) || b.id - a.id)
+    .slice(0, 1);
   const finals = [...(up||[]), ...(past||[])].filter(s => s.status === "final").map(s => s.id);
   const winners = {};
   if (finals.length){
@@ -57,9 +66,11 @@ export async function renderShows(){
   // Official-without-a-covering-season is visible up front (greyed row),
   // not just discovered after tapping Pick — but the Pick button and the
   // existing "tap through, see the reason, link to Casual" flow stay as-is.
-  // gameNumber/seasonLast are omitted for the "Just played" list below,
-  // which renders via a bare row() call outside withSeasons() and stays
-  // un-sectioned by design — no season header there either.
+  // seasonLast is omitted for the "Just played" list below, which renders
+  // outside withSeasons() and stays un-sectioned by design — no season
+  // header or closing rule there either. gameNumber IS passed through
+  // (see the call site) — a show's game number is intrinsic to it, not a
+  // property of which list happens to be rendering it right now.
   const row = (s, { gameNumber, seasonLast } = {}) => {
     const st = showState(s);
     const cls = { open:"open", live:"live", locked:"locked", final:"final", played:"final" }[st] || "";
@@ -117,7 +128,7 @@ export async function renderShows(){
   }
   $("#main").innerHTML = `
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
-    ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(row).join("")}</div>` : ""}
+    ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons(past||[]) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;
