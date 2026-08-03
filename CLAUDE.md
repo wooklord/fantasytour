@@ -429,9 +429,10 @@ run (drop-and-recreate `seasons`, matching picks/scores).
     league's `scores` for the show, flips `league_shows.status` back to `live`)
     then `finalize` (re-scores clean under the corrected logic, since post-fix
     the only pass that ever freezes a closer-family slot is the finalize pass
-    itself). Boston 7/31 itself has **not** been repaired yet as of this fix
-    landing — do that via reopen+finalize once it's safe to (i.e. not while
-    another show is live).
+    itself). **Boston 7/31 has been repaired** — reopened + finalized via the
+    admin panel's Reopen button (built and smoke-tested against this real
+    show), `winner_sent` now carries a fresh timestamp from the corrected
+    scoring pass instead of the original frozen-bug result.
 - **Duplicates stay OFF by default.** Add a warning tooltip on that admin toggle
   noting the consequence: with duplicates allowed, on a one-song encore a song picked
   for both Encore and Show Closer scores both slots — usually a free double.
