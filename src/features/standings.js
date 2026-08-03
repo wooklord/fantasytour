@@ -159,7 +159,12 @@ export async function renderBoard(){
         // number is what actually explains the placement. No separate
         // "tied" line: when the stack exhausts, the last layer's values
         // are already equal on every tied row — that IS the tie, visibly.
-        const layerLines = (o.layers||[])
+        // Suppressed under the identical hasAnyScore check that gates the
+        // placeholder podium (not a parallel condition) — a fresh season
+        // where everyone's at 0 would otherwise tie through the whole
+        // stack and print a "tiebreak: fewest zeros (0)" line for every
+        // row, which explains nothing real.
+        const layerLines = !hasAnyScore ? "" : (o.layers||[])
           .map(l => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`)
           .join("");
         return `<tr class="${o.id===state.session.id?"me":""}">

@@ -598,7 +598,7 @@
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map((o) => {
       const r = T[o.id];
-      const layerLines = (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`).join("");
+      const layerLines = !hasAnyScore ? "" : (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`).join("");
       return `<tr class="${o.id === state.session.id ? "me" : ""}">
         <td class="rank">${o.rank}</td><td>${esc(pname[o.id] || "?")}${layerLines}</td>
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;

@@ -74,6 +74,10 @@ function check(label, actual, expected) {
   check("distinct scores rank sequentially, untouched by tiebreakers",
     order.map(o => [o.id, o.rank, o.tied, o.resolvedBy]),
     [["p1", 1, false, null], ["p2", 2, false, null]]);
+  // Explicit, not just inferred from resolvedBy: a player at a unique
+  // score carries NO layers at all — the row should never render a
+  // tiebreak label for someone who was never actually tied with anyone.
+  check("distinct scores carry zero tiebreak layers", order.map(o => o.layers), [[], []]);
 }
 
 // =================================================================
