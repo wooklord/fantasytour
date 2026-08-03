@@ -162,7 +162,7 @@ export async function renderAdmin(){
         // zone (and carry the caveats that add real information), not
         // restate the value a second time.
         const zoneLabel = !sh.cutoff_at ? "" : tz
-          ? `<div class="muted" style="font-size:.75rem;margin:8px 0 2px">Venue zone: <b style="color:var(--cream)">${esc(venueAbbrev(sh.cutoff_at, tz))}</b>${
+          ? `<div class="muted" style="font-size:.75rem;margin:8px 0 2px">Timezone: <b style="color:var(--cream)">${esc(venueAbbrev(sh.cutoff_at, tz))}</b>${
               hasDstTransition(inputVal, tz) ? ' <span style="color:var(--coral)">⚠ DST changes on this date — double-check this time</span>' : ""
             }</div>`
           : `<div class="muted" style="font-size:.75rem;margin:8px 0 2px"><span style="color:var(--coral)">Device time — venue timezone unknown</span></div>`;
