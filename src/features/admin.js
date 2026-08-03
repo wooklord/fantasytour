@@ -79,7 +79,15 @@ export async function renderAdmin(){
     && !(seasonsA||[]).some(se => se.start_date <= sh.showdate && sh.showdate <= se.end_date));
   const seasonWarning = uncoveredShows.length ? `<div class="noticebox">
       ⚠️ Official has no season covering ${uncoveredShows.length === 1 ? "an upcoming show" : uncoveredShows.length + " upcoming shows"} —
-      picks will be blocked there until a season is added: ${uncoveredShows.map(sh => `${esc(fmtDate(sh.showdate))} ${esc(sh.venue||"TBA")}`).join(", ")}</div>` : "";
+      picks will be blocked there until a season is added: ${uncoveredShows.map(sh => {
+        // Just the compact M/D, no venue — this list has no cap and grows one
+        // entry per un-seasoned upcoming show, so venue names get unwieldy
+        // fast and the date alone is enough to act on. Sliced straight off
+        // the "YYYY-MM-DD" string rather than through a Date object, so
+        // there's no local-timezone rollover risk right at a date boundary.
+        const [, m, d] = sh.showdate.split("-");
+        return `${Number(m)}/${Number(d)}`;
+      }).join(", ")}</div>` : "";
   $("#main").innerHTML = `
     <div class="panel"><h2>Who's picked</h2>
       <div class="field"><label>Show</label>

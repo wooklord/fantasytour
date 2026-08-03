@@ -702,7 +702,10 @@
     const uncoveredShows = (shows || []).filter((sh) => sh.showdate >= todayA && !(seasonsA || []).some((se) => se.start_date <= sh.showdate && sh.showdate <= se.end_date));
     const seasonWarning = uncoveredShows.length ? `<div class="noticebox">
       \u26A0\uFE0F Official has no season covering ${uncoveredShows.length === 1 ? "an upcoming show" : uncoveredShows.length + " upcoming shows"} \u2014
-      picks will be blocked there until a season is added: ${uncoveredShows.map((sh) => `${esc(fmtDate(sh.showdate))} ${esc(sh.venue || "TBA")}`).join(", ")}</div>` : "";
+      picks will be blocked there until a season is added: ${uncoveredShows.map((sh) => {
+      const [, m, d] = sh.showdate.split("-");
+      return `${Number(m)}/${Number(d)}`;
+    }).join(", ")}</div>` : "";
     $("#main").innerHTML = `
     <div class="panel"><h2>Who's picked</h2>
       <div class="field"><label>Show</label>
