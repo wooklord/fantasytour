@@ -652,6 +652,31 @@
     var _a;
     return (_a = state.leagues.find((l) => l.league_id === state.currentLeagueId && l.bracket_kind === "official")) == null ? void 0 : _a.bracket_id;
   }
+  var sectionState = {};
+  try {
+    sectionState = JSON.parse(localStorage.getItem("ft_admin_sections") || "{}");
+  } catch (e) {
+    sectionState = {};
+  }
+  function sectionOpen(key) {
+    return !!sectionState[key];
+  }
+  function toggleSection(key) {
+    sectionState[key] = !sectionOpen(key);
+    localStorage.setItem("ft_admin_sections", JSON.stringify(sectionState));
+    const body = $("#sec-" + key), btn = $("#sec-btn-" + key);
+    if (body) body.classList.toggle("hidden", !sectionState[key]);
+    if (btn) btn.textContent = sectionState[key] ? "hide" : "show";
+  }
+  function collapsible(key, title, bodyHtml, alwaysVisible = "") {
+    const open = sectionOpen(key);
+    return `<div class="panel">
+    <div class="row"><h2 style="margin:0">${title}</h2>
+      <button class="linkbtn" id="sec-btn-${key}" onclick="toggleSection('${key}')" style="margin-left:auto">${open ? "hide" : "show"}</button></div>
+    ${alwaysVisible}
+    <div id="sec-${key}" class="${open ? "" : "hidden"}">${bodyHtml}</div>
+  </div>`;
+  }
   async function renderAdmin() {
     var _a, _b, _c, _d, _e;
     clearTimersFor("admin");
@@ -671,6 +696,10 @@
     ]);
     const todayA = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
     const nextShow = (shows || []).find((sh) => sh.showdate >= todayA) || (shows || [])[(shows || []).length - 1];
+    const uncoveredShows = (shows || []).filter((sh) => sh.showdate >= todayA && !(seasonsA || []).some((se) => se.start_date <= sh.showdate && sh.showdate <= se.end_date));
+    const seasonWarning = uncoveredShows.length ? `<div class="noticebox">
+      \u26A0\uFE0F Official has no season covering ${uncoveredShows.length === 1 ? "an upcoming show" : uncoveredShows.length + " upcoming shows"} \u2014
+      picks will be blocked there until a season is added: ${uncoveredShows.map((sh) => `${esc(fmtDate(sh.showdate))} ${esc(sh.venue || "TBA")}`).join(", ")}</div>` : "";
     $("#main").innerHTML = `
     <div class="panel"><h2>Who's picked</h2>
       <div class="field"><label>Show</label>
@@ -679,7 +708,7 @@
         </select></div>
       <div id="roster"><p class="muted">Pick a show.</p></div>
     </div>
-    <div class="panel"><h2>Master switch</h2>
+    ${collapsible("master", "Master switch", `
       <div class="field"><label>Voting override</label>
         <select id="c-override">
           <option value="auto" ${(cfg.voting_override || "auto") === "auto" ? "selected" : ""}>Auto \u2014 cutoffs decide</option>
@@ -687,21 +716,20 @@
           <option value="open" ${cfg.voting_override === "open" ? "selected" : ""}>Open \u2014 voting open for today + future shows</option>
         </select></div>
       <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.</p>
-    </div>
-    <div class="panel"><h2>Seasons</h2>
+    `)}
+    ${collapsible("seasons", "Seasons", `
       <p class="muted">Named date ranges \u2014 shows sort themselves in by date.</p>
       <div id="seasonrows">${(seasonsA || []).map(seasonRow).join("")}</div>
       <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
-    </div>
-    ${((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" ? `
-    <div class="panel"><h2>Season tiebreakers</h2>
+    `, seasonWarning)}
+    ${((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" ? collapsible("tiebreakers", "Season tiebreakers", `
       <p class="muted">Applies only to Official's season standings, when a season ends with players tied on points. Tried in order \u2014 the first layer that separates two players decides. Leave all "None", or exhaust every layer without a difference, and they share the placing \u2014 same as a per-show tie.</p>
       <div class="grid2">
         ${[0, 1, 2].map((i) => tiebreakerSelectRow(i, (cfg.tiebreakers || [])[i] || "")).join("")}
       </div>
       <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros \u2014 any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins \u2014 per-show ties still share the crown. Highest single-show score.</p>
-    </div>` : ""}
-    <div class="panel"><h2>Game rules \u2014 standard shows</h2>
+    `) : ""}
+    ${collapsible("rules-standard", "Game rules \u2014 standard shows", `
       <p class="muted">Slotted picks (position matters):</p>
       <div id="slots">${(cfg.slots || []).map((sl) => adminSlotRow(sl)).join("")}</div>
       <button class="btn ghost small" onclick="addSlot('slots')">+ add slot</button>
@@ -719,8 +747,8 @@
         <div class="field"><label>Wildcard: "Any Debut" (hits if any debut is played)</label>
           <select id="c-wcdebut"><option value="true" ${((_c = (_b = cfg.wildcards) == null ? void 0 : _b.debut) != null ? _c : true) ? "selected" : ""}>Players may pick it</option><option value="false" ${((_e = (_d = cfg.wildcards) == null ? void 0 : _d.debut) != null ? _e : true) ? "" : "selected"}>Off</option></select></div>
       </div>
-    </div>
-    <div class="panel"><h2>Game rules \u2014 one-set shows</h2>
+    `)}
+    ${collapsible("rules-oneset", "Game rules \u2014 one-set shows", `
       <p class="muted">Used for shows toggled to "1 set" below. Festival-tagged shows sync in as 1 set automatically.</p>
       <div id="slots1">${(os.slots || []).map((sl) => adminSlotRow(sl)).join("")}</div>
       <button class="btn ghost small" onclick="addSlot('slots1')">+ add slot</button>
@@ -728,11 +756,13 @@
         <div class="field"><label>Flat picks (count)</label><input id="c1-flat" type="number" min="0" value="${os.flat_picks}"></div>
         <div class="field"><label>Points per flat pick</label><input id="c1-flatpts" type="number" min="0" value="${os.flat_points}"></div>
       </div>
+    `)}
+    <div class="panel">
       <button class="btn" onclick="saveConfig()">Save all rules</button>
       <div class="err" id="cfg-err"></div>
-      <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments.</p>
+      <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments. Saves both rule sections above, whether or not they're currently expanded.</p>
     </div>
-    <div class="panel"><h2>Shows & cutoffs</h2>
+    ${collapsible("shows", "Shows & cutoffs", `
       <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
       ${(shows || []).map((sh) => `<div class="arow">
         <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue || "TBA")}</span></div>
@@ -746,23 +776,23 @@
           ${sh.status !== "final" && sh.cutoff_at && new Date(sh.cutoff_at) < /* @__PURE__ */ new Date() ? '<button onclick="finalizeShow(' + sh.id + ', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ""}
         </div>
       </div>`).join("") || '<p class="muted">No shows \u2014 sync first.</p>'}
-    </div>
-    <div class="panel"><h2>Members</h2>
+    `)}
+    ${collapsible("members", "Members", `
       <div class="field"><label>Add a member</label>
         <input id="member-search" placeholder="Search registered players by name\u2026" oninput="searchMembers()" autocomplete="off"></div>
       <div id="member-results"></div>
       <div id="playerlist"><p class="muted">Loading\u2026</p></div>
       <button class="linkbtn" id="banToggle" onclick="toggleBans()" style="margin-top:8px">show ban list</button>
       <div id="banlist" class="hidden" style="margin-top:6px"></div>
-    </div>
-    <div class="panel"><h2>Data</h2>
+    `)}
+    ${collapsible("data", "Data", `
       <div class="row">
         <button class="btn ghost small" onclick="runEdge('sync_shows', this)">Sync shows</button>
         <button class="btn ghost small" onclick="runEdge('sync_songs', this)">Sync song catalog</button>
         <button class="btn ghost small" onclick="runEdge('score', this)">Run scoring now</button>
       </div>
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
-    </div>
+    `)}
     ${settingsPanelHtml()}
     ${footerHtml()}`;
     if ((shows || []).length) loadRoster();
@@ -1519,6 +1549,7 @@ Save anyway?`)) return;
     addMember,
     toggleRoster,
     setRosterMember,
+    toggleSection,
     switchToBracket,
     switchToLeague
   });

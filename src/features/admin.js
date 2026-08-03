@@ -19,6 +19,40 @@ function officialBracketId(){
   return state.leagues.find(l => l.league_id === state.currentLeagueId && l.bracket_kind === "official")?.bracket_id;
 }
 
+// Per-device collapse state for the admin panel's sections — same idiom as
+// ft_theme2/ft_bracket_id (core/theme.js, core/switcher.js): a plain
+// localStorage-backed map read once at module load, written back on every
+// toggle. Every section wired through collapsible() below defaults to
+// collapsed (a missing key is falsy), so there's no separate "defaults"
+// list to maintain — "Who's picked" and Settings never call collapsible()
+// at all, since they're always expanded and have no toggle.
+let sectionState = {};
+try{ sectionState = JSON.parse(localStorage.getItem("ft_admin_sections") || "{}"); }catch(e){ sectionState = {}; }
+function sectionOpen(key){ return !!sectionState[key]; }
+export function toggleSection(key){
+  sectionState[key] = !sectionOpen(key);
+  localStorage.setItem("ft_admin_sections", JSON.stringify(sectionState));
+  const body = $("#sec-"+key), btn = $("#sec-btn-"+key);
+  if (body) body.classList.toggle("hidden", !sectionState[key]);
+  if (btn) btn.textContent = sectionState[key] ? "hide" : "show";
+}
+// Collapsing only toggles a CSS class (.hidden => display:none) on the body
+// div — the section's inputs/selects stay in the DOM with their values
+// intact and fully readable by querySelectorAll (readSlots, saveConfig,
+// etc.) whether or not the section is currently open. `alwaysVisible` is a
+// slot for content that must stay visible even when collapsed (the
+// Official-no-season warning) — it renders between the header and the
+// collapsible body, never inside it.
+function collapsible(key, title, bodyHtml, alwaysVisible = ""){
+  const open = sectionOpen(key);
+  return `<div class="panel">
+    <div class="row"><h2 style="margin:0">${title}</h2>
+      <button class="linkbtn" id="sec-btn-${key}" onclick="toggleSection('${key}')" style="margin-left:auto">${open ? "hide" : "show"}</button></div>
+    ${alwaysVisible}
+    <div id="sec-${key}" class="${open ? "" : "hidden"}">${bodyHtml}</div>
+  </div>`;
+}
+
 export async function renderAdmin(){
   clearTimersFor("admin"); state.tab = "admin"; markTab();
   await loadConfig();
@@ -35,6 +69,17 @@ export async function renderAdmin(){
   ]);
   const todayA = new Date().toLocaleDateString('sv');
   const nextShow = (shows||[]).find(sh => sh.showdate >= todayA) || (shows||[])[(shows||[]).length-1];
+  // Official-no-season warning: checked against the show's own date (an
+  // upcoming show, not "today"), independent of which bracket the switcher
+  // currently shows — Seasons always manages the league's Official bracket
+  // regardless (see officialBracketId above). Rendered via collapsible()'s
+  // alwaysVisible slot, outside the Seasons section's collapsible body, so
+  // it stays visible whether or not that section is expanded.
+  const uncoveredShows = (shows||[]).filter(sh => sh.showdate >= todayA
+    && !(seasonsA||[]).some(se => se.start_date <= sh.showdate && sh.showdate <= se.end_date));
+  const seasonWarning = uncoveredShows.length ? `<div class="noticebox">
+      ⚠️ Official has no season covering ${uncoveredShows.length === 1 ? "an upcoming show" : uncoveredShows.length + " upcoming shows"} —
+      picks will be blocked there until a season is added: ${uncoveredShows.map(sh => `${esc(fmtDate(sh.showdate))} ${esc(sh.venue||"TBA")}`).join(", ")}</div>` : "";
   $("#main").innerHTML = `
     <div class="panel"><h2>Who's picked</h2>
       <div class="field"><label>Show</label>
@@ -43,7 +88,7 @@ export async function renderAdmin(){
         </select></div>
       <div id="roster"><p class="muted">Pick a show.</p></div>
     </div>
-    <div class="panel"><h2>Master switch</h2>
+    ${collapsible("master", "Master switch", `
       <div class="field"><label>Voting override</label>
         <select id="c-override">
           <option value="auto" ${(cfg.voting_override||"auto")==="auto"?"selected":""}>Auto — cutoffs decide</option>
@@ -51,21 +96,20 @@ export async function renderAdmin(){
           <option value="open" ${cfg.voting_override==="open"?"selected":""}>Open — voting open for today + future shows</option>
         </select></div>
       <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.</p>
-    </div>
-    <div class="panel"><h2>Seasons</h2>
+    `)}
+    ${collapsible("seasons", "Seasons", `
       <p class="muted">Named date ranges — shows sort themselves in by date.</p>
       <div id="seasonrows">${(seasonsA||[]).map(seasonRow).join("")}</div>
       <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
-    </div>
-    ${currentBracket()?.bracket_kind === "official" ? `
-    <div class="panel"><h2>Season tiebreakers</h2>
+    `, seasonWarning)}
+    ${currentBracket()?.bracket_kind === "official" ? collapsible("tiebreakers", "Season tiebreakers", `
       <p class="muted">Applies only to Official's season standings, when a season ends with players tied on points. Tried in order — the first layer that separates two players decides. Leave all "None", or exhaust every layer without a difference, and they share the placing — same as a per-show tie.</p>
       <div class="grid2">
         ${[0,1,2].map(i => tiebreakerSelectRow(i, (cfg.tiebreakers||[])[i] || "")).join("")}
       </div>
       <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros — any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins — per-show ties still share the crown. Highest single-show score.</p>
-    </div>` : ""}
-    <div class="panel"><h2>Game rules — standard shows</h2>
+    `) : ""}
+    ${collapsible("rules-standard", "Game rules — standard shows", `
       <p class="muted">Slotted picks (position matters):</p>
       <div id="slots">${(cfg.slots||[]).map(sl => adminSlotRow(sl)).join("")}</div>
       <button class="btn ghost small" onclick="addSlot('slots')">+ add slot</button>
@@ -83,8 +127,8 @@ export async function renderAdmin(){
         <div class="field"><label>Wildcard: "Any Debut" (hits if any debut is played)</label>
           <select id="c-wcdebut"><option value="true" ${(cfg.wildcards?.debut ?? true)?"selected":""}>Players may pick it</option><option value="false" ${(cfg.wildcards?.debut ?? true)?"":"selected"}>Off</option></select></div>
       </div>
-    </div>
-    <div class="panel"><h2>Game rules — one-set shows</h2>
+    `)}
+    ${collapsible("rules-oneset", "Game rules — one-set shows", `
       <p class="muted">Used for shows toggled to "1 set" below. Festival-tagged shows sync in as 1 set automatically.</p>
       <div id="slots1">${(os.slots||[]).map(sl => adminSlotRow(sl)).join("")}</div>
       <button class="btn ghost small" onclick="addSlot('slots1')">+ add slot</button>
@@ -92,11 +136,13 @@ export async function renderAdmin(){
         <div class="field"><label>Flat picks (count)</label><input id="c1-flat" type="number" min="0" value="${os.flat_picks}"></div>
         <div class="field"><label>Points per flat pick</label><input id="c1-flatpts" type="number" min="0" value="${os.flat_points}"></div>
       </div>
+    `)}
+    <div class="panel">
       <button class="btn" onclick="saveConfig()">Save all rules</button>
       <div class="err" id="cfg-err"></div>
-      <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments.</p>
+      <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments. Saves both rule sections above, whether or not they're currently expanded.</p>
     </div>
-    <div class="panel"><h2>Shows & cutoffs</h2>
+    ${collapsible("shows", "Shows & cutoffs", `
       <p class="muted">Times shown in your device timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Sync defaults new shows to 6 PM venue-local.</p>
       ${(shows||[]).map(sh => `<div class="arow">
         <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue||"TBA")}</span></div>
@@ -110,23 +156,23 @@ export async function renderAdmin(){
           ${sh.status!=='final' && sh.cutoff_at && new Date(sh.cutoff_at) < new Date() ? '<button onclick="finalizeShow('+sh.id+', this)" style="border-color:var(--coral);color:var(--coral)">Finalize</button>' : ''}
         </div>
       </div>`).join("") || '<p class="muted">No shows — sync first.</p>'}
-    </div>
-    <div class="panel"><h2>Members</h2>
+    `)}
+    ${collapsible("members", "Members", `
       <div class="field"><label>Add a member</label>
         <input id="member-search" placeholder="Search registered players by name…" oninput="searchMembers()" autocomplete="off"></div>
       <div id="member-results"></div>
       <div id="playerlist"><p class="muted">Loading…</p></div>
       <button class="linkbtn" id="banToggle" onclick="toggleBans()" style="margin-top:8px">show ban list</button>
       <div id="banlist" class="hidden" style="margin-top:6px"></div>
-    </div>
-    <div class="panel"><h2>Data</h2>
+    `)}
+    ${collapsible("data", "Data", `
       <div class="row">
         <button class="btn ghost small" onclick="runEdge('sync_shows', this)">Sync shows</button>
         <button class="btn ghost small" onclick="runEdge('sync_songs', this)">Sync song catalog</button>
         <button class="btn ghost small" onclick="runEdge('score', this)">Run scoring now</button>
       </div>
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
-    </div>
+    `)}
     ${settingsPanelHtml()}
     ${footerHtml()}`;
   if ((shows||[]).length) loadRoster();
