@@ -68,6 +68,25 @@ async function carton(path: string) {
   return body.data ?? [];
 }
 
+// Carton's text fields (venue/city/song names/footnotes) arrive with HTML
+// entities already baked in (e.g. "Blues &amp; Brews Festival") — decoding
+// here keeps the DB holding real characters, since the frontend's esc() is
+// the only place display text should ever be HTML-encoded. Left undecoded,
+// esc() re-encodes the leading & of "&amp;" into "&amp;amp;", which the
+// browser then renders as the literal text "&amp;" instead of an ampersand.
+// &amp; is decoded last so it can't cascade into re-triggering the other
+// patterns (none of which decode back into "&", so this order is safe).
+function decodeEntities<T extends string | null | undefined>(s: T): T {
+  if (s == null) return s;
+  return (s as string)
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&") as T;
+}
+
 // Discord is broadcast per league, never personal/DMed. There's no DB column
 // for a per-league webhook yet, so this reads DISCORD_WEBHOOK_<LEAGUE NAME>
 // first (e.g. DISCORD_WEBHOOK_AMBASSADORS) and falls back to the single
@@ -176,8 +195,8 @@ async function syncShows() {
     .map((r: any) => ({
       id: Number(r.show_id),
       showdate: r.showdate,
-      venue: r.venuename ?? r.venue ?? null,
-      city: r.city ?? null,
+      venue: decodeEntities(r.venuename ?? r.venue ?? null),
+      city: decodeEntities(r.city ?? null),
       state: r.state ?? null,
       // The slug embeds the venue name, so a corrected venue name regenerates
       // it — upsert (not insert-ignore) means a later sync always carries a
@@ -238,7 +257,7 @@ async function syncShows() {
 async function syncSongs() {
   const rows = await carton(`/songs.json`);
   const upserts = rows.map((r: any) => ({
-    songname: r.name ?? r.songname,
+    songname: decodeEntities(r.name ?? r.songname),
     times_played: Number(r.times_played ?? 0) || null,
     last_played: r.last_played || null,
     is_original: r.isoriginal != null ? Boolean(Number(r.isoriginal)) : null,
@@ -475,10 +494,10 @@ async function scoreShow(show: any, leagueShowRows: any[], isFinal = false) {
     position: Number(r.position),
     setnumber: String(r.setnumber ?? ""),
     is_encore: /e/i.test(String(r.setnumber ?? "")) || /encore/i.test(String(r.settype ?? "")),
-    songname: r.songname ?? r.song ?? "",
+    songname: decodeEntities(r.songname ?? r.song ?? ""),
     is_cover: r.isoriginal != null ? !Number(r.isoriginal) : null,
-    footnote: [r.footnote, Array.isArray(r.footnotes) ? r.footnotes.join("; ") : null]
-      .filter(Boolean).join("; ") || null,
+    footnote: decodeEntities([r.footnote, Array.isArray(r.footnotes) ? r.footnotes.join("; ") : null]
+      .filter(Boolean).join("; ") || null),
   })).filter((s: any) => s.songname);
   if (!songs.length) return { show: show.id, note: "empty setlist" };
 

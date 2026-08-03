@@ -386,8 +386,8 @@
       let last;
       return list.map((sh) => {
         const se = seasonOf(sh.showdate);
-        const label = se ? se.name : "Between tours";
-        const brk = label !== last ? `<div class="setbreak">${esc(label)}</div>` : "";
+        const label = se ? se.name : null;
+        const brk = label && label !== last ? `<div class="season-break">Season: ${esc(label)}</div>` : "";
         last = label;
         return brk + row(sh);
       }).join("");
@@ -1355,7 +1355,7 @@ Save anyway?`)) return;
       if (top <= 0) return `<div class="panel"><h2>No winner</h2><p class="muted">Nobody scored on this one.</p></div>`;
       const champs = scores.filter((x) => x.points === top).map((x) => esc(pname[x.player_id] || "?"));
       return `<div class="panel" style="border-color:var(--yolk)">
-        <h2>${winBadge(64)} ${champs.join(" & ")} ${champs.length > 1 ? "tie for it" : "takes it"}</h2>
+        <h2>${winBadge(64)} ${champs.join(" & ")} ${champs.length > 1 ? "tie" : "takes it"}</h2>
         <p class="muted">${top} points${champs.length > 1 ? " apiece" : ""}</p></div>`;
     })()}
     <div class="panel"><h2>${esc(show.venue || "")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>

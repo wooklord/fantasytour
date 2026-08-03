@@ -55,12 +55,20 @@ export async function renderShows(){
       <button onclick="openShow(${s.id})">${st==='open'?'Pick':'View'}</button>
     </div>`;
   };
+  // Shows outside any season get NO divider at all (not a "Between tours"
+  // label, not a bare rule) — they just continue in the list. Casual never
+  // has seasons, so seasonOf() is always null there and this list renders
+  // with zero dividers, ever. A season's own heading only appears the moment
+  // a show inside it is reached, and reappears if the list re-enters that
+  // season after a gap (so resuming a season after an uncovered stretch
+  // still gets its heading back, rather than staying silent because `last`
+  // matched from before the gap).
   const withSeasons = list => {
     let last;
     return list.map(sh => {
       const se = seasonOf(sh.showdate);
-      const label = se ? se.name : "Between tours";
-      const brk = label !== last ? `<div class="setbreak">${esc(label)}</div>` : "";
+      const label = se ? se.name : null;
+      const brk = (label && label !== last) ? `<div class="season-break">Season: ${esc(label)}</div>` : "";
       last = label;
       return brk + row(sh);
     }).join("");

@@ -119,6 +119,7 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .showrow .v .venue{font-weight:600;overflow-wrap:anywhere}
 .showrow .v .loc{font-size:.82rem;color:var(--cream-dim);overflow-wrap:anywhere}
 .showrow button{background:var(--panel2);color:var(--cream);border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:.82rem;font-weight:600;flex:none}
+.season-break{font-family:'Fraunces',serif;font-weight:700;font-size:1.05rem;color:var(--mint);border-bottom:1px solid var(--line);padding:14px 2px 6px;margin-top:8px}
 
 /* ---------- admin show row (Shows & cutoffs panel) ----------
    Stacked, not a single flex row like .showrow: the admin row packs a
