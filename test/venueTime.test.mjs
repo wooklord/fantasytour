@@ -8,7 +8,7 @@
 //   node test/venueTime.test.mjs
 
 import {
-  venueLocalInputValue, venueLocalToUTC, venueAbbrev, hasDstTransition,
+  venueLocalInputValue, venueLocalToUTC, venueAbbrev, venueLongName, hasDstTransition,
 } from "../src/core/venueTime.js";
 
 const failures = [];
@@ -58,7 +58,23 @@ function check(label, actual, expected) {
 }
 
 // =================================================================
-// 4. Real, known US DST transition dates are detected generically (via
+// 4. Long-form zone name with the redundant trailing "Time" stripped —
+//    including the longest real case this app has (Hawaii's compound name)
+//    and the no-DST case (Arizona).
+// =================================================================
+{
+  check("summer long name: Pacific Daylight, not \"...Daylight Time\"",
+    venueLongName("2026-08-02T01:00:00.000Z", "America/Los_Angeles"), "Pacific Daylight");
+  check("winter long name: Pacific Standard",
+    venueLongName("2026-01-02T02:00:00.000Z", "America/Los_Angeles"), "Pacific Standard");
+  check("Hawaii's compound long name strips the same way",
+    venueLongName("2026-08-02T01:00:00.000Z", "Pacific/Honolulu"), "Hawaii-Aleutian Standard");
+  check("no-DST zone (Arizona): always Mountain Standard",
+    venueLongName("2026-08-02T01:00:00.000Z", "America/Phoenix"), "Mountain Standard");
+}
+
+// =================================================================
+// 5. Real, known US DST transition dates are detected generically (via
 //    offset comparison, not a hardcoded "2nd Sunday of March" rule) — and
 //    the days immediately adjacent are correctly NOT flagged.
 // =================================================================

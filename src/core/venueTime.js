@@ -58,6 +58,19 @@ export function venueAbbrev(cutoffISO, tz){
     .formatToParts(new Date(cutoffISO)).find(p => p.type === "timeZoneName")?.value || "";
 }
 
+// "Eastern Daylight" / "Mountain Standard" / etc — Intl's long form with the
+// redundant trailing "Time" stripped (the label above this already reads
+// "Timezone:"). Some environments return a bare GMT offset instead of a
+// name for timeZoneName:'long' (ICU-data-dependent, not reproduced in
+// Node or Chrome testing here) — falls back to the short abbreviation
+// there rather than showing an offset or a mangled string.
+export function venueLongName(cutoffISO, tz){
+  const val = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", timeZoneName: "long" })
+    .formatToParts(new Date(cutoffISO)).find(p => p.type === "timeZoneName")?.value || "";
+  if (!val || /^GMT/.test(val)) return venueAbbrev(cutoffISO, tz);
+  return val.endsWith(" Time") ? val.slice(0, -5) : val;
+}
+
 // Does this zone change offset at some point during this calendar date?
 // Brackets the date (00:00Z..23:59Z comfortably covers any real local day
 // for every zone this app uses) and compares offsets, rather than

@@ -700,6 +700,12 @@
     var _a;
     return ((_a = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", timeZoneName: "short" }).formatToParts(new Date(cutoffISO)).find((p) => p.type === "timeZoneName")) == null ? void 0 : _a.value) || "";
   }
+  function venueLongName(cutoffISO, tz) {
+    var _a;
+    const val = ((_a = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", timeZoneName: "long" }).formatToParts(new Date(cutoffISO)).find((p) => p.type === "timeZoneName")) == null ? void 0 : _a.value) || "";
+    if (!val || /^GMT/.test(val)) return venueAbbrev(cutoffISO, tz);
+    return val.endsWith(" Time") ? val.slice(0, -5) : val;
+  }
   function hasDstTransition(naiveLocalStr, tz) {
     const [datePart] = naiveLocalStr.split("T");
     const start = Date.parse(`${datePart}T00:00:00Z`);
@@ -830,7 +836,7 @@
       ${(shows || []).map((sh) => {
       const tz = sh.timezone || null;
       const inputVal = !sh.cutoff_at ? "" : tz ? venueLocalInputValue(sh.cutoff_at, tz) : new Date(new Date(sh.cutoff_at).getTime() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
-      const zoneLabel = !sh.cutoff_at ? "" : tz ? `<div class="muted" style="font-size:.75rem;margin:8px 0 2px">Timezone: <b style="color:var(--cream)">${esc(venueAbbrev(sh.cutoff_at, tz))}</b>${hasDstTransition(inputVal, tz) ? ' <span style="color:var(--coral)">\u26A0 DST changes on this date \u2014 double-check this time</span>' : ""}</div>` : `<div class="muted" style="font-size:.75rem;margin:8px 0 2px"><span style="color:var(--coral)">Device time \u2014 venue timezone unknown</span></div>`;
+      const zoneLabel = !sh.cutoff_at ? "" : tz ? `<div class="muted" style="font-size:.75rem;margin:8px 0 2px">Timezone: <b style="color:var(--cream)">${esc(venueLongName(sh.cutoff_at, tz))}</b>${hasDstTransition(inputVal, tz) ? ' <span style="color:var(--coral)">\u26A0 DST changes on this date \u2014 double-check this time</span>' : ""}</div>` : `<div class="muted" style="font-size:.75rem;margin:8px 0 2px"><span style="color:var(--coral)">Device time \u2014 venue timezone unknown</span></div>`;
       return `<div class="arow">
         <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue || "TBA")}</span></div>
         ${zoneLabel}
