@@ -668,20 +668,20 @@ Save anyway?`)) return;
           ((_c = winners[_b = s.show_id]) != null ? _c : winners[_b] = { points: s.points, names: [] }).names.push(s.player_name || "?");
       }
     }
-    const row = (s, { gameNumber, seasonLast, resultOwnLine } = {}) => {
+    const row = (s, { gameNumber, seasonLast } = {}) => {
       const st = showState(s);
       const cls = { open: "open", live: "live", locked: "locked", final: "final", played: "final" }[st] || "";
       const cd = st === "open" ? countdown(s.cutoff_at) : null;
       const txt = st === "final" ? "complete" : st === "open" && cd ? "locks in " + cd : st;
-      const winHtml = st === "final" && winners[s.id] ? `<span style="color:var(--yolk);font-size:.82rem">${winBadge(36)} ${winners[s.id].names.map(esc).join(" & ")} \xB7 ${winners[s.id].points}</span>` : "";
+      const winHtml = st === "final" && winners[s.id] ? `<div class="win-line">${winBadge(28)} ${winners[s.id].names.map(esc).join(" & ")}</div>` : "";
       const noSeason = isOfficial && !seasonOf(s.showdate);
       const { wk, md } = fmtDateParts(s.showdate);
       return `<div class="showrow${noSeason ? " unavailable" : ""}${seasonLast ? " season-last" : ""}">
       <div class="date"><span class="wk">${wk}</span><span>${md}</span>${gameNumber ? `<span class="gamenum">${gameNumber}</span>` : ""}</div>
       <div class="v"><div class="venue">${esc(s.venue || "TBA")}</div>
         <div class="loc">${esc(s.city || "")}${s.state ? ", " + esc(s.state) : ""}
-          <span class="pill ${cls}" data-cd="${st === "open" ? s.cutoff_at : ""}">${txt}</span>${resultOwnLine ? "" : winHtml ? " " + winHtml : ""}</div>
-        ${resultOwnLine && winHtml ? `<div style="margin-top:4px">${winHtml}</div>` : ""}</div>
+          <span class="pill ${cls}" data-cd="${st === "open" ? s.cutoff_at : ""}">${txt}</span></div>
+        ${winHtml}</div>
       <button onclick="openShow(${s.id})">${buttonLabelHtml(s, st === "open" ? "Pick" : "View")}</button>
     </div>`;
     };
@@ -709,7 +709,7 @@ Save anyway?`)) return;
     }
     $("#main").innerHTML = `
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
-    ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null, resultOwnLine: true })).join("")}</div>` : ""}
+    ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet \u2014 admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons(past || []) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;

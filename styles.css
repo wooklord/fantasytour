@@ -136,6 +136,17 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
    page into horizontal scroll. overflow-wrap:anywhere breaks it instead. */
 .showrow .v .venue{font-weight:600;overflow-wrap:anywhere}
 .showrow .v .loc{font-size:.82rem;color:var(--cream-dim);overflow-wrap:anywhere}
+/* Winner trophy+names+points, its own line under city/pill — used to be
+   an inline style, pulled into a real class alongside .venue/.loc while
+   resizing it (bigger text, smaller trophy) for the same reason those two
+   get dedicated rules instead of ad hoc styling. */
+/* Plain inline flow, not flex — flex treated the trophy SVG and the name
+   text as two separate items, so a long multi-way tie on a real (narrow)
+   phone wrapped the WHOLE text item onto its own line under the trophy
+   instead of wrapping naturally word-by-word with the trophy staying
+   attached to the first name, the way normal inline text + icon does. */
+.showrow .v .win-line{color:var(--yolk);font-size:1rem;margin-top:4px}
+.showrow .v .win-line svg{vertical-align:middle;margin-right:4px}
 .showrow button{background:var(--panel2);color:var(--cream);border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:.82rem;font-weight:600;flex:none;min-width:62px}
 /* Game-number sequence marker — lives in the (otherwise mostly-empty)
    vertical space under the date rather than competing with the venue name
