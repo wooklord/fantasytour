@@ -148,7 +148,7 @@
     const h = Math.floor(ms / 36e5), m = Math.floor(ms % 36e5 / 6e4), s = Math.floor(ms % 6e4 / 1e3);
     if (h > 72) {
       const days = Math.floor(h / 24), remH = h % 24;
-      return `${days}d ${remH}h`;
+      return `${days}d ${remH}h ${m}m`;
     }
     return h > 0 ? `${h}h ${m}m` : `${m}m ${String(s).padStart(2, "0")}s`;
   }

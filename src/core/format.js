@@ -17,10 +17,9 @@ export function countdown(ts){
   const ms = new Date(ts) - Date.now();
   if (ms <= 0) return null;
   const h = Math.floor(ms/36e5), m = Math.floor(ms%36e5/6e4), s = Math.floor(ms%6e4/1e3);
-  // Past 72h, minutes stop being useful precision and the raw hour count
-  // (714h, 1746h...) stops being readable at a glance — switch to days+hours
-  // and drop minutes entirely. 72h and under is untouched.
-  if (h > 72){ const days = Math.floor(h/24), remH = h % 24; return `${days}d ${remH}h`; }
+  // Past 72h, the raw hour count (714h, 1746h...) stops being readable at
+  // a glance — switch to days+hours+minutes. 72h and under is untouched.
+  if (h > 72){ const days = Math.floor(h/24), remH = h % 24; return `${days}d ${remH}h ${m}m`; }
   return h > 0 ? `${h}h ${m}m` : `${m}m ${String(s).padStart(2,"0")}s`;
 }
 export function clearTimers(){ state.timers.forEach(clearInterval); state.timers = []; }
