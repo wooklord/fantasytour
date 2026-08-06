@@ -337,6 +337,24 @@ Full spec in `docs/MULTITENANT_SPEC.md`. Summary:
   memberships. Enables global stats (e.g. total shows voted across leagues).
 - **Official participation is opt-IN**, and the toggle is **locked while a season runs**
   — no opting in mid-season. League admin can override.
+  **Reversed for beta, Stage F (`sql/stage_f_official_default_optin.sql`):**
+  `league_members.official_opt_in` now defaults to `true` (was `false`), and
+  every existing row was backfilled to `true`, so `admin_add_league_member`
+  (which inserts without specifying the column, relying entirely on the
+  default) lands new members opted in automatically — no more flipping the
+  flag by hand for every Ambassadors add. This is a beta convenience for a
+  closed group the dev adds one-by-one; it does not touch the lock-while-a-
+  season-runs rule, `admin_set_season_roster`, or the self-service opt-out
+  RPC (`set_official_opt_in` — still correct, but **not actually wired to
+  any frontend control**, so today there is no in-app way for a player to
+  opt themselves out; only a league admin can remove someone from a running
+  season's roster via the admin panel). **Revisit before the ~50-person
+  Facebook League launches** — the original opt-in-by-default reasoning
+  (participation should be a conscious choice for a pool of semi-strangers,
+  not an assumption) still holds there, and stacks with the other
+  known-not-scaled-past-Ambassadors gaps: the PIN-guessing surface and the
+  lack of self-service PIN management (both noted below), plus the missing
+  self-service opt-out UI this note just surfaced.
 - **Frozen season roster** (`season_rosters`): when an Official season starts, the set
   of opted-in members is snapshotted; scoring reads the snapshot, NOT the live flag.
   Frozen in both directions (opting out / getting booted mid-season leaves you on the
