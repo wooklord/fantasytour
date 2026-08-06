@@ -52,13 +52,33 @@ async function runMode(mode){
   check("Casual pick sheet renders fillable inputs (never gated)",
     casualSheet && /slotline/.test(casualSheet.html));
 
+  // Shows-list pick-status marker: show 1 has 2 of 5 (standard format's
+  // target) saved and no draft yet at boot; show 2 has all 5 saved.
+  const boot = byLabel(log, "boot")?.html || "";
+  check("shows list marks show 1 (saved but incomplete, no draft) with the amber checkmark",
+    boot.includes('pickmark progress" title="Picks saved but incomplete"'),
+    `boot html: ${boot}`);
+  check("shows list marks show 2 (saved, complete) with the green checkmark",
+    boot.includes('pickmark done" title="Picks saved — complete"'),
+    `boot html: ${boot}`);
+
   check("draft persists under the bracket-scoped key",
     res.draftKeyVal && JSON.parse(res.draftKeyVal).opener === "Distraction",
     `draftKeyVal: ${res.draftKeyVal}`);
 
+  const withDraft = byLabel(log, "shows-list-with-draft")?.html || "";
+  check("an unsaved draft flips show 1's marker to the amber warning glyph, outranking its still-incomplete saved count",
+    withDraft.includes('pickmark warn" title="Draft in progress — not yet saved"'),
+    `shows-list-with-draft html: ${withDraft}`);
+
   check("submit_picks called with p_bracket_id",
     rpcCalls.some(c => c.fn === "submit_picks" && c.args?.p_bracket_id != null),
     `rpc calls: ${JSON.stringify(rpcFns)}`);
+
+  const afterSave = byLabel(log, "shows-list-after-save")?.html || "";
+  check("saving picks clears the draft and refetches the count with no reload — show 1 drops back to the plain amber checkmark",
+    afterSave.includes('pickmark progress" title="Picks saved but incomplete"') && !afterSave.includes("pickmark warn"),
+    `shows-list-after-save html: ${afterSave}`);
 
   const officialGate = byLabel(log, "pick-sheet-official-ineligible");
   check("Official (no covering season) shows the ineligible reason, not a form",

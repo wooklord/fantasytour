@@ -117,7 +117,18 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
    (two classes vs. one), so this doesn't depend on declaration order the
    way a same-specificity rule (like :last-child) would. */
 .showrow.season-last{border-bottom:none}
-.showrow .date{font-family:var(--mono);color:var(--yolk);font-size:.85rem;min-width:74px;display:flex;flex-direction:column;align-items:flex-start;gap:5px}
+/* Switched from var(--mono) to Outfit (already loaded for body text, no
+   new font weight to add) at a light weight with tight tracking, and
+   min-width dropped 74px -> 46px, sized to the widest realistic date
+   ("Oct 22", two-digit day) rather than a cherry-picked short one — a
+   real phone-width complaint, mono's fixed-width digits plus the wide
+   ", " were reserving more of the row than the date actually needed,
+   squeezing venue/pill text into wrapping. .v needs no change itself:
+   it's already flex:1, so it grows into whatever .date stops reserving. */
+.showrow .date{font-family:'Outfit',system-ui,sans-serif;font-weight:300;letter-spacing:-.02em;color:var(--yolk);font-size:.85rem;min-width:46px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+/* Weekday now stacks above month/day instead of running inline before it
+   ("Thu, Aug 6" -> "THU" / "Aug 6") — same information, narrower column. */
+.showrow .date .wk{font-size:.6rem;font-weight:600;opacity:.75;letter-spacing:.6px}
 .showrow .v{flex:1;min-width:0}
 /* Venue/city text comes from The Carton's API and its length is out of our
    control — a long name with no spaces (one real bug already shipped this
@@ -125,12 +136,31 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
    page into horizontal scroll. overflow-wrap:anywhere breaks it instead. */
 .showrow .v .venue{font-weight:600;overflow-wrap:anywhere}
 .showrow .v .loc{font-size:.82rem;color:var(--cream-dim);overflow-wrap:anywhere}
-.showrow button{background:var(--panel2);color:var(--cream);border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:.82rem;font-weight:600;flex:none}
+.showrow button{background:var(--panel2);color:var(--cream);border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:.82rem;font-weight:600;flex:none;min-width:62px}
 /* Game-number sequence marker — lives in the (otherwise mostly-empty)
    vertical space under the date rather than competing with the venue name
    or the "locks in" pill for horizontal room; a "Game N" text label tried
    first and measurably lost that fight at phone width. */
 .showrow .gamenum{flex:none;width:20px;height:20px;border-radius:50%;border:1px solid var(--line2);color:var(--cream-dim);font-family:var(--mono);font-size:.68rem;display:flex;align-items:center;justify-content:center}
+/* Pick-status marker — went through two floating-badge layouts (a 26px
+   circle, then a 20px one, then a stacked column) before landing here:
+   riding inside the Pick/View button's own label costs zero extra row
+   width at all, which neither earlier version could say. Plain colored
+   text, no circle/border/background needed once it's part of the button
+   rather than a separate element floating in the row. */
+.pickmark{font-weight:800}
+/* A bare, default-weight ✓ nearly vanished against the button's dark
+   --panel2 fill in dark mode — bumped to a heavier glyph (✔ not ✓) at a
+   larger size so a fully-picked show still reads as a real, deliberately
+   green button, not a shrunken leftover once "Pick" drops off it. */
+.pickmark.done{color:var(--mint);font-weight:900;font-size:1.05rem}
+/* .warn is the one state that outranks a complete save: a draft sitting in
+   localStorage means something isn't on the server yet, even if the last
+   save was a full sheet — worse than plain "incomplete," so it gets its
+   own glyph (! not ✓) rather than sharing .progress's checkmark. Both read
+   fine in --yolk against the button's --panel2 background in either theme,
+   so no light-theme override is needed here (unlike the badge version). */
+.pickmark.progress,.pickmark.warn{color:var(--yolk)}
 .season-break{font-family:'Fraunces',serif;font-weight:700;font-size:1.05rem;color:var(--mint);border-bottom:1px solid var(--line);padding:14px 2px 6px;margin-top:8px}
 /* Bottom-of-season marker — a standalone sibling element after the last
    show, mirroring how .season-break marks the top as its own element

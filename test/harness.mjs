@@ -59,7 +59,31 @@ const RPC_HANDLERS = {
   },
   get_my_picks: async () => [],
   get_show_picks: async () => [],
-  submit_picks: async () => ({ ok: true, saved: 1 }),
+  // Batch pick-count RPC backing the shows-list marker. Computed against
+  // the fixture's real picks rows, same "real join, not a fixed stub"
+  // idiom as get_bracket_scores/my_leagues above.
+  get_my_pick_counts: async ({ p_name, p_bracket_id }, tables) => {
+    const player = tables.players_public.find(p => p.name === p_name);
+    if (!player) return [];
+    const counts = {};
+    tables.picks
+      .filter(pk => pk.bracket_id === p_bracket_id && pk.player_id === player.id)
+      .forEach(pk => { counts[pk.show_id] = (counts[pk.show_id] || 0) + 1; });
+    return Object.entries(counts).map(([show_id, pick_count]) => ({ show_id: Number(show_id), pick_count }));
+  },
+  // Mutates tables.picks (a real write, not a no-op stub) — needed so the
+  // shows-list marker test below can prove a save actually refetches and
+  // changes what the list shows, rather than asserting that by assumption.
+  // Mirrors real submit_picks: full replace of this player/bracket/show's
+  // saved slots with whatever was just submitted, not a merge.
+  submit_picks: async ({ p_name, p_bracket_id, p_show_id, p_picks }, tables) => {
+    const player = tables.players_public.find(p => p.name === p_name);
+    tables.picks = tables.picks.filter(pk =>
+      !(pk.player_id === player.id && pk.bracket_id === p_bracket_id && pk.show_id === p_show_id));
+    const saved = (p_picks || []).filter(p => (p.songname || "").trim());
+    saved.forEach(p => tables.picks.push({ player_id: player.id, bracket_id: p_bracket_id, show_id: p_show_id, slot: p.slot, songname: p.songname.trim() }));
+    return { ok: true, saved: saved.length };
+  },
   admin_save_season: async () => ({ ok: true }),
   admin_delete_season: async () => ({ ok: true }),
   admin_list_bans: async () => [],
@@ -179,11 +203,30 @@ export async function runScenario({ html, scripts, mode, presetSession }){
   }
   snap("pick-sheet-draft");
 
+  // shows-list marker must react to the draft that was just typed, even
+  // though nothing's saved server-side for it yet — re-render the list
+  // (simulating navigating back) and confirm it picked the draft up with
+  // no reload. This replaces #main, so the pick sheet has to be reopened
+  // afterward for the existing save step below to find its inputs — the
+  // draft persisted in localStorage repopulates it identically.
+  window.renderShows();
+  await tick(); await tick();
+  log.push({ label: "shows-list-with-draft", html: mainHTML(window, mode) });
+  window.openShow(1);
+  await tick(); await tick();
+
   // save picks
   const saveBtn = window.document.getElementById("save");
   if (saveBtn) saveBtn.onclick && await saveBtn.onclick();
   await tick();
   snap("pick-sheet-saved");
+
+  // shows-list marker must also react to a save with no reload — the
+  // draft is gone (savePicks clears it) and the count reflects the fresh
+  // get_my_pick_counts result, not the pre-save fixture count.
+  window.renderShows();
+  await tick(); await tick();
+  log.push({ label: "shows-list-after-save", html: mainHTML(window, mode) });
 
   // switch to Official (no season covers show 1 in the fixture) and open
   // the same show — expect the ineligible panel, not a fillable sheet

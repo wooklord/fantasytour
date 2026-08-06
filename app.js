@@ -131,6 +131,13 @@
   function fmtDate(d) {
     return (/* @__PURE__ */ new Date(d + "T12:00:00")).toLocaleDateString(void 0, { weekday: "short", month: "short", day: "numeric" });
   }
+  function fmtDateParts(d) {
+    const dt = /* @__PURE__ */ new Date(d + "T12:00:00");
+    return {
+      wk: dt.toLocaleDateString(void 0, { weekday: "short" }).toUpperCase(),
+      md: dt.toLocaleDateString(void 0, { month: "short", day: "numeric" })
+    };
+  }
   function fmtCutoff(ts) {
     if (!ts) return "TBD";
     return new Date(ts).toLocaleString(void 0, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
@@ -139,6 +146,10 @@
     const ms = new Date(ts) - Date.now();
     if (ms <= 0) return null;
     const h = Math.floor(ms / 36e5), m = Math.floor(ms % 36e5 / 6e4), s = Math.floor(ms % 6e4 / 1e3);
+    if (h > 72) {
+      const days = Math.floor(h / 24), remH = h % 24;
+      return `${days}d ${remH}h`;
+    }
     return h > 0 ? `${h}h ${m}m` : `${m}m ${String(s).padStart(2, "0")}s`;
   }
   function clearTimers() {
@@ -333,6 +344,265 @@
     return `<div class="laurel-spray">${svg}</div>`;
   }
 
+  // src/features/picks.js
+  var isWildcard = (v) => (v || "").trim().toLowerCase() === "any debut";
+  function draftKey(showId) {
+    return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`;
+  }
+  async function openShow(id) {
+    if (isDesktop()) state.tab = "shows";
+    clearTimersFor("shows");
+    const show = await fetchShow(id);
+    state.currentShow = show;
+    const st = showState(show);
+    if (st !== "open") {
+      renderShowDetail(show);
+      return;
+    }
+    let gate = { ok: true, reason: null };
+    try {
+      const [row] = await rpc("can_submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id });
+      if (row) gate = row;
+    } catch (e) {
+    }
+    if (gate.ok) renderPickSheet(show);
+    else renderIneligible(show, gate.reason);
+  }
+  function renderIneligible(show, reason) {
+    const casual = state.leagues.find((l) => l.league_id === state.currentLeagueId && l.bracket_kind === "casual");
+    $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button></p>
+    <div class="sheet">
+      <h2>${esc(show.venue || "TBA")}</h2>
+      <div class="sub">${fmtDate(show.showdate)}</div>
+      <p class="ineligible-reason">${esc(reason || "Picks aren't open for this bracket.")}</p>
+      ${casual ? `<button class="btn ghost small" onclick="switchToBracket(${casual.bracket_id})">Switch to Casual</button>` : ""}
+    </div>
+    ${footerHtml()}`;
+  }
+  function prettifySlotKey(key) {
+    return key.replace(/[_-]+/g, " ").replace(/([a-zA-Z])(\d)/g, "$1 $2").trim().split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+  }
+  function breakdownSlotInfo(format) {
+    const sect = format === "one_set" && state.cfg.oneset ? state.cfg.oneset : state.cfg;
+    const slots = sect.slots || [];
+    const coverKeys = slots.filter((s) => (s.type || s.key) === "cover_pick").map((s) => s.key);
+    const order = [], label = {};
+    slots.forEach((s) => {
+      order.push(s.key);
+      label[s.key] = coverKeys.length > 1 && coverKeys.includes(s.key) ? `${s.label} ${coverKeys.indexOf(s.key) + 1}` : s.label;
+    });
+    for (let i = 1; i <= (sect.flat_picks || 0); i++) {
+      order.push("flat" + i);
+      label["flat" + i] = "Pick " + i;
+    }
+    return { order, label };
+  }
+  function sortBySlotOrder(items, order) {
+    return [...items].sort((a, b) => {
+      const ia = order.indexOf(a.slot), ib = order.indexOf(b.slot);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+  }
+  function slotDefs(format) {
+    var _a, _b;
+    const sect = format === "one_set" && state.cfg.oneset ? state.cfg.oneset : state.cfg;
+    const slots = (sect.slots || []).map((s) => ({ key: s.key, label: s.label, pts: s.points, type: s.type || s.key }));
+    for (let i = 1; i <= (sect.flat_picks || 0); i++) slots.push({ key: "flat" + i, label: "Pick " + i, pts: (_b = (_a = sect.flat_points) != null ? _a : state.cfg.flat_points) != null ? _b : 1, flat: true });
+    return slots;
+  }
+  async function renderPickSheet(show) {
+    var _a;
+    let mine = [];
+    try {
+      mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id });
+    } catch (e) {
+    }
+    const dKey = draftKey(show.id);
+    const draft = JSON.parse(localStorage.getItem(dKey) || "null");
+    const val = (k) => esc((draft && draft[k] != null ? draft[k] : (mine.find((p) => p.slot === k) || {}).songname) || "");
+    const slots = slotDefs(show.format);
+    const slotHtml = (s) => `
+    <div class="slotline autocomplete">
+      <label>${esc(s.label)}</label>
+      <input data-slot="${s.key}" data-type="${s.type || s.key}" value="${val(s.key)}" placeholder="${(s.type || s.key) === "cover_pick" ? "a cover\u2026" : "song\u2026"}" autocomplete="off" spellcheck="false">
+      <span class="pts">${s.pts} pt${s.pts === 1 ? "" : "s"}</span>
+    </div>`;
+    const structured = slots.filter((s) => !s.flat), flats = slots.filter((s) => s.flat);
+    $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button></p>
+    <div class="sheet">
+      <h2>${esc(show.venue || "TBA")}</h2>
+      <div class="sub">${fmtDate(show.showdate)} \xB7 ${esc(show.city || "")}${show.state ? ", " + esc(show.state) : ""}${show.format === "one_set" ? " \xB7 FESTIVAL SET" : ""}</div>
+      ${structured.map(slotHtml).join("")}
+      ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
+      <button class="savebtn" id="save">Lock 'em in</button>
+      <div class="countbig">${state.cfg.voting_override === "open" ? "Admin override \u2014 voting open" : `Locks ${fmtCutoff(show.cutoff_at)} \xB7 <b id="cd"></b>`}</div>
+      <div class="err" id="p-err" style="text-align:center"></div>
+      ${((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" ? laurelSpray() : ""}
+    </div>
+    ${footerHtml()}`;
+    document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
+    document.querySelectorAll(".slotline input").forEach((inp) => inp.addEventListener("input", () => {
+      const d = {};
+      document.querySelectorAll(".slotline input").forEach((i) => {
+        if (i.value.trim()) d[i.dataset.slot] = i.value;
+      });
+      localStorage.setItem(dKey, JSON.stringify(d));
+    }));
+    $("#save").onclick = savePicks;
+    if (state.cfg.voting_override !== "open" && show.cutoff_at) state.timers.push(setInterval(() => {
+      const cd = countdown(show.cutoff_at);
+      if (cd) $("#cd").textContent = cd + " left";
+      else {
+        toast("Picks are locked \u2014 enjoy the show \u{1F95A}");
+        openShow(show.id);
+      }
+    }, 1e3));
+  }
+  function attachAutocomplete(input) {
+    let list = null, sel = -1;
+    const close = () => {
+      list == null ? void 0 : list.remove();
+      list = null;
+      sel = -1;
+    };
+    input.addEventListener("input", () => {
+      var _a, _b;
+      close();
+      const q = input.value.trim().toLowerCase();
+      if (q.length < 1) return;
+      const coverOnly = input.dataset.type === "cover_pick";
+      const pool = coverOnly ? state.songList.filter((s) => s.is_original === false) : state.songList;
+      const wc = [];
+      if (!coverOnly && ((_b = (_a = state.cfg.wildcards) == null ? void 0 : _a.debut) != null ? _b : true) && ("any debut".includes(q) || "debut".includes(q)))
+        wc.push({ songname: "Any Debut", times_played: "\u2605" });
+      const hits = [...wc, ...pool.filter((s) => s.songname.toLowerCase().includes(q))].slice(0, 8);
+      if (!hits.length) return;
+      list = document.createElement("div");
+      list.className = "acc-list";
+      hits.forEach((h) => {
+        var _a2;
+        const d = document.createElement("div");
+        d.innerHTML = `${esc(h.songname)} <small>${(_a2 = h.times_played) != null ? _a2 : "\u2013"}\xD7</small>`;
+        d.onmousedown = (e) => {
+          e.preventDefault();
+          input.value = h.songname;
+          input.dispatchEvent(new Event("input"));
+          close();
+        };
+        list.appendChild(d);
+      });
+      input.parentElement.appendChild(list);
+    });
+    input.addEventListener("keydown", (e) => {
+      if (!list) return;
+      const items = [...list.children];
+      if (e.key === "ArrowDown") {
+        sel = Math.min(sel + 1, items.length - 1);
+      } else if (e.key === "ArrowUp") {
+        sel = Math.max(sel - 1, 0);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (sel >= 0) {
+          input.value = items[sel].textContent.replace(/\s*\S*×$/, "").trim();
+          input.dispatchEvent(new Event("input"));
+        }
+        close();
+        return;
+      } else return;
+      items.forEach((it, i) => it.classList.toggle("sel", i === sel));
+    });
+    input.addEventListener("blur", () => setTimeout(close, 150));
+  }
+  async function savePicks() {
+    $("#p-err").textContent = "";
+    const picks = [...document.querySelectorAll(".slotline input")].map((i) => ({ slot: i.dataset.slot, songname: i.value.trim() })).filter((p) => p.songname);
+    const unknown = picks.filter((p) => !isWildcard(p.songname) && !state.songList.some((s) => s.songname.toLowerCase() === p.songname.toLowerCase()));
+    if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):
+${unknown.map((u) => u.songname).join("\n")}
+
+Save anyway?`)) return;
+    try {
+      await rpc("submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: state.currentShow.id, p_picks: picks });
+      localStorage.removeItem(draftKey(state.currentShow.id));
+      toast("Picks saved \u2714", "score");
+    } catch (e) {
+      $("#p-err").textContent = e.message;
+    }
+  }
+  async function renderShowDetail(show) {
+    var _a, _b, _c;
+    clearTimers();
+    const [{ data: setlist }, picks, scores] = await Promise.all([
+      db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
+      rpc("get_show_picks", { p_bracket_id: state.currentBracketId, p_show_id: show.id }).catch(() => []),
+      rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id }).then((rows) => (rows || []).sort((a, b) => b.points - a.points))
+    ]);
+    const pname = Object.fromEntries((scores || []).map((s) => [s.player_id, s.player_name]));
+    const mineHits = new Set((picks || []).filter((p) => p.player_id === state.session.id).map((p) => p.songname.toLowerCase()));
+    let lastSet = null;
+    const setHtml = (setlist || []).map((s) => {
+      const label = s.is_encore ? "Encore" : "Set " + (s.setnumber || "1");
+      const brk = label !== lastSet ? `<div class="setbreak">${esc(label)}</div>` : "";
+      lastSet = label;
+      return brk + `
+    <div class="songrow ${mineHits.has(s.songname.toLowerCase()) ? "hitmine" : ""}">
+      <span class="pos">${s.position}</span>
+      <span class="name">${esc(s.songname)}</span>
+    </div>`;
+    }).join("");
+    const attribution = (setlist || []).length ? `<p class="muted" style="text-align:center">Setlist data from ${show.permalink ? `<a href="${CARTON_SITE_BASE}/${esc(show.permalink)}" target="_blank" rel="noopener">The Carton</a>` : "The Carton"}.</p>` : "";
+    const { order: brkOrder, label: brkLabel } = breakdownSlotInfo(show.format);
+    const hasUndetermined = (scores || []).some((sc) => (sc.breakdown || []).some((b) => (b.reason || "").includes("slot undetermined")));
+    const scoreHtml = (scores || []).map((sc) => `
+    <div class="panel" style="padding:12px">
+      <div class="row"><b>${esc(pname[sc.player_id] || "?")}</b>
+        <span class="pts" style="margin-left:auto;font-family:var(--mono);color:var(--yolk)">${sc.points} pts</span></div>
+      ${sortBySlotOrder(sc.breakdown || [], brkOrder).map((b) => `
+        <div class="pickres ${b.points > 0 ? "hit" : b.hit ? "" : "miss"}">
+          <span class="sl">${esc(brkLabel[b.slot] || prettifySlotKey(b.slot))}</span><span>${esc(b.songname)}</span>
+          <span class="pt">${b.points > 0 ? "+" + b.points : "\xB7"} <small class="muted">${esc(b.reason)}</small></span>
+        </div>`).join("")}
+    </div>`).join("");
+    let pickBoard = "";
+    if (!(scores || []).length && (picks || []).length) {
+      const slotOrder = slotDefs(show.format).map((sl) => sl.key);
+      const slotLabel = Object.fromEntries(slotDefs(show.format).map((sl) => [sl.key, sl.label]));
+      const byName = {};
+      for (const p of picks) ((_b = byName[_a = p.player_name]) != null ? _b : byName[_a] = []).push(p);
+      pickBoard = `<h2 style="margin:18px 4px 4px">The picks are in</h2>` + Object.entries(byName).sort((a, b) => a[0].localeCompare(b[0])).map(([name, pp]) => `
+        <div class="panel" style="padding:12px"><div class="row"><b>${esc(name)}</b></div>
+          ${pp.sort((a, b) => slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot)).map((p) => `
+            <div class="pickres"><span class="sl">${esc(slotLabel[p.slot] || p.slot)}</span>
+              <span>${esc(p.songname)}</span></div>`).join("")}
+        </div>`).join("");
+    }
+    $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button>
+      <span class="pill ${showState(show) === "live" ? "live" : "final"}">${showState(show) === "final" ? "complete" : showState(show)}</span></p>
+    ${(() => {
+      if (show.status !== "final" || !(scores || []).length) return "";
+      const top = scores[0].points;
+      if (top <= 0) return `<div class="panel"><h2>No winner</h2><p class="muted">Nobody scored on this one.</p></div>`;
+      const champs = scores.filter((x) => x.points === top).map((x) => esc(pname[x.player_id] || "?"));
+      return `<div class="panel" style="border-color:var(--yolk)">
+        <h2>${winBadge(64)} ${champs.join(" & ")} ${champs.length > 1 ? "tie" : "takes it"}</h2>
+        <p class="muted">${top} points${champs.length > 1 ? " apiece" : ""}</p></div>`;
+    })()}
+    <div class="panel"><h2>${esc(show.venue || "")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
+      ${((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official" ? `<div class="row" style="justify-content:center;gap:10px;margin:4px 0 12px">${trophy(26)}<span style="font-family:'Fraunces',serif;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--yolk);font-size:.85rem">Official</span>${trophy(26)}</div>` : ""}
+      ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
+    ${pickBoard}
+    <h2 style="margin:18px 4px 4px">Scores</h2>
+    ${hasUndetermined ? `<p class="muted" style="text-align:center;margin:0 4px 8px">Closer-type picks show off-slot points (if enabled) until the encore starts (or the show ends) \u2014 full points lock in once determined.</p>` : ""}
+    ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet \u2014 they appear with the first song.</p>'}
+    ${footerHtml()}`;
+  }
+
   // src/features/shows.js
   async function renderShows() {
     var _a, _b, _c;
@@ -342,11 +612,32 @@
     markTab();
     const todayStr = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
     const graceStr = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
-    const [up, past, seas] = await Promise.all([
+    const [up, past, seas, myCounts] = await Promise.all([
       fetchShows((q) => q.gte("showdate", graceStr).order("showdate")),
       fetchShows((q) => q.lt("showdate", graceStr).order("showdate", { ascending: false }).limit(12)),
-      rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId })
+      rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId }),
+      rpc("get_my_pick_counts", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId })
     ]);
+    const savedCountOf = Object.fromEntries((myCounts || []).map((c) => [c.show_id, c.pick_count]));
+    const pickMarkInfo = (s) => {
+      const target = slotDefs(s.format).length;
+      const saved = savedCountOf[s.id] || 0;
+      const hasDraft = !!localStorage.getItem(draftKey(s.id));
+      if (hasDraft) {
+        const title = saved >= target && target > 0 ? "Saved picks are complete, but you have unsaved local changes on this device \u2014 save again to keep them" : "Draft in progress \u2014 not yet saved";
+        return { cls: "warn", glyph: "!", title };
+      }
+      if (target > 0 && saved >= target) return { cls: "done", glyph: "\u2714", title: "Picks saved \u2014 complete" };
+      if (saved > 0) return { cls: "progress", glyph: "\u2713", title: "Picks saved but incomplete" };
+      return null;
+    };
+    const buttonLabelHtml = (s, label) => {
+      const mark = pickMarkInfo(s);
+      if (!mark) return label;
+      if (mark.cls === "done") return `<span class="pickmark done" title="${mark.title}">${mark.glyph}</span>`;
+      if (mark.cls === "warn") return `${label} <span class="pickmark warn" title="${mark.title}">${mark.glyph}</span>`;
+      return `${label} <span class="pickmark progress" title="${mark.title}">${mark.glyph}</span>`;
+    };
     const seasonOf = (d) => (seas || []).find((se) => se.start_date <= d && d <= se.end_date);
     const labelOf = (d) => {
       var _a2;
@@ -384,13 +675,14 @@
       const txt = st === "final" ? "complete" : st === "open" && cd ? "locks in " + cd : st;
       const winHtml = st === "final" && winners[s.id] ? `<span style="color:var(--yolk);font-size:.82rem">${winBadge(36)} ${winners[s.id].names.map(esc).join(" & ")} \xB7 ${winners[s.id].points}</span>` : "";
       const noSeason = isOfficial && !seasonOf(s.showdate);
+      const { wk, md } = fmtDateParts(s.showdate);
       return `<div class="showrow${noSeason ? " unavailable" : ""}${seasonLast ? " season-last" : ""}">
-      <div class="date"><span>${fmtDate(s.showdate)}</span>${gameNumber ? `<span class="gamenum">${gameNumber}</span>` : ""}</div>
+      <div class="date"><span class="wk">${wk}</span><span>${md}</span>${gameNumber ? `<span class="gamenum">${gameNumber}</span>` : ""}</div>
       <div class="v"><div class="venue">${esc(s.venue || "TBA")}</div>
         <div class="loc">${esc(s.city || "")}${s.state ? ", " + esc(s.state) : ""}
           <span class="pill ${cls}" data-cd="${st === "open" ? s.cutoff_at : ""}">${txt}</span>${resultOwnLine ? "" : winHtml ? " " + winHtml : ""}</div>
         ${resultOwnLine && winHtml ? `<div style="margin-top:4px">${winHtml}</div>` : ""}</div>
-      <button onclick="openShow(${s.id})">${st === "open" ? "Pick" : "View"}</button>
+      <button onclick="openShow(${s.id})">${buttonLabelHtml(s, st === "open" ? "Pick" : "View")}</button>
     </div>`;
     };
     const withSeasons = (list) => {
@@ -1230,265 +1522,6 @@ OK = remove + ban \xB7 Cancel = remove only`);
     if (state.session) renderAll();
     else renderAuth();
   });
-
-  // src/features/picks.js
-  var isWildcard = (v) => (v || "").trim().toLowerCase() === "any debut";
-  function draftKey(showId) {
-    return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`;
-  }
-  async function openShow(id) {
-    if (isDesktop()) state.tab = "shows";
-    clearTimersFor("shows");
-    const show = await fetchShow(id);
-    state.currentShow = show;
-    const st = showState(show);
-    if (st !== "open") {
-      renderShowDetail(show);
-      return;
-    }
-    let gate = { ok: true, reason: null };
-    try {
-      const [row] = await rpc("can_submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id });
-      if (row) gate = row;
-    } catch (e) {
-    }
-    if (gate.ok) renderPickSheet(show);
-    else renderIneligible(show, gate.reason);
-  }
-  function renderIneligible(show, reason) {
-    const casual = state.leagues.find((l) => l.league_id === state.currentLeagueId && l.bracket_kind === "casual");
-    $("#main").innerHTML = `
-    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button></p>
-    <div class="sheet">
-      <h2>${esc(show.venue || "TBA")}</h2>
-      <div class="sub">${fmtDate(show.showdate)}</div>
-      <p class="ineligible-reason">${esc(reason || "Picks aren't open for this bracket.")}</p>
-      ${casual ? `<button class="btn ghost small" onclick="switchToBracket(${casual.bracket_id})">Switch to Casual</button>` : ""}
-    </div>
-    ${footerHtml()}`;
-  }
-  function prettifySlotKey(key) {
-    return key.replace(/[_-]+/g, " ").replace(/([a-zA-Z])(\d)/g, "$1 $2").trim().split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
-  }
-  function breakdownSlotInfo(format) {
-    const sect = format === "one_set" && state.cfg.oneset ? state.cfg.oneset : state.cfg;
-    const slots = sect.slots || [];
-    const coverKeys = slots.filter((s) => (s.type || s.key) === "cover_pick").map((s) => s.key);
-    const order = [], label = {};
-    slots.forEach((s) => {
-      order.push(s.key);
-      label[s.key] = coverKeys.length > 1 && coverKeys.includes(s.key) ? `${s.label} ${coverKeys.indexOf(s.key) + 1}` : s.label;
-    });
-    for (let i = 1; i <= (sect.flat_picks || 0); i++) {
-      order.push("flat" + i);
-      label["flat" + i] = "Pick " + i;
-    }
-    return { order, label };
-  }
-  function sortBySlotOrder(items, order) {
-    return [...items].sort((a, b) => {
-      const ia = order.indexOf(a.slot), ib = order.indexOf(b.slot);
-      if (ia === -1 && ib === -1) return 0;
-      if (ia === -1) return 1;
-      if (ib === -1) return -1;
-      return ia - ib;
-    });
-  }
-  function slotDefs(format) {
-    var _a, _b;
-    const sect = format === "one_set" && state.cfg.oneset ? state.cfg.oneset : state.cfg;
-    const slots = (sect.slots || []).map((s) => ({ key: s.key, label: s.label, pts: s.points, type: s.type || s.key }));
-    for (let i = 1; i <= (sect.flat_picks || 0); i++) slots.push({ key: "flat" + i, label: "Pick " + i, pts: (_b = (_a = sect.flat_points) != null ? _a : state.cfg.flat_points) != null ? _b : 1, flat: true });
-    return slots;
-  }
-  async function renderPickSheet(show) {
-    var _a;
-    let mine = [];
-    try {
-      mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id });
-    } catch (e) {
-    }
-    const dKey = draftKey(show.id);
-    const draft = JSON.parse(localStorage.getItem(dKey) || "null");
-    const val = (k) => esc((draft && draft[k] != null ? draft[k] : (mine.find((p) => p.slot === k) || {}).songname) || "");
-    const slots = slotDefs(show.format);
-    const slotHtml = (s) => `
-    <div class="slotline autocomplete">
-      <label>${esc(s.label)}</label>
-      <input data-slot="${s.key}" data-type="${s.type || s.key}" value="${val(s.key)}" placeholder="${(s.type || s.key) === "cover_pick" ? "a cover\u2026" : "song\u2026"}" autocomplete="off" spellcheck="false">
-      <span class="pts">${s.pts} pt${s.pts === 1 ? "" : "s"}</span>
-    </div>`;
-    const structured = slots.filter((s) => !s.flat), flats = slots.filter((s) => s.flat);
-    $("#main").innerHTML = `
-    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button></p>
-    <div class="sheet">
-      <h2>${esc(show.venue || "TBA")}</h2>
-      <div class="sub">${fmtDate(show.showdate)} \xB7 ${esc(show.city || "")}${show.state ? ", " + esc(show.state) : ""}${show.format === "one_set" ? " \xB7 FESTIVAL SET" : ""}</div>
-      ${structured.map(slotHtml).join("")}
-      ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
-      <button class="savebtn" id="save">Lock 'em in</button>
-      <div class="countbig">${state.cfg.voting_override === "open" ? "Admin override \u2014 voting open" : `Locks ${fmtCutoff(show.cutoff_at)} \xB7 <b id="cd"></b>`}</div>
-      <div class="err" id="p-err" style="text-align:center"></div>
-      ${((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" ? laurelSpray() : ""}
-    </div>
-    ${footerHtml()}`;
-    document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
-    document.querySelectorAll(".slotline input").forEach((inp) => inp.addEventListener("input", () => {
-      const d = {};
-      document.querySelectorAll(".slotline input").forEach((i) => {
-        if (i.value.trim()) d[i.dataset.slot] = i.value;
-      });
-      localStorage.setItem(dKey, JSON.stringify(d));
-    }));
-    $("#save").onclick = savePicks;
-    if (state.cfg.voting_override !== "open" && show.cutoff_at) state.timers.push(setInterval(() => {
-      const cd = countdown(show.cutoff_at);
-      if (cd) $("#cd").textContent = cd + " left";
-      else {
-        toast("Picks are locked \u2014 enjoy the show \u{1F95A}");
-        openShow(show.id);
-      }
-    }, 1e3));
-  }
-  function attachAutocomplete(input) {
-    let list = null, sel = -1;
-    const close = () => {
-      list == null ? void 0 : list.remove();
-      list = null;
-      sel = -1;
-    };
-    input.addEventListener("input", () => {
-      var _a, _b;
-      close();
-      const q = input.value.trim().toLowerCase();
-      if (q.length < 1) return;
-      const coverOnly = input.dataset.type === "cover_pick";
-      const pool = coverOnly ? state.songList.filter((s) => s.is_original === false) : state.songList;
-      const wc = [];
-      if (!coverOnly && ((_b = (_a = state.cfg.wildcards) == null ? void 0 : _a.debut) != null ? _b : true) && ("any debut".includes(q) || "debut".includes(q)))
-        wc.push({ songname: "Any Debut", times_played: "\u2605" });
-      const hits = [...wc, ...pool.filter((s) => s.songname.toLowerCase().includes(q))].slice(0, 8);
-      if (!hits.length) return;
-      list = document.createElement("div");
-      list.className = "acc-list";
-      hits.forEach((h) => {
-        var _a2;
-        const d = document.createElement("div");
-        d.innerHTML = `${esc(h.songname)} <small>${(_a2 = h.times_played) != null ? _a2 : "\u2013"}\xD7</small>`;
-        d.onmousedown = (e) => {
-          e.preventDefault();
-          input.value = h.songname;
-          input.dispatchEvent(new Event("input"));
-          close();
-        };
-        list.appendChild(d);
-      });
-      input.parentElement.appendChild(list);
-    });
-    input.addEventListener("keydown", (e) => {
-      if (!list) return;
-      const items = [...list.children];
-      if (e.key === "ArrowDown") {
-        sel = Math.min(sel + 1, items.length - 1);
-      } else if (e.key === "ArrowUp") {
-        sel = Math.max(sel - 1, 0);
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        if (sel >= 0) {
-          input.value = items[sel].textContent.replace(/\s*\S*×$/, "").trim();
-          input.dispatchEvent(new Event("input"));
-        }
-        close();
-        return;
-      } else return;
-      items.forEach((it, i) => it.classList.toggle("sel", i === sel));
-    });
-    input.addEventListener("blur", () => setTimeout(close, 150));
-  }
-  async function savePicks() {
-    $("#p-err").textContent = "";
-    const picks = [...document.querySelectorAll(".slotline input")].map((i) => ({ slot: i.dataset.slot, songname: i.value.trim() })).filter((p) => p.songname);
-    const unknown = picks.filter((p) => !isWildcard(p.songname) && !state.songList.some((s) => s.songname.toLowerCase() === p.songname.toLowerCase()));
-    if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):
-${unknown.map((u) => u.songname).join("\n")}
-
-Save anyway?`)) return;
-    try {
-      await rpc("submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: state.currentShow.id, p_picks: picks });
-      localStorage.removeItem(draftKey(state.currentShow.id));
-      toast("Picks saved \u2714", "score");
-    } catch (e) {
-      $("#p-err").textContent = e.message;
-    }
-  }
-  async function renderShowDetail(show) {
-    var _a, _b, _c;
-    clearTimers();
-    const [{ data: setlist }, picks, scores] = await Promise.all([
-      db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
-      rpc("get_show_picks", { p_bracket_id: state.currentBracketId, p_show_id: show.id }).catch(() => []),
-      rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id }).then((rows) => (rows || []).sort((a, b) => b.points - a.points))
-    ]);
-    const pname = Object.fromEntries((scores || []).map((s) => [s.player_id, s.player_name]));
-    const mineHits = new Set((picks || []).filter((p) => p.player_id === state.session.id).map((p) => p.songname.toLowerCase()));
-    let lastSet = null;
-    const setHtml = (setlist || []).map((s) => {
-      const label = s.is_encore ? "Encore" : "Set " + (s.setnumber || "1");
-      const brk = label !== lastSet ? `<div class="setbreak">${esc(label)}</div>` : "";
-      lastSet = label;
-      return brk + `
-    <div class="songrow ${mineHits.has(s.songname.toLowerCase()) ? "hitmine" : ""}">
-      <span class="pos">${s.position}</span>
-      <span class="name">${esc(s.songname)}</span>
-    </div>`;
-    }).join("");
-    const attribution = (setlist || []).length ? `<p class="muted" style="text-align:center">Setlist data from ${show.permalink ? `<a href="${CARTON_SITE_BASE}/${esc(show.permalink)}" target="_blank" rel="noopener">The Carton</a>` : "The Carton"}.</p>` : "";
-    const { order: brkOrder, label: brkLabel } = breakdownSlotInfo(show.format);
-    const hasUndetermined = (scores || []).some((sc) => (sc.breakdown || []).some((b) => (b.reason || "").includes("slot undetermined")));
-    const scoreHtml = (scores || []).map((sc) => `
-    <div class="panel" style="padding:12px">
-      <div class="row"><b>${esc(pname[sc.player_id] || "?")}</b>
-        <span class="pts" style="margin-left:auto;font-family:var(--mono);color:var(--yolk)">${sc.points} pts</span></div>
-      ${sortBySlotOrder(sc.breakdown || [], brkOrder).map((b) => `
-        <div class="pickres ${b.points > 0 ? "hit" : b.hit ? "" : "miss"}">
-          <span class="sl">${esc(brkLabel[b.slot] || prettifySlotKey(b.slot))}</span><span>${esc(b.songname)}</span>
-          <span class="pt">${b.points > 0 ? "+" + b.points : "\xB7"} <small class="muted">${esc(b.reason)}</small></span>
-        </div>`).join("")}
-    </div>`).join("");
-    let pickBoard = "";
-    if (!(scores || []).length && (picks || []).length) {
-      const slotOrder = slotDefs(show.format).map((sl) => sl.key);
-      const slotLabel = Object.fromEntries(slotDefs(show.format).map((sl) => [sl.key, sl.label]));
-      const byName = {};
-      for (const p of picks) ((_b = byName[_a = p.player_name]) != null ? _b : byName[_a] = []).push(p);
-      pickBoard = `<h2 style="margin:18px 4px 4px">The picks are in</h2>` + Object.entries(byName).sort((a, b) => a[0].localeCompare(b[0])).map(([name, pp]) => `
-        <div class="panel" style="padding:12px"><div class="row"><b>${esc(name)}</b></div>
-          ${pp.sort((a, b) => slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot)).map((p) => `
-            <div class="pickres"><span class="sl">${esc(slotLabel[p.slot] || p.slot)}</span>
-              <span>${esc(p.songname)}</span></div>`).join("")}
-        </div>`).join("");
-    }
-    $("#main").innerHTML = `
-    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button>
-      <span class="pill ${showState(show) === "live" ? "live" : "final"}">${showState(show) === "final" ? "complete" : showState(show)}</span></p>
-    ${(() => {
-      if (show.status !== "final" || !(scores || []).length) return "";
-      const top = scores[0].points;
-      if (top <= 0) return `<div class="panel"><h2>No winner</h2><p class="muted">Nobody scored on this one.</p></div>`;
-      const champs = scores.filter((x) => x.points === top).map((x) => esc(pname[x.player_id] || "?"));
-      return `<div class="panel" style="border-color:var(--yolk)">
-        <h2>${winBadge(64)} ${champs.join(" & ")} ${champs.length > 1 ? "tie" : "takes it"}</h2>
-        <p class="muted">${top} points${champs.length > 1 ? " apiece" : ""}</p></div>`;
-    })()}
-    <div class="panel"><h2>${esc(show.venue || "")} <span class="muted" style="font-size:.85rem">${fmtDate(show.showdate)}</span></h2>
-      ${((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official" ? `<div class="row" style="justify-content:center;gap:10px;margin:4px 0 12px">${trophy(26)}<span style="font-family:'Fraunces',serif;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--yolk);font-size:.85rem">Official</span>${trophy(26)}</div>` : ""}
-      ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
-    ${pickBoard}
-    <h2 style="margin:18px 4px 4px">Scores</h2>
-    ${hasUndetermined ? `<p class="muted" style="text-align:center;margin:0 4px 8px">Closer-type picks show off-slot points (if enabled) until the encore starts (or the show ends) \u2014 full points lock in once determined.</p>` : ""}
-    ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet \u2014 they appear with the first song.</p>'}
-    ${footerHtml()}`;
-  }
 
   // src/core/realtime.js
   var myLastPts = {};

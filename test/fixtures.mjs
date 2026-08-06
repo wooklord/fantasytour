@@ -84,6 +84,19 @@ export function makeFixtures(){
       { player_id: "p1", bracket_id: CASUAL_ID, show_id: 2, points: 5, breakdown: [{ slot:"opener", songname:"Distraction", points:2, hit:true, reason:"hit" }] },
       { player_id: "p2", bracket_id: CASUAL_ID, show_id: 2, points: 2, breakdown: [{ slot:"opener", songname:"Rambling Boy", points:0, hit:false, reason:"miss" }] },
     ],
+    // Shows-list marker fixture: standard format's target is 5 (3 slots +
+    // flat_picks:2, per defCfg above). p1 has 2 of 5 on show 1 (upcoming,
+    // still open — the amber "incomplete, no draft" case) and all 5 of 5
+    // on show 2 (final — the green "complete" case).
+    picks: [
+      { player_id: "p1", bracket_id: CASUAL_ID, show_id: 1, slot: "opener", songname: "Rambling Boy" },
+      { player_id: "p1", bracket_id: CASUAL_ID, show_id: 1, slot: "closer", songname: "Distraction" },
+      { player_id: "p1", bracket_id: CASUAL_ID, show_id: 2, slot: "opener", songname: "Distraction" },
+      { player_id: "p1", bracket_id: CASUAL_ID, show_id: 2, slot: "closer", songname: "Rambling Boy" },
+      { player_id: "p1", bracket_id: CASUAL_ID, show_id: 2, slot: "encore", songname: "Space Oddity" },
+      { player_id: "p1", bracket_id: CASUAL_ID, show_id: 2, slot: "flat1", songname: "Distraction" },
+      { player_id: "p1", bracket_id: CASUAL_ID, show_id: 2, slot: "flat2", songname: "Rambling Boy" },
+    ],
     setlist_songs: [
       { show_id: 2, position: 1, songname: "Distraction", setnumber: 1, is_encore: false },
       { show_id: 2, position: 2, songname: "Rambling Boy", setnumber: 1, is_encore: false },

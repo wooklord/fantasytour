@@ -10,7 +10,7 @@ import { currentBracket } from "../core/switcher.js";
 
 export const isWildcard = v => (v||"").trim().toLowerCase() === "any debut";
 
-function draftKey(showId){ return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`; }
+export function draftKey(showId){ return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`; }
 
 export async function openShow(id){
   if (isDesktop()) state.tab = "shows";

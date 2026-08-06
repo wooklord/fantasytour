@@ -2,20 +2,60 @@ import { $, esc, footerHtml } from "../core/dom.js";
 import { rpc } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
 import { fetchShows } from "../core/leagueShows.js";
-import { fmtDate, countdown, clearTimersFor, showState } from "../core/format.js";
+import { fmtDateParts, countdown, clearTimersFor, showState } from "../core/format.js";
 import { winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
 import { currentBracket } from "../core/switcher.js";
+import { slotDefs, draftKey } from "./picks.js";
 
 export async function renderShows(){
   clearTimersFor("shows"); state.tab = "shows"; state.currentShow = null; markTab();
   const todayStr = new Date().toLocaleDateString('sv');
   const graceStr = new Date(Date.now() - 2*864e5).toISOString().slice(0,10);
-  const [up, past, seas] = await Promise.all([
+  const [up, past, seas, myCounts] = await Promise.all([
     fetchShows(q => q.gte("showdate", graceStr).order("showdate")),
     fetchShows(q => q.lt("showdate", graceStr).order("showdate",{ascending:false}).limit(12)),
     rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId }),
+    rpc("get_my_pick_counts", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId }),
   ]);
+  const savedCountOf = Object.fromEntries((myCounts||[]).map(c => [c.show_id, c.pick_count]));
+  // Pick-status marker, folded into the Pick/View button itself — no
+  // separate element in the row, so it costs zero extra width next to the
+  // venue/pill text (every earlier layout, a floating circle, a stacked
+  // column, still reserved its own slot; this one doesn't). Target count
+  // is config-dependent (standard vs. one-set shows read different config
+  // sections) — slotDefs() already knows how to resolve that per-format,
+  // so this reuses it rather than re-deriving slot counts from state.cfg
+  // here. A draft key existing always means "amber warning," even over an
+  // already-complete save — none of a draft's contents are on the server,
+  // so a saved-complete show with a lingering draft still has something
+  // that could be lost, which is worse than plain "saved but incomplete."
+  const pickMarkInfo = s => {
+    const target = slotDefs(s.format).length;
+    const saved = savedCountOf[s.id] || 0;
+    const hasDraft = !!localStorage.getItem(draftKey(s.id));
+    if (hasDraft){
+      const title = saved >= target && target > 0
+        ? "Saved picks are complete, but you have unsaved local changes on this device — save again to keep them"
+        : "Draft in progress — not yet saved";
+      return { cls: "warn", glyph: "!", title };
+    }
+    if (target > 0 && saved >= target) return { cls: "done", glyph: "✔", title: "Picks saved — complete" };
+    if (saved > 0) return { cls: "progress", glyph: "✓", title: "Picks saved but incomplete" };
+    return null;
+  };
+  // Only green (fully done) replaces the label outright — a bare checkmark
+  // can't say "incomplete" on its own, so the amber check keeps "Pick" and
+  // just adds to it. Amber-warning keeps the label too, for the same
+  // reason (it's flagging something IN ADDITION TO whatever "Pick"/"View"
+  // already means, not replacing it).
+  const buttonLabelHtml = (s, label) => {
+    const mark = pickMarkInfo(s);
+    if (!mark) return label;
+    if (mark.cls === "done") return `<span class="pickmark done" title="${mark.title}">${mark.glyph}</span>`;
+    if (mark.cls === "warn") return `${label} <span class="pickmark warn" title="${mark.title}">${mark.glyph}</span>`;
+    return `${label} <span class="pickmark progress" title="${mark.title}">${mark.glyph}</span>`;
+  };
   const seasonOf = d => (seas||[]).find(se => se.start_date <= d && d <= se.end_date);
   const labelOf = d => seasonOf(d)?.name || null;
   const isOfficial = currentBracket()?.bracket_kind === "official";
@@ -83,13 +123,14 @@ export async function renderShows(){
     const winHtml = st === "final" && winners[s.id]
       ? `<span style="color:var(--yolk);font-size:.82rem">${winBadge(36)} ${winners[s.id].names.map(esc).join(" & ")} · ${winners[s.id].points}</span>` : "";
     const noSeason = isOfficial && !seasonOf(s.showdate);
+    const { wk, md } = fmtDateParts(s.showdate);
     return `<div class="showrow${noSeason ? " unavailable" : ""}${seasonLast ? " season-last" : ""}">
-      <div class="date"><span>${fmtDate(s.showdate)}</span>${gameNumber ? `<span class="gamenum">${gameNumber}</span>` : ""}</div>
+      <div class="date"><span class="wk">${wk}</span><span>${md}</span>${gameNumber ? `<span class="gamenum">${gameNumber}</span>` : ""}</div>
       <div class="v"><div class="venue">${esc(s.venue||"TBA")}</div>
         <div class="loc">${esc(s.city||"")}${s.state?", "+esc(s.state):""}
           <span class="pill ${cls}" data-cd="${st==='open'?s.cutoff_at:''}">${txt}</span>${resultOwnLine ? "" : (winHtml ? " "+winHtml : "")}</div>
         ${resultOwnLine && winHtml ? `<div style="margin-top:4px">${winHtml}</div>` : ""}</div>
-      <button onclick="openShow(${s.id})">${st==='open'?'Pick':'View'}</button>
+      <button onclick="openShow(${s.id})">${buttonLabelHtml(s, st==='open'?'Pick':'View')}</button>
     </div>`;
   };
   // Shows outside any season get NO divider at all (not a "Between tours"
