@@ -76,16 +76,39 @@ export async function renderShows(){
       .sort((a,b) => a.showdate.localeCompare(b.showdate))
       .forEach((sh, i) => { gameNumberOf[sh.id] = i + 1; });
   }
-  const isRecent = s => s.showdate < todayStr || s.status === "final";
-  const upcoming = (up||[]).filter(s => !isRecent(s));
-  // "Just played" is the single most recently played show, not everything
-  // still inside the 2-day grace window — a two-night run or festival
-  // weekend can put more than one already-played show in that window, and
-  // the other one belongs in Recent, not doubled up here. `id` is Carton's
-  // own show_id (see schema.sql's comment on the column) — the closest
-  // thing to a same-day sequence this data has, so ties on showdate break
-  // on it rather than an invented rule.
-  const justPlayed = (up||[]).filter(isRecent)
+  // Keys on finalization, not date — a show belongs in "Just played" only
+  // once league_shows.status flips to 'final'. The old rule (`showdate <
+  // todayStr || status === 'final'`) treated the calendar date rolling
+  // over at midnight as "played," which yanks a show that's still
+  // mid-set — a normal jam show running late, not an edge case — into
+  // Just Played hours before it's actually over.
+  // showState() already knows open/live/locked/final/played/no-cutoff
+  // from cutoff_at + status, so bucketing leans on it instead of
+  // re-deriving date logic. The one case it genuinely can't resolve
+  // without a date: no cutoff_at configured at all means there's nothing
+  // to compare "now" against, so that alone falls back to showdate —
+  // future/today stays Upcoming, past falls into Live (surfaced, not
+  // hidden in Upcoming as if nothing's happening).
+  const bucketOf = s => {
+    if (s.status === "final") return "final";
+    const st = showState(s);
+    if (st === "open") return "upcoming";
+    if (st === "no cutoff") return s.showdate >= todayStr ? "upcoming" : "live";
+    return "live"; // live, locked, played — cutoff's passed, not final yet
+  };
+  const upcoming = (up||[]).filter(s => bucketOf(s) === "upcoming");
+  // The show people most want to reach: cutoff's passed, maybe mid-
+  // setlist, not finalized yet. Nothing date-based moves it out of here —
+  // only finalizing does, into Just played below.
+  const liveNow = (up||[]).filter(s => bucketOf(s) === "live");
+  // "Just played" is the single most recently FINALIZED show, not
+  // everything still inside the 2-day grace window — a two-night run or
+  // festival weekend can put more than one already-final show in that
+  // window, and only the latest surfaces here. `id` is Carton's own
+  // show_id (see schema.sql's comment on the column) — the closest thing
+  // to a same-day sequence this data has, so ties on showdate break on it
+  // rather than an invented rule.
+  const justPlayed = (up||[]).filter(s => bucketOf(s) === "final")
     .sort((a,b) => b.showdate.localeCompare(a.showdate) || b.id - a.id)
     .slice(0, 1);
   const finals = [...(up||[]), ...(past||[])].filter(s => s.status === "final").map(s => s.id);
@@ -165,7 +188,7 @@ export async function renderShows(){
   // property of the player's season membership, not the specific show.
   let rosterBanner = "";
   if (isOfficial){
-    const covered = [...upcoming, ...justPlayed].find(s => seasonOf(s.showdate));
+    const covered = [...upcoming, ...liveNow, ...justPlayed].find(s => seasonOf(s.showdate));
     if (covered){
       try{
         const [gate] = await rpc("can_submit_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:covered.id });
@@ -175,6 +198,7 @@ export async function renderShows(){
   }
   $("#main").innerHTML = `
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
+    ${liveNow.length ? `<div class="panel"><h2>Live</h2>${liveNow.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons(past||[]) || '<p class="muted">Nothing yet.</p>'}</div>

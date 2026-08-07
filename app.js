@@ -650,9 +650,16 @@ Save anyway?`)) return;
         gameNumberOf[sh.id] = i + 1;
       });
     }
-    const isRecent = (s) => s.showdate < todayStr || s.status === "final";
-    const upcoming = (up || []).filter((s) => !isRecent(s));
-    const justPlayed = (up || []).filter(isRecent).sort((a, b) => b.showdate.localeCompare(a.showdate) || b.id - a.id).slice(0, 1);
+    const bucketOf = (s) => {
+      if (s.status === "final") return "final";
+      const st = showState(s);
+      if (st === "open") return "upcoming";
+      if (st === "no cutoff") return s.showdate >= todayStr ? "upcoming" : "live";
+      return "live";
+    };
+    const upcoming = (up || []).filter((s) => bucketOf(s) === "upcoming");
+    const liveNow = (up || []).filter((s) => bucketOf(s) === "live");
+    const justPlayed = (up || []).filter((s) => bucketOf(s) === "final").sort((a, b) => b.showdate.localeCompare(a.showdate) || b.id - a.id).slice(0, 1);
     const finals = [...up || [], ...past || []].filter((s) => s.status === "final").map((s) => s.id);
     const winners = {};
     if (finals.length) {
@@ -698,7 +705,7 @@ Save anyway?`)) return;
     };
     let rosterBanner = "";
     if (isOfficial) {
-      const covered = [...upcoming, ...justPlayed].find((s) => seasonOf(s.showdate));
+      const covered = [...upcoming, ...liveNow, ...justPlayed].find((s) => seasonOf(s.showdate));
       if (covered) {
         try {
           const [gate] = await rpc("can_submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: covered.id });
@@ -709,6 +716,7 @@ Save anyway?`)) return;
     }
     $("#main").innerHTML = `
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
+    ${liveNow.length ? `<div class="panel"><h2>Live</h2>${liveNow.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet \u2014 admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons(past || []) || '<p class="muted">Nothing yet.</p>'}</div>
