@@ -104,13 +104,23 @@ export async function renderShows(){
   // "Just played" is the single most recently FINALIZED show, not
   // everything still inside the 2-day grace window — a two-night run or
   // festival weekend can put more than one already-final show in that
-  // window, and only the latest surfaces here. `id` is Carton's own
-  // show_id (see schema.sql's comment on the column) — the closest thing
-  // to a same-day sequence this data has, so ties on showdate break on it
-  // rather than an invented rule.
-  const justPlayed = (up||[]).filter(s => bucketOf(s) === "final")
-    .sort((a,b) => b.showdate.localeCompare(a.showdate) || b.id - a.id)
-    .slice(0, 1);
+  // window. `id` is Carton's own show_id (see schema.sql's comment on the
+  // column) — the closest thing to a same-day sequence this data has, so
+  // ties on showdate break on it rather than an invented rule.
+  const finalCandidates = (up||[]).filter(s => bucketOf(s) === "final")
+    .sort((a,b) => b.showdate.localeCompare(a.showdate) || b.id - a.id);
+  const justPlayed = finalCandidates.slice(0, 1);
+  // Finalized, but not THE most recent — used to just vanish: excluded
+  // from Upcoming (it's final), capped out of Just played (top-1 only),
+  // and not old enough for the separate `past` fetch (showdate < graceStr)
+  // to have picked it up either. A two-night run's earlier night belongs
+  // in Recent, same as any other already-finished show — it was only
+  // ever missing because Recent's data source didn't reach back into the
+  // last-2-days window at all. Every entry here is inside that window
+  // (showdate >= graceStr) and `past` is strictly older, so prepending
+  // this ahead of `past` at the render call keeps Recent's newest-first
+  // order correct with no re-sort needed.
+  const extraRecent = finalCandidates.slice(1);
   const finals = [...(up||[]), ...(past||[])].filter(s => s.status === "final").map(s => s.id);
   const winners = {};
   if (finals.length){
@@ -188,7 +198,7 @@ export async function renderShows(){
   // property of the player's season membership, not the specific show.
   let rosterBanner = "";
   if (isOfficial){
-    const covered = [...upcoming, ...liveNow, ...justPlayed].find(s => seasonOf(s.showdate));
+    const covered = [...upcoming, ...liveNow, ...justPlayed, ...extraRecent].find(s => seasonOf(s.showdate));
     if (covered){
       try{
         const [gate] = await rpc("can_submit_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:covered.id });
@@ -201,7 +211,7 @@ export async function renderShows(){
     ${liveNow.length ? `<div class="panel"><h2>Live</h2>${liveNow.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
-    <div class="panel"><h2>Recent</h2>${withSeasons(past||[]) || '<p class="muted">Nothing yet.</p>'}</div>
+    <div class="panel"><h2>Recent</h2>${withSeasons([...extraRecent, ...(past||[])]) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;
   state.timers.push(setInterval(() => {
     document.querySelectorAll("[data-cd]").forEach(el => {
