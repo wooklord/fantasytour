@@ -26,7 +26,13 @@ export const TIEBREAK_SHORT_LABELS = {
 // scoping, no zeros (a zero only means something within a season's roster).
 // rosterJoinDates: { [player_id]: 'YYYY-MM-DD' } — only consulted when
 // `season` is set; missing entries fall back to the season's start_date.
-export function computeStandings({ scoreRows, showsById, season, rosterJoinDates = {} }){
+// rosterIds: every player_id on the season's roster, only consulted when
+// `season` is set — seeds an all-zero entry for a roster member with no
+// scoreRows at all (opted in, never had a show finalize while eligible),
+// so they land in standings at 0 instead of being invisible. All-time has
+// no single "roster" (a player can move between seasons over time), so
+// this is deliberately season-scoped, same as rosterJoinDates above.
+export function computeStandings({ scoreRows, showsById, season, rosterJoinDates = {}, rosterIds = [] }){
   const inScope = row => {
     if (!season) return true;
     const sh = showsById[row.show_id];
@@ -41,6 +47,7 @@ export function computeStandings({ scoreRows, showsById, season, rosterJoinDates
       if (row.points > t.high){ t.high = row.points; t.highShow = showsById[row.show_id] || null; }
     }
   }
+  if (season) for (const id of rosterIds) T[id] ??= { career:0, scoped:0, shows:0, high:0, highShow:null, wins:0, zeros:0 };
   const byShow = {};
   for (const row of scoreRows) if (inScope(row) && showsById[row.show_id]?.status === "final")
     (byShow[row.show_id] ??= []).push(row);

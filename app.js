@@ -732,8 +732,8 @@ Save anyway?`)) return;
     ...TIEBREAK_LABELS,
     highest_single_show: "High Score"
   };
-  function computeStandings({ scoreRows, showsById, season, rosterJoinDates = {} }) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+  function computeStandings({ scoreRows, showsById, season, rosterJoinDates = {}, rosterIds = [] }) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
     const inScope = (row) => {
       if (!season) return true;
       const sh = showsById[row.show_id];
@@ -752,9 +752,10 @@ Save anyway?`)) return;
         }
       }
     }
+    if (season) for (const id of rosterIds) (_c = T[id]) != null ? _c : T[id] = { career: 0, scoped: 0, shows: 0, high: 0, highShow: null, wins: 0, zeros: 0 };
     const byShow = {};
-    for (const row of scoreRows) if (inScope(row) && ((_c = showsById[row.show_id]) == null ? void 0 : _c.status) === "final")
-      ((_e = byShow[_d = row.show_id]) != null ? _e : byShow[_d] = []).push(row);
+    for (const row of scoreRows) if (inScope(row) && ((_d = showsById[row.show_id]) == null ? void 0 : _d.status) === "final")
+      ((_f = byShow[_e = row.show_id]) != null ? _f : byShow[_e] = []).push(row);
     for (const arr of Object.values(byShow)) {
       const mx = Math.max(...arr.map((x) => x.points));
       if (mx > 0) {
@@ -763,7 +764,7 @@ Save anyway?`)) return;
     }
     if (season) {
       const byPlayerShow = {};
-      for (const row of scoreRows) ((_g = byPlayerShow[_f = row.player_id]) != null ? _g : byPlayerShow[_f] = {})[row.show_id] = ((_h = byPlayerShow[row.player_id][row.show_id]) != null ? _h : 0) + row.points;
+      for (const row of scoreRows) ((_h = byPlayerShow[_g = row.player_id]) != null ? _h : byPlayerShow[_g] = {})[row.show_id] = ((_i = byPlayerShow[row.player_id][row.show_id]) != null ? _i : 0) + row.points;
       for (const playerId of Object.keys(T)) {
         const joinDate = rosterJoinDates[playerId] || season.start_date;
         const lo = joinDate > season.start_date ? joinDate : season.start_date;
@@ -771,7 +772,7 @@ Save anyway?`)) return;
         for (const [showId, sh] of Object.entries(showsById)) {
           if (sh.status !== "final") continue;
           if (sh.showdate < lo || sh.showdate > season.end_date) continue;
-          const pts = (_j = (_i = byPlayerShow[playerId]) == null ? void 0 : _i[showId]) != null ? _j : 0;
+          const pts = (_k = (_j = byPlayerShow[playerId]) == null ? void 0 : _j[showId]) != null ? _k : 0;
           if (pts === 0) zeros++;
         }
         T[playerId].zeros = zeros;
@@ -836,7 +837,7 @@ Save anyway?`)) return;
     renderBoard();
   }
   async function renderBoard() {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     clearTimersFor("board");
     state.tab = "board";
     markTab();
@@ -845,7 +846,7 @@ Save anyway?`)) return;
       fetchShows((q) => q),
       rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId })
     ]);
-    const pname = Object.fromEntries((sc || []).map((s) => [s.player_id, s.player_name]));
+    let pname = Object.fromEntries((sc || []).map((s) => [s.player_id, s.player_name]));
     const showsById = Object.fromEntries((allShows || []).map((sh) => [sh.id, sh]));
     const today = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
     if (state.boardSeason === null) {
@@ -857,12 +858,14 @@ Save anyway?`)) return;
     }
     const season = (seasons || []).find((se) => String(se.id) === state.boardSeason);
     const tiebreakers = ((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" && season ? ((_b = state.cfg) == null ? void 0 : _b.tiebreakers) || [] : [];
-    let rosterJoinDates = {};
-    if (tiebreakers.length) {
+    let rosterJoinDates = {}, rosterIds = [];
+    if (season && ((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official") {
       const roster = await rpc("get_season_roster", { p_name: state.session.name, p_pin: state.session.pin, p_season_id: season.id });
       rosterJoinDates = Object.fromEntries((roster || []).map((r) => [r.player_id, String(r.added_at).slice(0, 10)]));
+      rosterIds = (roster || []).map((r) => r.player_id);
+      pname = { ...Object.fromEntries((roster || []).map((r) => [r.player_id, r.name])), ...pname };
     }
-    const T = computeStandings({ scoreRows: sc || [], showsById, season, rosterJoinDates });
+    const T = computeStandings({ scoreRows: sc || [], showsById, season, rosterJoinDates, rosterIds });
     const order = rankStandings(T, (p) => season ? p.scoped : p.career, tiebreakers);
     const rows = order.map((o) => [o.id, T[o.id]]);
     const opts = [
@@ -870,7 +873,7 @@ Save anyway?`)) return;
       `<option value="all" ${state.boardSeason === "all" ? "selected" : ""}>All time</option>`
     ].join("");
     const scopeName = season ? esc(season.name) : "All time";
-    const isOfficial = ((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official";
+    const isOfficial = ((_d = currentBracket()) == null ? void 0 : _d.bracket_kind) === "official";
     const tierFor = (o) => o.rank === 1 ? "gold" : o.rank === 2 ? "silver" : "bronze";
     const narrow = window.matchMedia("(max-width:420px)").matches;
     const bigPx = narrow ? 76 : 118, smallPx = narrow ? 54 : 82;

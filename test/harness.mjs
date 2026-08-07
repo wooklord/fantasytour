@@ -115,7 +115,11 @@ const RPC_HANDLERS = {
   // underlying table, membership-gated rather than admin-gated in real SQL,
   // but the fake doesn't model auth failures, only the real join.
   get_season_roster: async ({ p_season_id }, tables) =>
-    tables.season_rosters.filter(sr => sr.season_id === p_season_id).map(sr => ({ player_id: sr.player_id, added_at: sr.added_at })),
+    tables.season_rosters.filter(sr => sr.season_id === p_season_id).map(sr => ({
+      player_id: sr.player_id,
+      name: tables.players_public.find(p => p.id === sr.player_id)?.name,
+      added_at: sr.added_at,
+    })),
   admin_pick_status: async () => [{ player_name: "Wooklord", picks_count: 1, last_saved: "2026-07-26T00:00:00Z" }],
   admin_update_config: async () => ({ ok: true }),
   admin_set_cutoff: async () => ({ ok: true }),

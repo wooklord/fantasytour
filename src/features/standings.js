@@ -20,7 +20,7 @@ export async function renderBoard(){
     fetchShows(q => q),
     rpc("get_bracket_seasons", { p_bracket_id: state.currentBracketId }),
   ]);
-  const pname = Object.fromEntries((sc||[]).map(s => [s.player_id, s.player_name]));
+  let pname = Object.fromEntries((sc||[]).map(s => [s.player_id, s.player_name]));
   const showsById = Object.fromEntries((allShows||[]).map(sh => [sh.id, sh]));
   const today = new Date().toLocaleDateString('sv');
   // Default season priority: (1) a currently-active season wins outright —
@@ -47,13 +47,27 @@ export async function renderBoard(){
   // (equal points share a placing, not an arbitrary order) via an empty
   // stack — see tiebreak.js's rankStandings.
   const tiebreakers = (currentBracket()?.bracket_kind === "official" && season) ? (state.cfg?.tiebreakers || []) : [];
-  let rosterJoinDates = {};
-  if (tiebreakers.length){
+  // Fetched whenever a season is active, not just when tiebreakers are
+  // configured — standings used to be built ENTIRELY from get_bracket_scores
+  // rows, so a roster member who'd opted in but never had a show finalize
+  // while eligible was invisible rather than shown at 0. The roster is the
+  // fix: every member gets seeded into computeStandings (rosterIds below),
+  // and their name has to come from here now since they may have no score
+  // row to source a name from at all. Casual/All time have no single
+  // "roster" (Casual never has seasons; All time spans many), so this
+  // stays season-gated, same as the tiebreaker stack above.
+  let rosterJoinDates = {}, rosterIds = [];
+  if (season && currentBracket()?.bracket_kind === "official"){
     const roster = await rpc("get_season_roster", { p_name:state.session.name, p_pin:state.session.pin, p_season_id: season.id });
     rosterJoinDates = Object.fromEntries((roster||[]).map(r => [r.player_id, String(r.added_at).slice(0,10)]));
+    rosterIds = (roster||[]).map(r => r.player_id);
+    // Score-derived names win on conflict (pname built above), but a
+    // never-scored roster member has no score row to source a name from —
+    // this is their only source.
+    pname = { ...Object.fromEntries((roster||[]).map(r => [r.player_id, r.name])), ...pname };
   }
 
-  const T = computeStandings({ scoreRows: sc||[], showsById, season, rosterJoinDates });
+  const T = computeStandings({ scoreRows: sc||[], showsById, season, rosterJoinDates, rosterIds });
   const order = rankStandings(T, p => season ? p.scoped : p.career, tiebreakers);
   const rows = order.map(o => [o.id, T[o.id]]);
   const opts = [...(seasons||[]).map(se =>
