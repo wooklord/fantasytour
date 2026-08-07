@@ -69,6 +69,21 @@ export async function renderBoard(){
 
   const T = computeStandings({ scoreRows: sc||[], showsById, season, rosterJoinDates, rosterIds });
   const order = rankStandings(T, p => season ? p.scoped : p.career, tiebreakers);
+  // rankStandings groups ties (equal points, or an exhausted tiebreaker
+  // stack that never separated them) in whatever order Object.keys(T)
+  // happened to iterate — score-row arrival order, then get_season_roster's
+  // arbitrary (no ORDER BY) row order for roster-seeded entries. Neither
+  // means anything, so any group sharing a rank sorts by name instead of
+  // leaving that arbitrary order on display. Applies everywhere ties show
+  // up — Casual's plain equal-points ties included, not just Official's.
+  for (let i = 0; i < order.length; ){
+    let j = i;
+    while (j < order.length && order[j].rank === order[i].rank) j++;
+    if (j - i > 1) order.slice(i, j)
+      .sort((a,b) => (pname[a.id]||"").localeCompare(pname[b.id]||""))
+      .forEach((o,k) => order[i+k] = o);
+    i = j;
+  }
   const rows = order.map(o => [o.id, T[o.id]]);
   const opts = [...(seasons||[]).map(se =>
       `<option value="${se.id}" ${state.boardSeason===String(se.id)?"selected":""}>${esc(se.name)}</option>`),
