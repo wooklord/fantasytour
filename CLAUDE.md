@@ -115,6 +115,45 @@ every show reads as already-locked regardless of what the test intends to exerci
 (this bit the C2a rewrite once, caught immediately by the new fixed-expectation
 assertions rather than staying invisible the way a diff-only check would have).
 
+**Session-shape blind spot, found the hard way:** every scenario in `test/harness.mjs`
+presets `p1` (Wooklord) — `is_league_admin: true` in the fixture — except
+`runNonAdminScenario` (added after the incident below). That meant `isCurrentLeagueAdmin()`
+was `true` in literally every test ever run for this app, so any bug that only
+manifests for a genuine non-admin was structurally invisible to the whole suite, not
+just under-covered. This is exactly how a real bug shipped and sat unnoticed until a
+non-admin tester hit it live: `core/realtime.js`'s `refreshCurrent()` called
+`renderAdmin()` directly instead of the role-aware `renderAdminOrSettings()` dispatcher
+on the shared admin/settings tab — for an admin the two calls are equivalent, so it
+looked correct in every admin-tested session; for a non-admin backgrounding the app
+on Settings, it silently rendered the admin panel (and its admin-gated RPCs, which
+then reject) instead. Fixed, and `runNonAdminScenario` (presets `p2`,
+`is_league_admin: false`) now locks in both the initial Settings render and the exact
+backgrounding/foregrounding regression.
+
+**Other session shapes still not exercised by anything in this harness** — read this
+before assuming a change is covered just because the suite is green:
+- **A genuine global admin** (`is_global_admin: true`). No fixture player has this set;
+  `p1`'s admin status comes entirely from `league_members.is_league_admin`. Right now
+  the two produce identical rendering (both satisfy `isCurrentLeagueAdmin()`'s
+  OR-condition, and nothing else in `src/` checks `is_global_admin` directly), so
+  there's nothing currently divergent to miss — but any future Global-exclusive
+  feature (cross-league stats, nuclear boot, the league-creation screen — none of
+  which exist in `src/` yet despite being described in the spec) needs a
+  global-admin session added to the harness from the day it's built, not after.
+- **More than one league.** `renderLeagueSelector()`'s actual dropdown branch
+  (`leagueIds.length > 1`) has never run — the fixture has exactly one league
+  (Ambassadors), so the function always takes the "hide the selector" early return.
+  Once the Facebook League is real, a player or admin in both leagues exercises the
+  branch nobody's ever seen render.
+- **A player who is NOT opted into Official / not on the season roster, blocked from
+  submitting picks for that reason.** `p2`'s `official_opt_in: false` in the fixture
+  has never been exercised through an actual login, and separately, the fake
+  `can_submit_picks` handler in `harness.mjs` only models the "no season covers this
+  show" rejection — it doesn't check `official_opt_in` or `season_rosters` at all. So
+  even adding the session wouldn't currently prove the real roster-based rejection
+  path works; the fake handler needs the same real-join treatment `get_bracket_scores`
+  and `admin_list_members` already get before that's actually covered.
+
 ## Postgres / Supabase gotchas learned the hard way
 
 - **pgcrypto lives in the `extensions` schema** on Supabase. Every `SECURITY DEFINER`

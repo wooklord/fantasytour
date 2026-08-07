@@ -1605,7 +1605,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
       return;
     }
     if (state.tab === "board") renderBoard();
-    else if (state.tab === "admin") renderAdmin();
+    else if (state.tab === "admin") renderAdminOrSettings();
     else if (state.currentShow) openShow(state.currentShow.id);
     else renderShows();
   }

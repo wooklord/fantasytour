@@ -169,6 +169,49 @@ export async function runLoggedOutBoot({ html, scripts, mode }){
   return { colsDisplay, authFormPresent, authFormInVisibleContainer };
 }
 
+// Every OTHER scenario in this file (and, until now, every scenario ever
+// written for this app) presets p1 (Wooklord) — a league admin in the
+// fixture. isCurrentLeagueAdmin() has therefore always been true, so any
+// bug that only manifests for a genuine non-admin (like the shared
+// admin/settings tab rendering the wrong thing on backgrounding — see the
+// visibilitychange step below) was structurally invisible to this whole
+// suite, not just under-covered. Presets p2 (EggHead), is_league_admin:
+// false in the fixture, specifically to close that blind spot.
+export async function runNonAdminScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const dbHolder = {};
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, dbHolder);
+  const session = { id: "p2", name: "EggHead", pin: "1234", is_global_admin: false };
+  window.localStorage.setItem("ft_session", JSON.stringify(session));
+
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+
+  clickTab(window, "admin"); // the shared slot — "admin" is the only nav data-tab value either way
+  await tick(); await tick();
+  const settingsHtml = mainHTML(window, mode);
+  const sharedTabLabel = window.document.getElementById("admintab")?.textContent
+    || window.document.getElementById("col-admin-title")?.textContent || "";
+
+  // The exact bug: backgrounding (visibilitychange -> hidden) then
+  // foregrounding (-> visible) while sitting on this tab used to call
+  // renderAdmin() directly instead of the role-aware dispatcher, which
+  // rendered the admin-only panel (and its admin-gated RPCs) for a
+  // non-admin. jsdom's document.visibilityState is a plain configurable
+  // property, so it's overridden directly rather than faked through some
+  // other API — this fires the app's REAL listener (core/realtime.js),
+  // not a stand-in for it.
+  Object.defineProperty(window.document, "visibilityState", { value: "visible", configurable: true });
+  window.document.dispatchEvent(new window.Event("visibilitychange"));
+  await tick(); await tick();
+  const afterForegroundHtml = mainHTML(window, mode);
+
+  return { settingsHtml, sharedTabLabel, afterForegroundHtml };
+}
+
 // scripts: array of JS source strings to eval, in order, after globals are set.
 export async function runScenario({ html, scripts, mode, presetSession }){
   const { tables, ids } = makeFixtures();

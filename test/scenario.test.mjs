@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -170,6 +170,25 @@ async function runMode(mode){
   check("logged-out boot renders the login form somewhere visible",
     loggedOut.authFormPresent && loggedOut.authFormInVisibleContainer,
     `colsDisplay: "${loggedOut.colsDisplay}" authFormPresent: ${loggedOut.authFormPresent} inVisibleContainer: ${loggedOut.authFormInVisibleContainer}`);
+
+  // Every session above is p1, a league admin in the fixture — this whole
+  // suite never logged in as a genuine non-admin until now. Regression
+  // coverage for the real bug: a non-admin's shared admin/settings tab
+  // rendered the admin-only panel after backgrounding+foregrounding,
+  // because refreshCurrent() called renderAdmin() directly instead of the
+  // role-aware dispatcher every other call site already used.
+  const nonAdmin = await runNonAdminScenario({ html, scripts, mode });
+  check("non-admin's shared tab shows Settings, not Admin, content",
+    /Bracket/.test(nonAdmin.settingsHtml) && /Log out/.test(nonAdmin.settingsHtml)
+      && !/Master switch/.test(nonAdmin.settingsHtml) && !/Who's picked/.test(nonAdmin.settingsHtml),
+    `settingsHtml: ${nonAdmin.settingsHtml}`);
+  check("non-admin's shared tab is labeled Settings, not Admin",
+    nonAdmin.sharedTabLabel === "Settings",
+    `sharedTabLabel: "${nonAdmin.sharedTabLabel}"`);
+  check("backgrounding+foregrounding on that tab still shows Settings, not the admin panel (the actual bug)",
+    /Bracket/.test(nonAdmin.afterForegroundHtml) && /Log out/.test(nonAdmin.afterForegroundHtml)
+      && !/Master switch/.test(nonAdmin.afterForegroundHtml) && !/Who's picked/.test(nonAdmin.afterForegroundHtml),
+    `afterForegroundHtml: ${nonAdmin.afterForegroundHtml}`);
 
   return failures.length;
 }

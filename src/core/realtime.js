@@ -3,11 +3,10 @@ import { db, rpc } from "./supabaseClient.js";
 import { state } from "./state.js";
 import { toast } from "./toast.js";
 import { showState } from "./format.js";
-import { renderAll } from "./layout.js";
+import { renderAll, renderAdminOrSettings } from "./layout.js";
 import { renderShows } from "../features/shows.js";
 import { openShow } from "../features/picks.js";
 import { renderBoard } from "../features/standings.js";
-import { renderAdmin } from "../features/admin.js";
 
 const myLastPts = {};
 let channel = null;
@@ -82,7 +81,14 @@ export function refreshCurrent(){
   if (state.tab === "shows" && state.currentShow && showState(state.currentShow) === "open") return; // never wipe an in-progress pick sheet
   if (isDesktop()){ renderAll(); return; }
   if (state.tab === "board") renderBoard();
-  else if (state.tab === "admin") renderAdmin();
+  // "admin" is the shared third-tab slot — Admin for league admins,
+  // Settings for everyone else (same sentinel value either way, see
+  // settings.js's renderSettings). Calling renderAdmin() directly here
+  // instead of the role-aware dispatcher rendered the admin-only panel
+  // (and its admin-gated RPC calls) for a NON-admin on the Settings tab —
+  // happened to look correct in every admin-tested session since
+  // isCurrentLeagueAdmin() made the two calls equivalent for an admin.
+  else if (state.tab === "admin") renderAdminOrSettings();
   else if (state.currentShow) openShow(state.currentShow.id);
   else renderShows();
 }
