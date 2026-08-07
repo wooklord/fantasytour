@@ -18,8 +18,10 @@ export const TIEBREAK_SHORT_LABELS = {
 };
 
 // scoreRows: [{player_id, show_id, points}] — every score row for the
-// bracket, unfiltered (career needs everything; scoped/wins/high/zeros are
-// filtered internally against `season`).
+// bracket, unfiltered (rows for a non-final show are skipped entirely
+// below — standings only ever reflect settled results, never a show
+// still live-scoring; scoped/wins/high/zeros are additionally filtered
+// against `season`).
 // showsById: { [show_id]: { showdate, status, ... } } — this league's shows,
 // merged with the league_shows overlay (status/showdate).
 // season: { start_date, end_date } | null — null means "All time": no
@@ -40,6 +42,12 @@ export function computeStandings({ scoreRows, showsById, season, rosterJoinDates
   };
   const T = {};
   for (const row of scoreRows){
+    // A row for a show that hasn't finalized yet (open/live/locked) is a
+    // still-moving number — reopening a show deletes its scores rows
+    // anyway, but this also covers the window mid-show where scores are
+    // landing song-by-song, so the board doesn't shift under a player
+    // watching it while a show is still in progress.
+    if (showsById[row.show_id]?.status !== "final") continue;
     const t = (T[row.player_id] ??= { career:0, scoped:0, shows:0, high:0, highShow:null, wins:0, zeros:0 });
     t.career += row.points;
     if (inScope(row)){
@@ -119,8 +127,16 @@ function groupBy(ids, valueOf){
 function resolveGroup(ids, players, tiebreakers, idx, path){
   if (idx >= tiebreakers.length) return [{ ids, resolvedBy: null, path }];
   const layer = tiebreakers[idx];
+  const groups = groupBy(ids, id => layerValue(players[id], layer));
+  // A layer that leaves the whole group in one bucket (every member had
+  // the identical value) explained nothing — try the next layer instead
+  // of recording it. Narrower than "didn't split this pair": if the group
+  // DOES split, every resulting sub-group still gets this layer added
+  // (including ones that only separated a different member), same as
+  // before — only the "nobody was separated at all" case is new.
+  if (groups.length === 1) return resolveGroup(ids, players, tiebreakers, idx + 1, path);
   const out = [];
-  for (const group of groupBy(ids, id => layerValue(players[id], layer))){
+  for (const group of groups){
     const newPath = [...path, { layer, value: displayValue(players[group[0]], layer) }];
     if (group.length === 1) out.push({ ids: group, resolvedBy: layer, path: newPath });
     else out.push(...resolveGroup(group, players, tiebreakers, idx + 1, newPath));

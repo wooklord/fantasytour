@@ -39,13 +39,37 @@ function check(label, actual, expected) {
   ];
   const T = computeStandings({ scoreRows, showsById, season, rosterJoinDates });
 
-  check("pA career sums every row regardless of season scope", T.pA.career, 5);
+  check("pA career sums every FINAL row regardless of season scope", T.pA.career, 5);
   check("pA scoped sums only in-season rows", T.pA.scoped, 5);
   check("pA zeros: explicit 0 (show2) + missing row (show3), show4 excluded (not final), show5 excluded (before season)", T.pA.zeros, 2);
 
   check("pB career includes the out-of-scope row", T.pB.career, 9);
   check("pB scoped excludes the out-of-scope row", T.pB.scoped, 0);
   check("pB zeros: only show3 counts — show1/show2 predate pB's roster join", T.pB.zeros, 1);
+}
+
+// =================================================================
+// 1b. computeStandings: a row for a not-yet-final show never counts, in
+//     either scope — the board must not shift while a show is still
+//     live-scoring. Also: once that same show flips to final, its row
+//     counts normally, and if it's reopened (flips back off final), it
+//     drops back out again — exactly the shape a real reopen produces
+//     (league_shows.status reverts, and the edge function separately
+//     wipes the scores rows, but this proves the status check alone is
+//     already sufficient even if a stale row somehow survived).
+// =================================================================
+{
+  const season = { start_date: "2026-06-01", end_date: "2026-08-31" };
+  const scoreRows = [{ player_id: "p1", show_id: "show1", points: 5 }];
+
+  const live = computeStandings({ scoreRows, showsById: { show1: { showdate: "2026-06-05", status: "live" } }, season });
+  check("a live (not-yet-final) show's row counts toward nothing at all", live.p1, undefined);
+
+  const final = computeStandings({ scoreRows, showsById: { show1: { showdate: "2026-06-05", status: "final" } }, season });
+  check("the identical row counts normally once the show is final", [final.p1.career, final.p1.scoped, final.p1.shows], [5, 5, 1]);
+
+  const reopened = computeStandings({ scoreRows, showsById: { show1: { showdate: "2026-06-05", status: "live" } }, season });
+  check("flipping the same show back off final (a reopen) drops it back out", reopened.p1, undefined);
 }
 
 // =================================================================
@@ -95,8 +119,9 @@ function check(label, actual, expected) {
 // =================================================================
 // 5. rankStandings: full recursive resolution across a 4-way tie —
 //    layer 1 splits {p1,p2} from {p3,p4} on zeros; within {p1,p2}, layer 2
-//    (wins) resolves cleanly; within {p3,p4}, wins ties too, and even
-//    highest-single-show ties, so the stack exhausts and they share a
+//    (wins) resolves cleanly; within {p3,p4}, wins ties too (2 vs 2), and
+//    highest-single-show ties too (20 vs 20) — neither layer splits them,
+//    so neither is recorded, and the stack exhausts with them sharing a
 //    placing. Confirms competition-style rank numbering (1,2,3,3) — the
 //    next rank after a shared pair skips ahead by the group size.
 // =================================================================
@@ -120,11 +145,12 @@ function check(label, actual, expected) {
   // never carries a layer entry their group wasn't actually subjected to.
   check("p1 carries both layers it was measured on, with its OWN values", byId.p1.layers, [{ layer: "fewest_zeros", value: 0 }, { layer: "most_wins", value: 3 }]);
   check("p2 carries the same two layers, its own (losing) values", byId.p2.layers, [{ layer: "fewest_zeros", value: 0 }, { layer: "most_wins", value: 1 }]);
-  // p3/p4 exhaust every layer in the stack — all three show up, including
-  // the untried-by-p1/p2 highest_single_show, since p3/p4's tie survived
-  // that far.
-  check("p3 carries all three exhausted layers", byId.p3.layers, [{ layer: "fewest_zeros", value: 1 }, { layer: "most_wins", value: 2 }, { layer: "highest_single_show", value: 20 }]);
-  check("p4 carries the identical exhausted-layer history", byId.p4.layers, byId.p3.layers);
+  // p3/p4 exhaust the stack, but most_wins (2 vs 2) and highest_single_show
+  // (20 vs 20) never actually split them — a layer that leaves the whole
+  // group in one bucket explained nothing, so only fewest_zeros (which DID
+  // split the original 4-way group into {p1,p2}/{p3,p4}) is recorded.
+  check("p3 carries only the layer that actually split something (fewest_zeros) — most_wins/highest_single_show resolved nothing and are omitted", byId.p3.layers, [{ layer: "fewest_zeros", value: 1 }]);
+  check("p4 carries the identical (short) layer history", byId.p4.layers, byId.p3.layers);
 }
 
 // =================================================================
@@ -152,6 +178,25 @@ function check(label, actual, expected) {
   check("Kobeybeef: tied on zeros with WookLord, then separated by wins — both layers shown", byId.kobeybeef.layers, [{ layer: "fewest_zeros", value: 2 }, { layer: "most_wins", value: 1 }]);
   check("WookLord: same two layers, its own (losing) wins value — not a bare demotion", byId.wooklord.layers, [{ layer: "fewest_zeros", value: 2 }, { layer: "most_wins", value: 0 }]);
   check("Kobeybeef ranks ahead of WookLord", byId.kobeybeef.rank < byId.wooklord.rank, true);
+}
+
+// =================================================================
+// 5c. The exact noise the dev flagged: a 6-way tie at 1 point where every
+//     layer is identical across the whole group (zeros, wins, high all
+//     tied for all six) — the stack exhausts without splitting anyone
+//     even once. Every layer resolved nothing, so none are recorded:
+//     layers must be [], not three redundant "(0)"/"(0)"/"(1)" lines.
+// =================================================================
+{
+  const players = Object.fromEntries(["a","b","c","d","e","f"].map(id =>
+    [id, { scoped: 1, zeros: 0, wins: 0, high: 1 }]));
+  const stack = ["fewest_zeros", "most_wins", "highest_single_show"];
+  const order = rankStandings(players, p => p.scoped, stack);
+  check("all six share rank 1, tied, unresolved",
+    order.map(o => [o.rank, o.tied, o.resolvedBy]),
+    order.map(() => [1, true, null]));
+  check("no layer split anyone, so every player carries zero labels — not one redundant line per layer",
+    order.map(o => o.layers), order.map(() => []));
 }
 
 // =================================================================

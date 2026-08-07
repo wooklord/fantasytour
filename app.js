@@ -733,7 +733,7 @@ Save anyway?`)) return;
     highest_single_show: "High Score"
   };
   function computeStandings({ scoreRows, showsById, season, rosterJoinDates = {}, rosterIds = [] }) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     const inScope = (row) => {
       if (!season) return true;
       const sh = showsById[row.show_id];
@@ -741,7 +741,8 @@ Save anyway?`)) return;
     };
     const T = {};
     for (const row of scoreRows) {
-      const t = (_b = T[_a = row.player_id]) != null ? _b : T[_a] = { career: 0, scoped: 0, shows: 0, high: 0, highShow: null, wins: 0, zeros: 0 };
+      if (((_a = showsById[row.show_id]) == null ? void 0 : _a.status) !== "final") continue;
+      const t = (_c = T[_b = row.player_id]) != null ? _c : T[_b] = { career: 0, scoped: 0, shows: 0, high: 0, highShow: null, wins: 0, zeros: 0 };
       t.career += row.points;
       if (inScope(row)) {
         t.scoped += row.points;
@@ -752,10 +753,10 @@ Save anyway?`)) return;
         }
       }
     }
-    if (season) for (const id of rosterIds) (_c = T[id]) != null ? _c : T[id] = { career: 0, scoped: 0, shows: 0, high: 0, highShow: null, wins: 0, zeros: 0 };
+    if (season) for (const id of rosterIds) (_d = T[id]) != null ? _d : T[id] = { career: 0, scoped: 0, shows: 0, high: 0, highShow: null, wins: 0, zeros: 0 };
     const byShow = {};
-    for (const row of scoreRows) if (inScope(row) && ((_d = showsById[row.show_id]) == null ? void 0 : _d.status) === "final")
-      ((_f = byShow[_e = row.show_id]) != null ? _f : byShow[_e] = []).push(row);
+    for (const row of scoreRows) if (inScope(row) && ((_e = showsById[row.show_id]) == null ? void 0 : _e.status) === "final")
+      ((_g = byShow[_f = row.show_id]) != null ? _g : byShow[_f] = []).push(row);
     for (const arr of Object.values(byShow)) {
       const mx = Math.max(...arr.map((x) => x.points));
       if (mx > 0) {
@@ -764,7 +765,7 @@ Save anyway?`)) return;
     }
     if (season) {
       const byPlayerShow = {};
-      for (const row of scoreRows) ((_h = byPlayerShow[_g = row.player_id]) != null ? _h : byPlayerShow[_g] = {})[row.show_id] = ((_i = byPlayerShow[row.player_id][row.show_id]) != null ? _i : 0) + row.points;
+      for (const row of scoreRows) ((_i = byPlayerShow[_h = row.player_id]) != null ? _i : byPlayerShow[_h] = {})[row.show_id] = ((_j = byPlayerShow[row.player_id][row.show_id]) != null ? _j : 0) + row.points;
       for (const playerId of Object.keys(T)) {
         const joinDate = rosterJoinDates[playerId] || season.start_date;
         const lo = joinDate > season.start_date ? joinDate : season.start_date;
@@ -772,7 +773,7 @@ Save anyway?`)) return;
         for (const [showId, sh] of Object.entries(showsById)) {
           if (sh.status !== "final") continue;
           if (sh.showdate < lo || sh.showdate > season.end_date) continue;
-          const pts = (_k = (_j = byPlayerShow[playerId]) == null ? void 0 : _j[showId]) != null ? _k : 0;
+          const pts = (_l = (_k = byPlayerShow[playerId]) == null ? void 0 : _k[showId]) != null ? _l : 0;
           if (pts === 0) zeros++;
         }
         T[playerId].zeros = zeros;
@@ -804,8 +805,10 @@ Save anyway?`)) return;
   function resolveGroup(ids, players, tiebreakers, idx, path) {
     if (idx >= tiebreakers.length) return [{ ids, resolvedBy: null, path }];
     const layer = tiebreakers[idx];
+    const groups = groupBy(ids, (id) => layerValue(players[id], layer));
+    if (groups.length === 1) return resolveGroup(ids, players, tiebreakers, idx + 1, path);
     const out = [];
-    for (const group of groupBy(ids, (id) => layerValue(players[id], layer))) {
+    for (const group of groups) {
       const newPath = [...path, { layer, value: displayValue(players[group[0]], layer) }];
       if (group.length === 1) out.push({ ids: group, resolvedBy: layer, path: newPath });
       else out.push(...resolveGroup(group, players, tiebreakers, idx + 1, newPath));
