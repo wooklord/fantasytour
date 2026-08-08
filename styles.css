@@ -254,12 +254,15 @@ html[data-theme="light"] .panel.live-halo{border-color:rgba(201,138,18,.45);box-
 .laurel-spray svg{width:100%;height:100%;display:block;overflow:hidden}
 
 /* ---------- leaderboard ---------- */
-/* Left-aligned, not centered — arrangement is rank order left to right
-   (standings.js), so gold sits leftmost by construction and there's
-   nothing to center around. .podium-wrap stacks the boxed row (if any)
-   over the compact-tier rows (if any); either can be empty. */
+/* The boxed row centers as a whole block — arrangement WITHIN it is still
+   rank order left to right (standings.js: gold sits leftmost by
+   construction, ties adjacent), only the row's position in the panel is
+   centered rather than pinned to the left edge. .podium-wrap stacks the
+   boxed row (if any) over the compact-tier rows (if any); either can be
+   empty. The compact rows stay left-aligned (a names list reads better
+   ragged-left than centered). */
 .podium-wrap{display:flex;flex-direction:column;gap:12px;margin:8px 0 16px}
-.podium{display:flex;gap:18px;justify-content:flex-start;align-items:flex-end;flex-wrap:wrap;margin:0}
+.podium{display:flex;gap:28px;justify-content:center;align-items:flex-end;flex-wrap:wrap;margin:0}
 .pod{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.85rem}
 .pod.first b{font-size:1rem}
 /* A tier past RANK_GROUP_MAX (standings.js) collapses to one row per tier
