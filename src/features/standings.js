@@ -47,6 +47,7 @@ export async function renderBoard(){
   // (equal points share a placing, not an arbitrary order) via an empty
   // stack — see tiebreak.js's rankStandings.
   const tiebreakers = (currentBracket()?.bracket_kind === "official" && season) ? (state.cfg?.tiebreakers || []) : [];
+  const ORDINAL = ["1st","2nd","3rd"];
   // Fetched whenever a season is active, not just when tiebreakers are
   // configured — standings used to be built ENTIRELY from get_bracket_scores
   // rows, so a roster member who'd opted in but never had a show finalize
@@ -203,7 +204,6 @@ export async function renderBoard(){
         // carry the ordinal it actually holds in the full stack (e.g. "3rd
         // tiebreak" when it's the third configured layer, even though it's
         // the only line this row shows).
-        const ORDINAL = ["1st","2nd","3rd"];
         const layerLines = !hasAnyScore ? "" : (o.layers||[])
           .map(l => `<div class="muted" style="font-size:.72rem">${ORDINAL[tiebreakers.indexOf(l.layer)]} tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`)
           .join("");
@@ -213,6 +213,9 @@ export async function renderBoard(){
       }).join("")
         || '<tr><td colspan="3" class="muted">No scores yet — pick some songs.</td></tr>'}
       </table></div>
+      ${tiebreakers.length ? `<p class="muted" style="margin-top:8px;font-size:.75rem">Tiebreakers: ${
+        tiebreakers.map((l, i) => `${ORDINAL[i]} ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" · ")
+      }</p>` : ""}
     </div>
     <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">· ${scopeName}</span></h2>
       <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th><th style="text-align:right">Shows</th><th style="text-align:right">Avg</th><th style="text-align:right">High</th><th style="text-align:right">${winBadge(18)}</th></tr>

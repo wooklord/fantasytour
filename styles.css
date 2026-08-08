@@ -101,12 +101,22 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 .panel h2{font-size:1.25rem;margin-bottom:8px;overflow-wrap:anywhere}
 /* Live section lost the top-of-page slot to "Just played" (game numbering
    reads top-to-bottom now) — this halo carries the "this one's urgent"
-   signal instead of position. Kept subtle deliberately: a yolk-tinted
-   border plus a soft glow, not a loud outline — it has to read as "pay
-   attention here" without competing with the pill/button colors inside
-   the row itself. */
+   signal instead of position. Dark theme: a yolk-tinted border plus a soft
+   glow, subtle by design — it has to read as "pay attention here" without
+   competing with the pill/button colors inside the row itself. That same
+   low-alpha glow is invisible in light theme — a soft bloom only reads
+   against a dark ground, and against the light theme's near-white --panel
+   a 45%-alpha border barely differs from the plain --line border next to
+   it (confirmed by screenshotting both side by side). Light theme instead
+   uses a solid border plus a top-down tinted wash — verified in a real
+   light-theme render, not just by eye on the values. */
 .panel.live-halo{border-color:rgba(255,197,61,.55);box-shadow:0 0 18px 1px rgba(255,197,61,.16)}
-html[data-theme="light"] .panel.live-halo{border-color:rgba(201,138,18,.45);box-shadow:0 0 16px 1px rgba(201,138,18,.14)}
+html[data-theme="light"] .panel.live-halo{
+  border-color:var(--yolk-deep);
+  border-width:2px;
+  background:linear-gradient(180deg, rgba(169,111,5,.10), var(--panel) 65%);
+  box-shadow:0 3px 12px rgba(169,111,5,.22);
+}
 .muted{color:var(--cream-dim);font-size:.88rem}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .pill{display:inline-block;font-family:var(--mono);font-size:.75rem;padding:3px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--cream-dim)}

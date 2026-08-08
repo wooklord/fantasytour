@@ -882,6 +882,7 @@ Save anyway?`)) return;
     }
     const season = (seasons || []).find((se) => String(se.id) === state.boardSeason);
     const tiebreakers = ((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" && season ? ((_b = state.cfg) == null ? void 0 : _b.tiebreakers) || [] : [];
+    const ORDINAL = ["1st", "2nd", "3rd"];
     let rosterJoinDates = {}, rosterIds = [];
     if (season && ((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official") {
       const roster = await rpc("get_season_roster", { p_name: state.session.name, p_pin: state.session.pin, p_season_id: season.id });
@@ -935,13 +936,13 @@ Save anyway?`)) return;
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map((o) => {
       const r = T[o.id];
-      const ORDINAL = ["1st", "2nd", "3rd"];
       const layerLines = !hasAnyScore ? "" : (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">${ORDINAL[tiebreakers.indexOf(l.layer)]} tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`).join("");
       return `<tr class="${o.id === state.session.id ? "me" : ""}">
         <td class="rank">${o.rank}</td><td>${esc(pname[o.id] || "?")}${layerLines}</td>
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
     }).join("") || '<tr><td colspan="3" class="muted">No scores yet \u2014 pick some songs.</td></tr>'}
       </table></div>
+      ${tiebreakers.length ? `<p class="muted" style="margin-top:8px;font-size:.75rem">Tiebreakers: ${tiebreakers.map((l, i) => `${ORDINAL[i]} ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" \xB7 ")}</p>` : ""}
     </div>
     <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">\xB7 ${scopeName}</span></h2>
       <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th><th style="text-align:right">Shows</th><th style="text-align:right">Avg</th><th style="text-align:right">High</th><th style="text-align:right">${winBadge(18)}</th></tr>
