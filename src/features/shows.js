@@ -6,8 +6,24 @@ import { fmtDateParts, countdown, clearTimersFor, showState } from "../core/form
 import { winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
 import { currentBracket } from "../core/switcher.js";
-import { slotDefs, draftKey } from "./picks.js";
+import { slotDefs, draftKey, openShow } from "./picks.js";
 
+// The Shows nav-tab entry point — deliberately distinct from renderShows()
+// itself, which the "← shows" back-link inside a pick sheet/detail view
+// calls directly and always wants the list, clearing state.currentShow on
+// its way there. Returning to the Shows tab after visiting Standings or
+// Settings isn't the same gesture as tapping "back" — it should resume
+// whatever show was open, not drop back to the list underneath it.
+// openShow() re-fetches fresh, so a show that finalized or a bracket that
+// got switched while away both resolve correctly on their own: finalizing
+// just makes showState() return "final" now, rendering the results view
+// instead of a stale pick sheet; switching brackets already nulls
+// currentShow itself (switcher.js's switchToBracket), so there's nothing
+// left to resume by the time this runs and it falls through to the list.
+export function enterShowsTab(){
+  if (state.currentShow) openShow(state.currentShow.id);
+  else renderShows();
+}
 export async function renderShows(){
   clearTimersFor("shows"); state.tab = "shows"; state.currentShow = null; markTab();
   const todayStr = new Date().toLocaleDateString('sv');
@@ -19,42 +35,55 @@ export async function renderShows(){
     rpc("get_my_pick_counts", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId }),
   ]);
   const savedCountOf = Object.fromEntries((myCounts||[]).map(c => [c.show_id, c.pick_count]));
-  // Pick-status marker, folded into the Pick/View button itself — no
-  // separate element in the row, so it costs zero extra width next to the
-  // venue/pill text (every earlier layout, a floating circle, a stacked
-  // column, still reserved its own slot; this one doesn't). Target count
-  // is config-dependent (standard vs. one-set shows read different config
-  // sections) — slotDefs() already knows how to resolve that per-format,
-  // so this reuses it rather than re-deriving slot counts from state.cfg
-  // here. A draft key existing always means "amber warning," even over an
-  // already-complete save — none of a draft's contents are on the server,
-  // so a saved-complete show with a lingering draft still has something
-  // that could be lost, which is worse than plain "saved but incomplete."
-  const pickMarkInfo = s => {
+  // Pick/Scores button: label, marker, and layout for one show — folded
+  // into the button itself, no separate row element (every earlier
+  // layout, a floating circle, a stacked column, reserved its own slot;
+  // this doesn't). "Scores" covers every post-cutoff case (locked/live/
+  // final) uniformly, keyed on showState()+status rather than on whether
+  // setlist data actually exists — there's never an empty-setlist label
+  // problem to solve this way, and no batch setlist query needed.
+  //
+  // A completed sheet still replaces the label outright pre-lock (a bare
+  // checkmark can't say "incomplete," so amber/warn keep the label and
+  // stack the marker under it instead — stacking pins the button's width
+  // to the label alone, since the marker can only add height). Post-
+  // cutoff, "done" isn't notable anymore — no label replacement AND no
+  // marker at all once picks are in; only "saved but incomplete" survives
+  // the deadline, de-emphasized (quiet) since it's informational there,
+  // not the actionable thing.
+  //
+  // The draft-derived exclamation is deliberately only ever consulted
+  // pre-lock (`st === "open"`) — a stale draft key sitting in localStorage
+  // past cutoff is worthless (submission's closed), so it's not read at
+  // all once the show isn't open, regardless of whether it later
+  // finalizes. Circled specifically because a bare "!" alone on its own
+  // small stacked line reads as too faint to be deliberate — the checks
+  // don't have that problem bare, so they're untouched.
+  const pickButtonInfo = s => {
+    const st = showState(s);
+    const label = st === "open" ? "Pick" : "Scores";
+    if (s.status === "final") return { label, markerHtml: "" };
     const target = slotDefs(s.format).length;
     const saved = savedCountOf[s.id] || 0;
-    const hasDraft = !!localStorage.getItem(draftKey(s.id));
-    if (hasDraft){
-      const title = saved >= target && target > 0
-        ? "Saved picks are complete, but you have unsaved local changes on this device — save again to keep them"
-        : "Draft in progress — not yet saved";
-      return { cls: "warn", glyph: "!", title };
+    if (st === "open"){
+      const hasDraft = !!localStorage.getItem(draftKey(s.id));
+      if (hasDraft){
+        const title = target > 0 && saved >= target
+          ? "Saved picks are complete, but you have unsaved local changes on this device — save again to keep them"
+          : "Draft in progress — not yet saved";
+        return { label, stacked: true, markerHtml: `<span class="pickmark warn" title="${title}">!</span>` };
+      }
+      if (target > 0 && saved >= target)
+        return { label: "", markerHtml: `<span class="pickmark done" title="Picks saved — complete">✔</span>` };
+      if (saved > 0)
+        return { label, stacked: true, markerHtml: `<span class="pickmark progress" title="Picks saved but incomplete">✓</span>` };
+      return { label, markerHtml: "" };
     }
-    if (target > 0 && saved >= target) return { cls: "done", glyph: "✔", title: "Picks saved — complete" };
-    if (saved > 0) return { cls: "progress", glyph: "✓", title: "Picks saved but incomplete" };
-    return null;
-  };
-  // Only green (fully done) replaces the label outright — a bare checkmark
-  // can't say "incomplete" on its own, so the amber check keeps "Pick" and
-  // just adds to it. Amber-warning keeps the label too, for the same
-  // reason (it's flagging something IN ADDITION TO whatever "Pick"/"View"
-  // already means, not replacing it).
-  const buttonLabelHtml = (s, label) => {
-    const mark = pickMarkInfo(s);
-    if (!mark) return label;
-    if (mark.cls === "done") return `<span class="pickmark done" title="${mark.title}">${mark.glyph}</span>`;
-    if (mark.cls === "warn") return `${label} <span class="pickmark warn" title="${mark.title}">${mark.glyph}</span>`;
-    return `${label} <span class="pickmark progress" title="${mark.title}">${mark.glyph}</span>`;
+    // Post-cutoff (live/locked/played, or a past-dated no-cutoff show —
+    // the Live bucket): draft ignored entirely, done shows nothing.
+    if (target > 0 && saved > 0 && saved < target)
+      return { label, stacked: true, quiet: true, markerHtml: `<span class="pickmark progress" title="Picks saved but incomplete">✓</span>` };
+    return { label, markerHtml: "" };
   };
   const seasonOf = d => (seas||[]).find(se => se.start_date <= d && d <= se.end_date);
   const labelOf = d => seasonOf(d)?.name || null;
@@ -99,7 +128,10 @@ export async function renderShows(){
   const upcoming = (up||[]).filter(s => bucketOf(s) === "upcoming");
   // The show people most want to reach: cutoff's passed, maybe mid-
   // setlist, not finalized yet. Nothing date-based moves it out of here —
-  // only finalizing does, into Just played below.
+  // only finalizing does, into Just played. Rendered below Just played
+  // (see the panel order at the render call) so game numbering reads
+  // consistently top to bottom; a halo (styles.css's .live-halo) carries
+  // the "this one's urgent" signal instead of top position.
   const liveNow = (up||[]).filter(s => bucketOf(s) === "live");
   // "Just played" is the single most recently FINALIZED show, not
   // everything still inside the 2-day grace window — a two-night run or
@@ -164,7 +196,11 @@ export async function renderShows(){
         <div class="loc">${esc(s.city||"")}${s.state?", "+esc(s.state):""}
           <span class="pill ${cls}" data-cd="${st==='open'?s.cutoff_at:''}">${txt}</span></div>
         ${winHtml}</div>
-      <button onclick="openShow(${s.id})">${buttonLabelHtml(s, st==='open'?'Pick':'View')}</button>
+      ${(() => {
+        const btn = pickButtonInfo(s);
+        const cls = [btn.stacked && "stacked", btn.quiet && "quiet"].filter(Boolean).join(" ");
+        return `<button onclick="openShow(${s.id})"${cls ? ` class="${cls}"` : ""}>${btn.label}${btn.markerHtml}</button>`;
+      })()}
     </div>`;
   };
   // Shows outside any season get NO divider at all (not a "Between tours"
@@ -208,8 +244,8 @@ export async function renderShows(){
   }
   $("#main").innerHTML = `
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
-    ${liveNow.length ? `<div class="panel"><h2>Live</h2>${liveNow.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
+    ${liveNow.length ? `<div class="panel live-halo"><h2>Live</h2>${liveNow.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons([...extraRecent, ...(past||[])]) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;

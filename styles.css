@@ -99,6 +99,14 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
 /* ---------- cards / panels ---------- */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:14px 0}
 .panel h2{font-size:1.25rem;margin-bottom:8px;overflow-wrap:anywhere}
+/* Live section lost the top-of-page slot to "Just played" (game numbering
+   reads top-to-bottom now) — this halo carries the "this one's urgent"
+   signal instead of position. Kept subtle deliberately: a yolk-tinted
+   border plus a soft glow, not a loud outline — it has to read as "pay
+   attention here" without competing with the pill/button colors inside
+   the row itself. */
+.panel.live-halo{border-color:rgba(255,197,61,.55);box-shadow:0 0 18px 1px rgba(255,197,61,.16)}
+html[data-theme="light"] .panel.live-halo{border-color:rgba(201,138,18,.45);box-shadow:0 0 16px 1px rgba(201,138,18,.14)}
 .muted{color:var(--cream-dim);font-size:.88rem}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .pill{display:inline-block;font-family:var(--mono);font-size:.75rem;padding:3px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--cream-dim)}
@@ -172,6 +180,28 @@ nav.tabs button.on{color:var(--yolk);border-top-color:var(--yolk)}
    fine in --yolk against the button's --panel2 background in either theme,
    so no light-theme override is needed here (unlike the badge version). */
 .pickmark.progress,.pickmark.warn{color:var(--yolk)}
+/* .warn is always circled — no bare-exclamation state exists anywhere in
+   the design, so this is unconditional on the class rather than a
+   separate modifier. A bare "!" alone on its own small stacked line read
+   as too faint to be deliberate; the checks don't have that problem bare
+   (a self-contained glyph either way), so they're untouched.
+   border:currentColor picks up whatever color .warn already set, no
+   separate per-state border rule needed. */
+.pickmark.warn{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;border:1px solid currentColor;font-size:.72rem}
+/* Stacked — label on its own line, marker on a smaller line beneath,
+   instead of sharing one line with it. Pins the button's width to the
+   label alone; the marker can only add height, never width, so it can't
+   reopen this row's recurring crowding problems. Used whenever there's
+   a label AND a marker together (amber/warn); a bare label with nothing
+   to mark, or a fully-done sheet's bare checkmark with no label at all,
+   both stay a single line — nothing to stack. */
+.showrow button.stacked{display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.1;padding:6px 12px}
+.showrow button.stacked .pickmark{font-size:.72rem}
+.showrow button.stacked .pickmark.warn{font-size:.62rem;width:16px;height:16px}
+/* Quiet — Live's surviving marker (amber-only; done and warn never reach
+   here, see pickButtonInfo) is de-emphasized relative to Upcoming's same
+   marker: informational there, not the actionable thing. */
+.showrow button.stacked.quiet .pickmark{opacity:.62;font-size:.66rem}
 .season-break{font-family:'Fraunces',serif;font-weight:700;font-size:1.05rem;color:var(--mint);border-bottom:1px solid var(--line);padding:14px 2px 6px;margin-top:8px}
 /* Bottom-of-season marker — a standalone sibling element after the last
    show, mirroring how .season-break marks the top as its own element

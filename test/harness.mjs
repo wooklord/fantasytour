@@ -275,6 +275,33 @@ export async function runScenario({ html, scripts, mode, presetSession }){
   await tick(); await tick();
   log.push({ label: "shows-list-after-save", html: mainHTML(window, mode) });
 
+  // The actual bug this session's build fixes: a draft must stop being
+  // consulted once a show locks, even though nothing clears the draft key
+  // itself at that moment. Re-open show 1 (1 of 5 saved from the step
+  // above), type a fresh draft, then flip ITS OWN fixture row's cutoff
+  // into the past — same show, same still-incomplete saved count, same
+  // still-present draft key — and confirm the marker drops the exclamation
+  // for the amber check rather than either keeping the exclamation or
+  // vanishing to nothing.
+  window.openShow(1);
+  await tick(); await tick();
+  const relockInput = window.document.querySelector(".slotline input");
+  if (relockInput){
+    relockInput.value = "Shadow";
+    relockInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+  }
+  await tick();
+  const show1Row = tables.league_shows.find(l => l.show_id === 1);
+  const show1OriginalCutoff = show1Row.cutoff_at;
+  show1Row.cutoff_at = new Date(Date.now() - 60000).toISOString(); // 1 minute ago
+  window.renderShows();
+  await tick(); await tick();
+  log.push({ label: "shows-list-after-lock-with-stale-draft", html: mainHTML(window, mode) });
+  // Restore immediately — this mutates the shared fixture row, and later
+  // steps below (the Official-ineligible gate, the tab-resumption check)
+  // both reuse show 1 assuming it's still open.
+  show1Row.cutoff_at = show1OriginalCutoff;
+
   // switch to Official (no season covers show 1 in the fixture) and open
   // the same show — expect the ineligible panel, not a fillable sheet
   window.switchToBracket(ids.OFFICIAL_ID);
@@ -287,6 +314,18 @@ export async function runScenario({ html, scripts, mode, presetSession }){
   // switch back to Casual for the rest of the scenario
   window.switchToBracket(ids.CASUAL_ID);
   await tick(); await tick();
+
+  // Tab-navigation resumption (real bug, real fix): open a show, switch to
+  // Standings, switch back to Shows via the actual nav tab button (not the
+  // "← shows" back-link, which deliberately always wants the list) —
+  // confirms the SAME show's view comes back, not the list underneath it.
+  window.openShow(1);
+  await tick(); await tick();
+  clickTab(window, "board");
+  await tick(); await tick();
+  clickTab(window, "shows");
+  await tick(); await tick();
+  log.push({ label: "shows-tab-resumed-after-standings", html: mainHTML(window, mode) });
 
   // view a completed show's detail (final, has scores)
   window.openShow(2);

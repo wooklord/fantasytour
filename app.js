@@ -604,6 +604,10 @@ Save anyway?`)) return;
   }
 
   // src/features/shows.js
+  function enterShowsTab() {
+    if (state.currentShow) openShow(state.currentShow.id);
+    else renderShows();
+  }
   async function renderShows() {
     var _a, _b, _c;
     clearTimersFor("shows");
@@ -619,24 +623,27 @@ Save anyway?`)) return;
       rpc("get_my_pick_counts", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId })
     ]);
     const savedCountOf = Object.fromEntries((myCounts || []).map((c) => [c.show_id, c.pick_count]));
-    const pickMarkInfo = (s) => {
+    const pickButtonInfo = (s) => {
+      const st = showState(s);
+      const label = st === "open" ? "Pick" : "Scores";
+      if (s.status === "final") return { label, markerHtml: "" };
       const target = slotDefs(s.format).length;
       const saved = savedCountOf[s.id] || 0;
-      const hasDraft = !!localStorage.getItem(draftKey(s.id));
-      if (hasDraft) {
-        const title = saved >= target && target > 0 ? "Saved picks are complete, but you have unsaved local changes on this device \u2014 save again to keep them" : "Draft in progress \u2014 not yet saved";
-        return { cls: "warn", glyph: "!", title };
+      if (st === "open") {
+        const hasDraft = !!localStorage.getItem(draftKey(s.id));
+        if (hasDraft) {
+          const title = target > 0 && saved >= target ? "Saved picks are complete, but you have unsaved local changes on this device \u2014 save again to keep them" : "Draft in progress \u2014 not yet saved";
+          return { label, stacked: true, markerHtml: `<span class="pickmark warn" title="${title}">!</span>` };
+        }
+        if (target > 0 && saved >= target)
+          return { label: "", markerHtml: `<span class="pickmark done" title="Picks saved \u2014 complete">\u2714</span>` };
+        if (saved > 0)
+          return { label, stacked: true, markerHtml: `<span class="pickmark progress" title="Picks saved but incomplete">\u2713</span>` };
+        return { label, markerHtml: "" };
       }
-      if (target > 0 && saved >= target) return { cls: "done", glyph: "\u2714", title: "Picks saved \u2014 complete" };
-      if (saved > 0) return { cls: "progress", glyph: "\u2713", title: "Picks saved but incomplete" };
-      return null;
-    };
-    const buttonLabelHtml = (s, label) => {
-      const mark = pickMarkInfo(s);
-      if (!mark) return label;
-      if (mark.cls === "done") return `<span class="pickmark done" title="${mark.title}">${mark.glyph}</span>`;
-      if (mark.cls === "warn") return `${label} <span class="pickmark warn" title="${mark.title}">${mark.glyph}</span>`;
-      return `${label} <span class="pickmark progress" title="${mark.title}">${mark.glyph}</span>`;
+      if (target > 0 && saved > 0 && saved < target)
+        return { label, stacked: true, quiet: true, markerHtml: `<span class="pickmark progress" title="Picks saved but incomplete">\u2713</span>` };
+      return { label, markerHtml: "" };
     };
     const seasonOf = (d) => (seas || []).find((se) => se.start_date <= d && d <= se.end_date);
     const labelOf = (d) => {
@@ -691,7 +698,11 @@ Save anyway?`)) return;
         <div class="loc">${esc(s.city || "")}${s.state ? ", " + esc(s.state) : ""}
           <span class="pill ${cls}" data-cd="${st === "open" ? s.cutoff_at : ""}">${txt}</span></div>
         ${winHtml}</div>
-      <button onclick="openShow(${s.id})">${buttonLabelHtml(s, st === "open" ? "Pick" : "View")}</button>
+      ${(() => {
+        const btn = pickButtonInfo(s);
+        const cls2 = [btn.stacked && "stacked", btn.quiet && "quiet"].filter(Boolean).join(" ");
+        return `<button onclick="openShow(${s.id})"${cls2 ? ` class="${cls2}"` : ""}>${btn.label}${btn.markerHtml}</button>`;
+      })()}
     </div>`;
     };
     const withSeasons = (list) => {
@@ -718,8 +729,8 @@ Save anyway?`)) return;
     }
     $("#main").innerHTML = `
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
-    ${liveNow.length ? `<div class="panel"><h2>Live</h2>${liveNow.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
+    ${liveNow.length ? `<div class="panel live-halo"><h2>Live</h2>${liveNow.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet \u2014 admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons([...extraRecent, ...past || []]) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;
@@ -1512,7 +1523,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
     document.querySelectorAll("nav.tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === state.tab));
   }
   document.querySelectorAll("nav.tabs button").forEach((b) => b.onclick = () => {
-    ({ shows: renderShows, board: renderBoard, admin: renderAdminOrSettings })[b.dataset.tab]();
+    ({ shows: enterShowsTab, board: renderBoard, admin: renderAdminOrSettings })[b.dataset.tab]();
   });
   async function renderAll() {
     if (!isDesktop()) {

@@ -52,14 +52,15 @@ async function runMode(mode){
   check("Casual pick sheet renders fillable inputs (never gated)",
     casualSheet && /slotline/.test(casualSheet.html));
 
-  // Shows-list pick-status marker: show 1 has 2 of 5 (standard format's
-  // target) saved and no draft yet at boot; show 2 has all 5 saved.
+  // Shows-list pick-status marker: show 1 (open, upcoming) has 2 of 5
+  // (standard format's target) saved and no draft yet at boot; show 2
+  // (final) has all 5 saved.
   const boot = byLabel(log, "boot")?.html || "";
-  check("shows list marks show 1 (saved but incomplete, no draft) with the amber checkmark",
+  check("shows list marks show 1 (open, saved but incomplete, no draft) with the amber checkmark",
     boot.includes('pickmark progress" title="Picks saved but incomplete"'),
     `boot html: ${boot}`);
-  check("shows list marks show 2 (saved, complete) with the green checkmark",
-    boot.includes('pickmark done" title="Picks saved — complete"'),
+  check("show 2 (final, was fully picked) shows bare 'Scores' — no marker at all once a show is final, regardless of completeness",
+    boot.includes(">Scores<") && !boot.includes("pickmark done"),
     `boot html: ${boot}`);
 
   check("draft persists under the bracket-scoped key",
@@ -80,10 +81,25 @@ async function runMode(mode){
     afterSave.includes('pickmark progress" title="Picks saved but incomplete"') && !afterSave.includes("pickmark warn"),
     `shows-list-after-save html: ${afterSave}`);
 
+  // The real fix, verified end-to-end rather than assumed: a draft key
+  // left over from before lock must stop being consulted the instant the
+  // show locks, even though nothing clears the key itself at that moment.
+  // Same show, same still-incomplete saved count (1 of 5), same
+  // still-present draft — only the cutoff moved into the past.
+  const afterLock = byLabel(log, "shows-list-after-lock-with-stale-draft")?.html || "";
+  check("a show locking with a stale draft still present falls back to the amber check, not the exclamation and not nothing",
+    afterLock.includes('pickmark progress" title="Picks saved but incomplete"') && !afterLock.includes("pickmark warn"),
+    `shows-list-after-lock-with-stale-draft html: ${afterLock}`);
+
   const officialGate = byLabel(log, "pick-sheet-official-ineligible");
   check("Official (no covering season) shows the ineligible reason, not a form",
     res.officialHasInputs === false && /No Official season covers this show yet/.test(officialGate?.html || ""),
     `official gate html: ${officialGate?.html}`);
+
+  const resumed = byLabel(log, "shows-tab-resumed-after-standings");
+  check("returning to Shows via the nav tab resumes the open show, not the list",
+    resumed && /slotline/.test(resumed.html),
+    `resumed html: ${resumed?.html}`);
 
   check("standings reads via get_bracket_scores rather than a raw scores table query",
     rpcFns.includes("get_bracket_scores"),

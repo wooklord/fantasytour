@@ -1,7 +1,7 @@
 import { $, isDesktop } from "./dom.js";
 import { state } from "./state.js";
 import { isCurrentLeagueAdmin } from "./switcher.js";
-import { renderShows } from "../features/shows.js";
+import { renderShows, enterShowsTab } from "../features/shows.js";
 import { renderBoard } from "../features/standings.js";
 import { renderAdmin } from "../features/admin.js";
 import { renderSettings } from "../features/settings.js";
@@ -15,7 +15,7 @@ export function markTab(){
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
 }
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
-  ({ shows: renderShows, board: renderBoard, admin: renderAdminOrSettings })[b.dataset.tab]();
+  ({ shows: enterShowsTab, board: renderBoard, admin: renderAdminOrSettings })[b.dataset.tab]();
 });
 
 // desktop: paint every column; keep `tab` pointed so each render targets its own container
