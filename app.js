@@ -942,7 +942,7 @@ Save anyway?`)) return;
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
     }).join("") || '<tr><td colspan="3" class="muted">No scores yet \u2014 pick some songs.</td></tr>'}
       </table></div>
-      ${tiebreakers.length ? `<p class="muted" style="margin-top:8px;font-size:.75rem">Tiebreakers: ${tiebreakers.map((l, i) => `${ORDINAL[i]} ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" \xB7 ")}</p>` : ""}
+      ${tiebreakers.length ? `<p class="muted" style="margin-top:8px;font-size:.75rem;text-align:center">Tiebreakers<br>${tiebreakers.map((l, i) => `${ORDINAL[i]}: ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" \xB7 ")}</p>` : ""}
     </div>
     <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">\xB7 ${scopeName}</span></h2>
       <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th><th style="text-align:right">Shows</th><th style="text-align:right">Avg</th><th style="text-align:right">High</th><th style="text-align:right">${winBadge(18)}</th></tr>

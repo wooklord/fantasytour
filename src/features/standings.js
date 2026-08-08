@@ -213,8 +213,8 @@ export async function renderBoard(){
       }).join("")
         || '<tr><td colspan="3" class="muted">No scores yet — pick some songs.</td></tr>'}
       </table></div>
-      ${tiebreakers.length ? `<p class="muted" style="margin-top:8px;font-size:.75rem">Tiebreakers: ${
-        tiebreakers.map((l, i) => `${ORDINAL[i]} ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" · ")
+      ${tiebreakers.length ? `<p class="muted" style="margin-top:8px;font-size:.75rem;text-align:center">Tiebreakers<br>${
+        tiebreakers.map((l, i) => `${ORDINAL[i]}: ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" · ")
       }</p>` : ""}
     </div>
     <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">· ${scopeName}</span></h2>
