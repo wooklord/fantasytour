@@ -201,7 +201,7 @@ export async function renderShowDetail(show){
     return brk + `
     <div class="songrow ${mineHits.has(s.songname.toLowerCase()) ? "hitmine" : ""}">
       <span class="pos">${s.position}</span>
-      <span class="name">${esc(s.songname)}</span>
+      <span class="name">${esc(s.songname)}${s.segue ? ' <span class="segue">&gt;</span>' : ""}</span>
     </div>`;
   }).join("");
   const attribution = (setlist||[]).length ? `<p class="muted" style="text-align:center">Setlist data from ${

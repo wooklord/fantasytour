@@ -290,6 +290,9 @@ html[data-theme="light"] .panel.live-halo{border-color:rgba(201,138,18,.45);box-
 .songrow .pos{font-family:var(--mono);font-size:.72rem;color:var(--cream-dim);min-width:44px}
 .songrow.hitmine{background:linear-gradient(90deg,rgba(255,197,61,.14),transparent);border-radius:6px}
 .songrow.hitmine .name{color:var(--yolk);font-weight:700}
+/* Segue marker from Carton's own transition text (">"/"->") — appended to
+   the song's own line, not a separate row. */
+.songrow .segue{color:var(--yolk);opacity:.75;font-weight:700}
 .pickres{display:flex;gap:8px;align-items:baseline;padding:5px 0;font-size:.9rem}
 .pickres .sl{font-family:var(--mono);font-size:.7rem;color:var(--cream-dim);min-width:64px;text-transform:uppercase}
 .pickres .pt{margin-left:auto;font-family:var(--mono)}

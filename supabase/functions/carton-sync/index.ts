@@ -511,16 +511,27 @@ async function scoreShow(show: any, leagueShowRows: any[], isFinal = false) {
     is_cover: r.isoriginal != null ? !Number(r.isoriginal) : null,
     footnote: decodeEntities([r.footnote, Array.isArray(r.footnotes) ? r.footnotes.join("; ") : null]
       .filter(Boolean).join("; ") || null),
+    // Carton's own `transition` text is the connector it would print after
+    // this song ("," no segue, " > " segue, "->" direct segue, or blank at
+    // a set/show break). Keyed on the arrow character itself, not
+    // `transition_id` — that numeric id isn't a stable cross-show enum (the
+    // same "no continuation" case showed up as three different ids across
+    // one real 2-set show, one per set boundary), so it's not safe to
+    // hardcode against. Display-only: doesn't feed slot determination (see
+    // deriveSlotFacts) — set/show boundaries are already known unambiguously
+    // from position/setnumber, and a blank transition can't distinguish
+    // "set's over" from "not transcribed yet".
+    segue: />/.test(String(r.transition ?? "")),
   })).filter((s: any) => s.songname);
   if (!songs.length) return { show: show.id, note: "empty setlist" };
 
   // ---- diff against what's stored; write ONLY changes (toast-storm fix) ----
   const { data: prevRows } = await supa.from("setlist_songs")
-    .select("position,songname,setnumber,is_encore").eq("show_id", show.id);
+    .select("position,songname,setnumber,is_encore,segue").eq("show_id", show.id);
   const prevByPos = new Map((prevRows ?? []).map((r: any) => [r.position, r]));
   const changed = songs.filter((s: any) => {
     const p = prevByPos.get(s.position);
-    return !p || p.songname !== s.songname || p.setnumber !== s.setnumber || !!p.is_encore !== s.is_encore;
+    return !p || p.songname !== s.songname || p.setnumber !== s.setnumber || !!p.is_encore !== s.is_encore || !!p.segue !== s.segue;
   });
   if (changed.length) {
     await supa.from("setlist_songs").upsert(changed, { onConflict: "show_id,position" });
