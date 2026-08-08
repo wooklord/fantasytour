@@ -105,65 +105,29 @@ export async function renderBoard(){
   // is what actually keeps 3 boxes on one row.
   const narrow = window.matchMedia("(max-width:420px)").matches;
   const bigPx = narrow ? 76 : 118, smallPx = narrow ? 54 : 82;
-  // .podium is align-items:flex-end with .pod.first only bumping trophy/
-  // name size (styles.css) — there's no absolute positioning or flex
-  // `order` trick, so "elevated" is purely "this box is taller than its
-  // neighbors while every box's bottom lines up." That means big=true can
-  // go on ANY position (left/center/right) and the flex layout renders the
-  // intended shape on its own — no per-position CSS needed here. Casual has
-  // no seasons/tiebreakers to signify, so it gets a plain rank numeral in
-  // the same spot instead of the trophy graphic — same rank/tier/
-  // arrangement logic throughout, only what renders inside the box differs.
+  // No points line here — the table right below already shows the score,
+  // so repeating it on the podium was pure noise. Casual has no
+  // seasons/tiebreakers to signify, so it gets a plain rank numeral in the
+  // same spot instead of the trophy graphic — same rank/tier logic
+  // throughout, only what renders inside the box differs.
   const podBox = (o, big) => `<div class="pod ${big?"first":""}">${
       isOfficial ? trophy(big?bigPx:smallPx, tierFor(o)) : rankNumeral(big?bigPx:smallPx, tierFor(o), o.rank)
-    }<b>${esc(pname[o.id]||"?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
-  const gold = order.filter(o => o.rank === 1);
-  const silver = order.filter(o => o.rank === 2);
-  const bronze = order.filter(o => o.rank === 3);
+    }<b>${esc(pname[o.id]||"?")}</b></div>`;
+  // Rank order, left to right, best first — ties already sort adjacent (the
+  // shared-rank alphabetical pass above runs on `order` itself, so this
+  // arrangement inherits it for free). Replaces the old centered/flanking
+  // layout, which only ever made sense for exactly 3 boxes: once any tier
+  // could grow past what three fixed slots (left/center/right) could
+  // express, that layout started placing the winner arbitrarily (e.g. 3rd
+  // of 4 boxes) instead of reading as centered. One rule that always holds
+  // beats two that only agree in the 3-box case.
+  const podiumEntries = order.filter(o => o.rank <= 3);
+  const topGroup = podiumEntries.filter(o => o.rank === 1);
   // Elevation is a direct function of resolved rank and how many players
-  // hold rank 1 — nothing about a box's position in the concatenated
-  // left/center/right array or its index ever factors in, by construction.
-  const isElevated = o => o.rank === 1 && gold.length <= 2;
-  // Arrangement encodes RANK; colors (above) encode ties. The two are
-  // independent — gold/silver/bronze and gold/silver/silver use the exact
-  // same shape below, only tierFor's colors differ.
-  let left = [], center = [], right = [];
-  if (gold.length >= 3){
-    // 3+-way tie for 1st: no single top to elevate over the others, and
-    // structurally nothing to flank with either (the next real rank starts
-    // past however many are tied, so silver/bronze are empty regardless).
-    // Show every tied player, all level — deliberately uncapped even at 4+,
-    // since capping would silently drop someone who genuinely tied for the
-    // top score, exactly what this whole tiebreaker feature exists to never
-    // do. The standings table above is unaffected either way.
-    center = gold;
-  } else if (gold.length === 2){
-    // Two-way tie for 1st: both flank, both elevated. Whoever holds the
-    // next rank down (if anyone — two players total means nobody does)
-    // sits centered at normal height as the runner-up. Competition ranking
-    // (rank += group size) means rank 2 is mathematically unreachable
-    // whenever exactly 2 players share rank 1 — the next occupied rank is
-    // always 3 — so `silver` is always empty here and the real runner-up
-    // is whoever's in `bronze`. Combining both keeps this correct without
-    // hardcoding that assumption; tierFor colors them by their real rank
-    // regardless (bronze in practice, never a hardcoded "silver").
-    left = [gold[0]]; right = [gold[1]];
-    center = [...silver, ...bronze];
-  } else {
-    // Solo 1st: centered, elevated. Flanked by the next-ranked players,
-    // best-to-worst, alternating left/right/left/right… For exactly two
-    // flank candidates this IS "rank 2 left, rank 3 right" (or "both
-    // silvers, one each side" when there's no bronze) — the alternation
-    // just happens to reduce to that. Uncapped past two: a tier with 3+
-    // members renders every one of them rather than arbitrarily dropping
-    // the extras, same reasoning as the 3+-gold case above. .podium is
-    // already flex-wrap:wrap (styles.css), so anything past what fits one
-    // row wraps to a second line instead of squeezing or being hidden.
-    center = gold;
-    const flank = [...silver, ...bronze];
-    left = flank.filter((_, i) => i % 2 === 0);
-    right = flank.filter((_, i) => i % 2 === 1);
-  }
+  // hold rank 1 — a 3+-way tie for 1st has no single top to raise above
+  // the others, so none of them elevate; a solo or 2-way tie for 1st still
+  // reads as the raised leftmost box(es).
+  const isElevated = o => o.rank === 1 && topGroup.length <= 2;
   // Placeholder empty state: before ANY non-zero score exists among these
   // players (not just "before the first show finalizes" — a finalized
   // show where everyone blanked leaves the exact same all-zero tie), the
@@ -175,11 +139,37 @@ export async function renderBoard(){
   const placeholderBox = (tier, rank, big) => `<div class="pod ${big?"first":""}">${
       isOfficial ? trophy(big?bigPx:smallPx, tier) : rankNumeral(big?bigPx:smallPx, tier, rank)
     }</div>`;
+  // Bounding a genuine tie without hiding anyone: the podium only ever
+  // shows tiers 1/2/3 (podiumEntries above), so there are at most 3 tiers
+  // to decide on, each independently. A tier with more than RANK_GROUP_MAX
+  // people collapses to one compact "icon + comma-separated names" row —
+  // no per-player box, no elevation — instead of rendering a wall of
+  // trophies (this is what once rendered seven full-size golds for an
+  // all-zero tie, and still would for any real tie that size). A tier at or
+  // under the cap stays fully boxed even sitting right next to a collapsed
+  // one — a 2-way tie for 1st isn't penalized just because 3rd place has a
+  // crowd. The full standings table below is unaffected either way.
+  const RANK_GROUP_MAX = 4;
+  const tiers = [];
+  for (const o of podiumEntries){
+    const t = tiers[tiers.length - 1];
+    if (t && t.rank === o.rank) t.items.push(o); else tiers.push({ rank: o.rank, items: [o] });
+  }
+  const boxedTiers = tiers.filter(t => t.items.length <= RANK_GROUP_MAX);
+  const compactTiers = tiers.filter(t => t.items.length > RANK_GROUP_MAX);
+  const boxedHtml = boxedTiers.length
+    ? `<div class="podium">${boxedTiers.flatMap(t => t.items).map(o => podBox(o, isElevated(o))).join("")}</div>`
+    : "";
+  const compactHtml = compactTiers.length
+    ? `<div class="podium-compact">${compactTiers.map(t => `<div class="pod-row">${
+        isOfficial ? trophy(32, tierFor(t.items[0])) : rankNumeral(32, tierFor(t.items[0]), t.rank)
+      }<span class="pod-names">${t.items.map(o => esc(pname[o.id]||"?")).join(", ")}</span></div>`).join("")}</div>`
+    : "";
   const podium = !order.length
     ? ""
     : !hasAnyScore
     ? `<div class="podium">${placeholderBox("silver",2,false)}${placeholderBox("gold",1,true)}${placeholderBox("bronze",3,false)}</div>`
-    : `<div class="podium">${[...left, ...center, ...right].map(o => podBox(o, isElevated(o))).join("")}</div>`;
+    : `<div class="podium-wrap">${boxedHtml}${compactHtml}</div>`;
   const statRows = rows.filter(([,r]) => r.shows > 0)
     .sort((a,b) => b[1].scoped/b[1].shows - a[1].scoped/a[1].shows);
   $("#main").innerHTML = `
@@ -204,8 +194,18 @@ export async function renderBoard(){
         // where everyone's at 0 would otherwise tie through the whole
         // stack and print a "tiebreak: fewest zeros (0)" line for every
         // row, which explains nothing real.
+        //
+        // Numbered by the layer's position in the CONFIGURED stack
+        // (tiebreakers.indexOf), not by its position in this row's own
+        // layers list — a layer that resolved nothing is skipped upstream
+        // (resolveGroup only records a layer once it actually splits the
+        // group), so a row often shows just one line, and that line has to
+        // carry the ordinal it actually holds in the full stack (e.g. "3rd
+        // tiebreak" when it's the third configured layer, even though it's
+        // the only line this row shows).
+        const ORDINAL = ["1st","2nd","3rd"];
         const layerLines = !hasAnyScore ? "" : (o.layers||[])
-          .map(l => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`)
+          .map(l => `<div class="muted" style="font-size:.72rem">${ORDINAL[tiebreakers.indexOf(l.layer)]} tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`)
           .join("");
         return `<tr class="${o.id===state.session.id?"me":""}">
         <td class="rank">${o.rank}</td><td>${esc(pname[o.id]||"?")}${layerLines}</td>

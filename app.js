@@ -907,27 +907,24 @@ Save anyway?`)) return;
     const tierFor = (o) => o.rank === 1 ? "gold" : o.rank === 2 ? "silver" : "bronze";
     const narrow = window.matchMedia("(max-width:420px)").matches;
     const bigPx = narrow ? 76 : 118, smallPx = narrow ? 54 : 82;
-    const podBox = (o, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? bigPx : smallPx, tierFor(o)) : rankNumeral(big ? bigPx : smallPx, tierFor(o), o.rank)}<b>${esc(pname[o.id] || "?")}</b><span class="podpts">${T[o.id].scoped} pts</span></div>`;
-    const gold = order.filter((o) => o.rank === 1);
-    const silver = order.filter((o) => o.rank === 2);
-    const bronze = order.filter((o) => o.rank === 3);
-    const isElevated = (o) => o.rank === 1 && gold.length <= 2;
-    let left = [], center = [], right = [];
-    if (gold.length >= 3) {
-      center = gold;
-    } else if (gold.length === 2) {
-      left = [gold[0]];
-      right = [gold[1]];
-      center = [...silver, ...bronze];
-    } else {
-      center = gold;
-      const flank = [...silver, ...bronze];
-      left = flank.filter((_, i) => i % 2 === 0);
-      right = flank.filter((_, i) => i % 2 === 1);
-    }
+    const podBox = (o, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? bigPx : smallPx, tierFor(o)) : rankNumeral(big ? bigPx : smallPx, tierFor(o), o.rank)}<b>${esc(pname[o.id] || "?")}</b></div>`;
+    const podiumEntries = order.filter((o) => o.rank <= 3);
+    const topGroup = podiumEntries.filter((o) => o.rank === 1);
+    const isElevated = (o) => o.rank === 1 && topGroup.length <= 2;
     const hasAnyScore = order.some((o) => o.points > 0);
     const placeholderBox = (tier, rank, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? bigPx : smallPx, tier) : rankNumeral(big ? bigPx : smallPx, tier, rank)}</div>`;
-    const podium = !order.length ? "" : !hasAnyScore ? `<div class="podium">${placeholderBox("silver", 2, false)}${placeholderBox("gold", 1, true)}${placeholderBox("bronze", 3, false)}</div>` : `<div class="podium">${[...left, ...center, ...right].map((o) => podBox(o, isElevated(o))).join("")}</div>`;
+    const RANK_GROUP_MAX = 4;
+    const tiers = [];
+    for (const o of podiumEntries) {
+      const t = tiers[tiers.length - 1];
+      if (t && t.rank === o.rank) t.items.push(o);
+      else tiers.push({ rank: o.rank, items: [o] });
+    }
+    const boxedTiers = tiers.filter((t) => t.items.length <= RANK_GROUP_MAX);
+    const compactTiers = tiers.filter((t) => t.items.length > RANK_GROUP_MAX);
+    const boxedHtml = boxedTiers.length ? `<div class="podium">${boxedTiers.flatMap((t) => t.items).map((o) => podBox(o, isElevated(o))).join("")}</div>` : "";
+    const compactHtml = compactTiers.length ? `<div class="podium-compact">${compactTiers.map((t) => `<div class="pod-row">${isOfficial ? trophy(32, tierFor(t.items[0])) : rankNumeral(32, tierFor(t.items[0]), t.rank)}<span class="pod-names">${t.items.map((o) => esc(pname[o.id] || "?")).join(", ")}</span></div>`).join("")}</div>` : "";
+    const podium = !order.length ? "" : !hasAnyScore ? `<div class="podium">${placeholderBox("silver", 2, false)}${placeholderBox("gold", 1, true)}${placeholderBox("bronze", 3, false)}</div>` : `<div class="podium-wrap">${boxedHtml}${compactHtml}</div>`;
     const statRows = rows.filter(([, r]) => r.shows > 0).sort((a, b) => b[1].scoped / b[1].shows - a[1].scoped / a[1].shows);
     $("#main").innerHTML = `
     <div class="panel">
@@ -938,7 +935,8 @@ Save anyway?`)) return;
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map((o) => {
       const r = T[o.id];
-      const layerLines = !hasAnyScore ? "" : (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`).join("");
+      const ORDINAL = ["1st", "2nd", "3rd"];
+      const layerLines = !hasAnyScore ? "" : (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">${ORDINAL[tiebreakers.indexOf(l.layer)]} tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`).join("");
       return `<tr class="${o.id === state.session.id ? "me" : ""}">
         <td class="rank">${o.rank}</td><td>${esc(pname[o.id] || "?")}${layerLines}</td>
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;

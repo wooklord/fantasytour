@@ -254,10 +254,19 @@ html[data-theme="light"] .panel.live-halo{border-color:rgba(201,138,18,.45);box-
 .laurel-spray svg{width:100%;height:100%;display:block;overflow:hidden}
 
 /* ---------- leaderboard ---------- */
-.podium{display:flex;gap:18px;justify-content:center;align-items:flex-end;margin:8px 0 16px;flex-wrap:wrap}
+/* Left-aligned, not centered — arrangement is rank order left to right
+   (standings.js), so gold sits leftmost by construction and there's
+   nothing to center around. .podium-wrap stacks the boxed row (if any)
+   over the compact-tier rows (if any); either can be empty. */
+.podium-wrap{display:flex;flex-direction:column;gap:12px;margin:8px 0 16px}
+.podium{display:flex;gap:18px;justify-content:flex-start;align-items:flex-end;flex-wrap:wrap;margin:0}
 .pod{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.85rem}
-.pod .podpts{font-family:var(--mono);color:var(--yolk);font-size:.78rem}
 .pod.first b{font-size:1rem}
+/* A tier past RANK_GROUP_MAX (standings.js) collapses to one row per tier
+   instead of a wall of trophy boxes — icon + comma-separated names, no
+   elevation. */
+.podium-compact{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.pod-row{display:flex;align-items:center;gap:10px;font-size:.9rem}
 /* standings.js shrinks the trophy/numeral px size on narrow viewports to
    match — this just tightens the gap between boxes to go with it, so 3
    boxes (even 2 elevated + 1 not) reliably fit one row on a real phone
