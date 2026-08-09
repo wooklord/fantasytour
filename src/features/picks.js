@@ -180,7 +180,7 @@ export async function renderPickSheet(show){
   if (state.cfg.voting_override !== 'open' && show.cutoff_at) state.timers.push(setInterval(() => {
     const cd = countdown(show.cutoff_at);
     if (cd) $("#cd").textContent = cd + " left";
-    else { toast("Picks are locked — enjoy the show 🥚"); openShow(show.id); }
+    else { toast("All picks are locked — enjoy the show 🥚"); openShow(show.id); }
   }, 1000));
 }
 
@@ -313,7 +313,7 @@ export async function renderShowDetail(show){
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
     ${pickBoard}
     <h2 style="margin:18px 4px 4px">Scores</h2>
-    ${hasUndetermined ? `<p class="muted" style="text-align:center;margin:0 4px 8px">Closer-type picks show off-slot points (if enabled) until the encore starts (or the show ends) — full points lock in once determined.</p>` : ""}
+    ${hasUndetermined ? `<p class="muted" style="text-align:center;margin:0 4px 8px">Closer-type picks show off-slot points (if enabled) until the encore starts (or the show ends) — full points awarded once determined.</p>` : ""}
     ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet — they appear with the first song.</p>'}
     ${footerHtml()}`;
 }

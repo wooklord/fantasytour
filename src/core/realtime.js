@@ -38,11 +38,11 @@ export function subscribeRealtime(){
         let mine = [];
         try{ mine = await rpc("get_my_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:sh.id }); }catch(e){}
         toast(mine.length
-          ? `⏰ 1 hour to lock — ${esc(sh.venue||sh.showdate)}. Your picks are in ✔`
-          : `⏰ 1 hour to lock — ${esc(sh.venue||sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
+          ? `⏰ 1 hour to cutoff — ${esc(sh.venue||sh.showdate)}. Your picks are in ✔`
+          : `⏰ 1 hour to cutoff — ${esc(sh.venue||sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
       }
       if (fresh(ls.lock_sent))
-        toast(`\u{1F512} Picks locked — ${esc(sh.venue||sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);
+        toast(`\u{1F512} All picks locked — ${esc(sh.venue||sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);
       if (fresh(ls.winner_sent)){
         try{
           const sc = await rpc("get_bracket_scores", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id: sh.id });

@@ -510,7 +510,7 @@
       const cd = countdown(show.cutoff_at);
       if (cd) $("#cd").textContent = cd + " left";
       else {
-        toast("Picks are locked \u2014 enjoy the show \u{1F95A}");
+        toast("All picks are locked \u2014 enjoy the show \u{1F95A}");
         openShow(show.id);
       }
     }, 1e3));
@@ -651,7 +651,7 @@ Save anyway?`)) return;
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
     ${pickBoard}
     <h2 style="margin:18px 4px 4px">Scores</h2>
-    ${hasUndetermined ? `<p class="muted" style="text-align:center;margin:0 4px 8px">Closer-type picks show off-slot points (if enabled) until the encore starts (or the show ends) \u2014 full points lock in once determined.</p>` : ""}
+    ${hasUndetermined ? `<p class="muted" style="text-align:center;margin:0 4px 8px">Closer-type picks show off-slot points (if enabled) until the encore starts (or the show ends) \u2014 full points awarded once determined.</p>` : ""}
     ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet \u2014 they appear with the first song.</p>'}
     ${footerHtml()}`;
   }
@@ -1621,10 +1621,10 @@ OK = remove + ban \xB7 Cancel = remove only`);
           mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id });
         } catch (e) {
         }
-        toast(mine.length ? `\u23F0 1 hour to lock \u2014 ${esc(sh.venue || sh.showdate)}. Your picks are in \u2714` : `\u23F0 1 hour to lock \u2014 ${esc(sh.venue || sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
+        toast(mine.length ? `\u23F0 1 hour to cutoff \u2014 ${esc(sh.venue || sh.showdate)}. Your picks are in \u2714` : `\u23F0 1 hour to cutoff \u2014 ${esc(sh.venue || sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
       }
       if (fresh(ls.lock_sent))
-        toast(`\u{1F512} Picks locked \u2014 ${esc(sh.venue || sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);
+        toast(`\u{1F512} All picks locked \u2014 ${esc(sh.venue || sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);
       if (fresh(ls.winner_sent)) {
         try {
           const sc = await rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id });
