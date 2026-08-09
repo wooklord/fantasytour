@@ -35,10 +35,10 @@ export async function renderShows(){
     rpc("get_my_pick_counts", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId }),
   ]);
   const savedCountOf = Object.fromEntries((myCounts||[]).map(c => [c.show_id, c.pick_count]));
-  // Pick/Scores button: label, marker, and layout for one show — folded
+  // Pick/Score button: label, marker, and layout for one show — folded
   // into the button itself, no separate row element (every earlier
   // layout, a floating circle, a stacked column, reserved its own slot;
-  // this doesn't). "Scores" covers every post-cutoff case (locked/live/
+  // this doesn't). "Score" covers every post-cutoff case (locked/live/
   // final) uniformly, keyed on showState()+status rather than on whether
   // setlist data actually exists — there's never an empty-setlist label
   // problem to solve this way, and no batch setlist query needed.
@@ -61,7 +61,7 @@ export async function renderShows(){
   // don't have that problem bare, so they're untouched.
   const pickButtonInfo = s => {
     const st = showState(s);
-    const label = st === "open" ? "Pick" : "Scores";
+    const label = st === "open" ? "Pick" : "Score";
     if (s.status === "final") return { label, markerHtml: "" };
     const target = slotDefs(s.format).length;
     const saved = savedCountOf[s.id] || 0;

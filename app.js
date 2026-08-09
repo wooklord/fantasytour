@@ -678,7 +678,7 @@ Save anyway?`)) return;
     const savedCountOf = Object.fromEntries((myCounts || []).map((c) => [c.show_id, c.pick_count]));
     const pickButtonInfo = (s) => {
       const st = showState(s);
-      const label = st === "open" ? "Pick" : "Scores";
+      const label = st === "open" ? "Pick" : "Score";
       if (s.status === "final") return { label, markerHtml: "" };
       const target = slotDefs(s.format).length;
       const saved = savedCountOf[s.id] || 0;

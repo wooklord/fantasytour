@@ -59,8 +59,8 @@ async function runMode(mode){
   check("shows list marks show 1 (open, saved but incomplete, no draft) with the amber checkmark",
     boot.includes('pickmark progress" title="Picks saved but incomplete"'),
     `boot html: ${boot}`);
-  check("show 2 (final, was fully picked) shows bare 'Scores' — no marker at all once a show is final, regardless of completeness",
-    boot.includes(">Scores<") && !boot.includes("pickmark done"),
+  check("show 2 (final, was fully picked) shows bare 'Score' — no marker at all once a show is final, regardless of completeness",
+    boot.includes(">Score<") && !boot.includes("pickmark done"),
     `boot html: ${boot}`);
 
   check("draft persists under the bracket-scoped key",
