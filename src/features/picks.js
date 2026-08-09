@@ -9,7 +9,19 @@ import { toast } from "../core/toast.js";
 import { currentBracket } from "../core/switcher.js";
 import { SLOT_LABELS, SLOT_TOOLTIPS, FLAT_PICK_TOOLTIP, slotLabelFor } from "../core/slotTypes.js";
 
-export const isWildcard = v => (v||"").trim().toLowerCase() === "any debut";
+// Case/whitespace-insensitive song-name comparison — the catalog
+// (songs_cache, synced from The Carton) has real entries with stray
+// leading/trailing whitespace (confirmed: 7 of 363 rows as of this
+// writing, e.g. "Time Escaping " with a trailing space). Autocomplete's
+// substring filter tolerated that silently (`.includes()` doesn't care
+// about extra trailing characters on the catalog side), but the save-time
+// catalog check compared a *trimmed* input value against the catalog's
+// *untrimmed* string with strict equality — same song, real mismatch,
+// false "not in catalog" warning. Every songname comparison in this file
+// routes through this one function now so the two checks can't drift
+// apart again.
+export const normSong = v => (v||"").trim().toLowerCase();
+export const isWildcard = v => normSong(v) === "any debut";
 
 // An open-padlock emoji (🔓) technically IS the "unlocked" codepoint, but at
 // the ~14px this renders inline next to a slot it reads as just "a padlock"
@@ -189,14 +201,14 @@ export function attachAutocomplete(input){
   const close = () => { list?.remove(); list = null; sel = -1; };
   input.addEventListener("input", () => {
     close();
-    const q = input.value.trim().toLowerCase();
+    const q = normSong(input.value);
     if (q.length < 1) return;
     const coverOnly = input.dataset.type === "cover_pick";
     const pool = coverOnly ? state.songList.filter(s => s.is_original === false) : state.songList;
     const wc = [];
     if (!coverOnly && (state.cfg.wildcards?.debut ?? true) && ("any debut".includes(q) || "debut".includes(q)))
       wc.push({ songname: "Any Debut", times_played: "★" });
-    const hits = [...wc, ...pool.filter(s => s.songname.toLowerCase().includes(q))].slice(0, 8);
+    const hits = [...wc, ...pool.filter(s => normSong(s.songname).includes(q))].slice(0, 8);
     if (!hits.length) return;
     list = document.createElement("div"); list.className = "acc-list";
     hits.forEach(h => {
@@ -225,7 +237,7 @@ export async function savePicks(){
     .map(i => ({ slot: i.dataset.slot, songname: i.value.trim() }))
     .filter(p => p.songname);
   // warn on unknown songs (typos) but allow — could be a debut call
-  const unknown = picks.filter(p => !isWildcard(p.songname) && !state.songList.some(s => s.songname.toLowerCase() === p.songname.toLowerCase()));
+  const unknown = picks.filter(p => !isWildcard(p.songname) && !state.songList.some(s => normSong(s.songname) === normSong(p.songname)));
   if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):\n${unknown.map(u=>u.songname).join("\n")}\n\nSave anyway?`)) return;
   try{
     await rpc("submit_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:state.currentShow.id, p_picks:picks });

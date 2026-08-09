@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { makeFixtures } from "./fixtures.mjs";
+import { makeFixtures, makeCatalogWhitespaceFixtures } from "./fixtures.mjs";
 import { createFakeSupabase } from "./fakeSupabase.mjs";
 
 // Strips every <script>...</script> and <script .../> tag so we can control
@@ -408,3 +408,50 @@ function dumpLocalStorage(window){
 }
 
 function tick(){ return new Promise(r => setTimeout(r, 0)); }
+
+// Regression test for the autocomplete/save-time catalog-match mismatch:
+// selecting a catalog song with real leading/trailing whitespace (e.g.
+// "Time Escaping ") from autocomplete used to fail the save-time "not in
+// catalog" warning, because the input value got trimmed before comparing
+// while the catalog string it was checked against didn't. Exercises the
+// REAL bundled app.js — types into a slotline input, lets the real
+// attachAutocomplete populate .acc-list, fires the real mousedown handler
+// to select an entry (not a hand-set input.value, which would skip the
+// actual selection code path), for both a regular slot (opener) and a
+// cover slot (cover_pick, which additionally filters autocomplete to
+// is_original:false) — then saves and asserts window.confirm (the "not
+// in catalog" prompt) was never invoked for either.
+export async function runCatalogWhitespaceScenario({ html, scripts, mode }){
+  const { tables, session } = makeCatalogWhitespaceFixtures();
+  const calls = [];
+  const dbHolder = {};
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, dbHolder);
+  const confirmCalls = [];
+  window.confirm = (msg) => { confirmCalls.push(msg); return true; };
+  window.localStorage.setItem("ft_session", JSON.stringify(session));
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+  window.openShow(1);
+  await tick(); await tick();
+
+  const selectFromAutocomplete = (slotKey, query) => {
+    const input = window.document.querySelector(`.slotline input[data-slot="${slotKey}"]`);
+    input.value = query;
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    const item = [...window.document.querySelectorAll(".acc-list div")]
+      .find(d => d.textContent.toLowerCase().includes(query.toLowerCase()));
+    if (!item) throw new Error(`autocomplete never offered a match for "${query}" in slot ${slotKey}`);
+    item.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    return input.value;
+  };
+
+  const openerValue = selectFromAutocomplete("opener", "layla");
+  const coverValue = selectFromAutocomplete("cover1", "time escap");
+
+  window.document.getElementById("save").click();
+  await tick(); await tick();
+
+  return { confirmCalls, openerValue, coverValue, savedPicks: tables.picks };
+}

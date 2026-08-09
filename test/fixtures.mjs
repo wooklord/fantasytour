@@ -110,3 +110,52 @@ export function makeFixtures(){
 
   return { tables, session, ids: { LEAGUE_ID, CASUAL_ID, OFFICIAL_ID } };
 }
+
+// Minimal fixture for the autocomplete/save-time catalog-match regression:
+// a real catalog entry with trailing whitespace (e.g. "Time Escaping ")
+// passes autocomplete's substring filter but used to fail the save-time
+// exact-match check, because the input value got trimmed before comparing
+// while the catalog string didn't — see normSong in picks.js. Deliberately
+// NOT layered onto makeFixtures() above: that fixture's slot count/target
+// numbers are load-bearing for several other assertions, and this scenario
+// only needs one opener-type slot and one cover_pick slot to exist at all.
+export function makeCatalogWhitespaceFixtures(){
+  const now = Date.now();
+  const iso = (offsetMin) => new Date(now + offsetMin*60000).toISOString();
+  const day = (offsetDays) => new Date(now + offsetDays*864e5).toISOString().slice(0,10);
+  const LEAGUE_ID = 1, CASUAL_ID = 10;
+  const cfg = {
+    slots: [
+      { key:"opener", type:"opener", label:"Opener", points:2 },
+      { key:"cover1", type:"cover_pick", label:"Cover", points:2 },
+    ],
+    flat_picks: 0, flat_points: 1,
+    partial_credit: true, partial_points: 1,
+    allow_duplicates: false,
+    voting_override: "auto",
+    bonuses: { cover:1, debut:2, perfect:3, jamchart:0 },
+    wildcards: { debut: true },
+    oneset: { slots:[{key:"opener",type:"opener",label:"Opener",points:2}], flat_picks:0, flat_points:1 },
+  };
+  const tables = {
+    leagues: [{ id: LEAGUE_ID, name: "Ambassadors" }],
+    brackets: [{ id: CASUAL_ID, league_id: LEAGUE_ID, kind: "casual", name: "Casual", config: cfg }],
+    league_members: [{ league_id: LEAGUE_ID, player_id: "p1", is_league_admin: true, official_opt_in: true }],
+    // Both entries carry real trailing whitespace, mirroring actual
+    // songs_cache rows found in production (confirmed via a live query —
+    // 7 of 363 catalog rows have leading/trailing whitespace as of this
+    // writing, "Time Escaping " among them).
+    songs_cache: [
+      { songname: "Layla ", times_played: 9, is_original: true },
+      { songname: "Time Escaping ", times_played: 5, is_original: false },
+    ],
+    shows: [{ id: 1, showdate: day(0), venue: "The Barn", city: "Woodstock", state: "NY" }],
+    league_shows: [{ league_id: LEAGUE_ID, show_id: 1, cutoff_at: iso(60), format: "standard", status: "upcoming",
+      remind_sent: null, lock_sent: null, winner_sent: null }],
+    seasons: [], season_rosters: [],
+    players_public: [{ id: "p1", name: "Wooklord", created_at: "2026-01-01" }],
+    scores: [], picks: [], setlist_songs: [],
+  };
+  const session = { id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false };
+  return { tables, session, ids: { LEAGUE_ID, CASUAL_ID } };
+}

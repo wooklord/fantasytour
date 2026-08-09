@@ -373,7 +373,8 @@
   }
 
   // src/features/picks.js
-  var isWildcard = (v) => (v || "").trim().toLowerCase() === "any debut";
+  var normSong = (v) => (v || "").trim().toLowerCase();
+  var isWildcard = (v) => normSong(v) === "any debut";
   var UNLOCKED_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
   function draftKey(showId) {
     return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`;
@@ -525,14 +526,14 @@
     input.addEventListener("input", () => {
       var _a, _b;
       close();
-      const q = input.value.trim().toLowerCase();
+      const q = normSong(input.value);
       if (q.length < 1) return;
       const coverOnly = input.dataset.type === "cover_pick";
       const pool = coverOnly ? state.songList.filter((s) => s.is_original === false) : state.songList;
       const wc = [];
       if (!coverOnly && ((_b = (_a = state.cfg.wildcards) == null ? void 0 : _a.debut) != null ? _b : true) && ("any debut".includes(q) || "debut".includes(q)))
         wc.push({ songname: "Any Debut", times_played: "\u2605" });
-      const hits = [...wc, ...pool.filter((s) => s.songname.toLowerCase().includes(q))].slice(0, 8);
+      const hits = [...wc, ...pool.filter((s) => normSong(s.songname).includes(q))].slice(0, 8);
       if (!hits.length) return;
       list = document.createElement("div");
       list.className = "acc-list";
@@ -573,7 +574,7 @@
   async function savePicks() {
     $("#p-err").textContent = "";
     const picks = [...document.querySelectorAll(".slotline input")].map((i) => ({ slot: i.dataset.slot, songname: i.value.trim() })).filter((p) => p.songname);
-    const unknown = picks.filter((p) => !isWildcard(p.songname) && !state.songList.some((s) => s.songname.toLowerCase() === p.songname.toLowerCase()));
+    const unknown = picks.filter((p) => !isWildcard(p.songname) && !state.songList.some((s) => normSong(s.songname) === normSong(p.songname)));
     if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):
 ${unknown.map((u) => u.songname).join("\n")}
 
