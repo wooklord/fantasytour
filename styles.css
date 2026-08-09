@@ -350,6 +350,18 @@ html[data-theme="light"] .panel.live-halo{
 .btn.ghost{background:var(--panel2);color:var(--cream);border:1px solid var(--line2)}
 .btn.small{padding:7px 12px;font-size:.8rem}
 .btn:disabled{opacity:.5}
+/* .btn.ghost's --panel2/--cream/--line2 are app-surface colors — dropped
+   onto .sheet's paper card (renderIneligible's "Switch to Casual"), light
+   theme's --panel2 is nearly the same pale cream as the paper itself, so
+   the button read as barely-there against its own card even though its
+   text stayed technically legible. Different failure than the plain-text
+   cases elsewhere in .sheet (a component blending into its background,
+   not text vanishing into it) but the same root cause: an app-wide token
+   used somewhere that doesn't flip with the app theme. Same specificity
+   as .btn.ghost (two classes) — placed after it in the file so this wins
+   the tie regardless of which rule anyone edits next; a future .btn
+   dropped into .sheet is covered too, not just this one call site. */
+.sheet .btn{background:transparent;color:var(--paper-ink);border:1px solid var(--paper-ink)}
 .err{color:var(--coral);font-size:.85rem;margin-top:8px;min-height:1.2em}
 .admin-slot{display:flex;gap:8px;margin:6px 0;flex-wrap:wrap}
 .admin-slot input,.admin-slot select{background:var(--pit);border:1px solid var(--line2);border-radius:8px;color:var(--cream);padding:8px 10px;font-size:.85rem}

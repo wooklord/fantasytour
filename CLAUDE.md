@@ -280,6 +280,47 @@ before assuming a change is covered just because the suite is green:
 
 ---
 
+## Frontend/CSS gotchas learned the hard way
+
+- **`.sheet` (the pick sheet paper card) is theme-invariant — always cream
+  paper with dark ink, regardless of which app theme is active.**
+  `--paper`/`--paper-ink`/`--paper-ink-soft` are the tokens built for it;
+  the app's own `--cream`/`--cream-dim`/`--panel`/`--panel2`/`--line`/`--pit`/
+  `--indigo` all flip between light and dark theme and are wrong the
+  instant they're used on anything sitting on the paper. This has broken
+  three different ways so far, always the same root cause — an app-wide
+  class used where a paper-scoped one was needed:
+  - The ineligible-reason text originally used `--ink` (a theme-flipping
+    variable that, despite the name, is repurposed as light theme's
+    *foreground* color) — cream-on-cream in light theme. Fixed with
+    `--paper-ink`.
+  - A "numbers are points per slot" legend line used the app-wide `.muted`
+    class (`color:var(--cream-dim)`) — ~1.56:1 contrast in dark theme,
+    since dark theme's `--cream-dim` is a pale grey that nearly matches
+    the paper's own lightness. Fixed with an inline `--paper-ink-soft` style.
+  - `renderIneligible`'s "Switch to Casual" button used the shared
+    `.btn.ghost` class (`--panel2`/`--cream`/`--line2`) — in light theme,
+    `--panel2` is nearly the same pale cream as the paper, so the button
+    read as barely-there against its own card even though its own text
+    stayed technically legible. **This is a different failure shape than
+    the first two**: a *component* blending into its background, not
+    *text* vanishing into it — because the button supplies its own opaque
+    fill, the text-on-fill contrast was never the problem, the
+    component's boundary against the paper was. Fixed with a
+    `.sheet .btn` override using `--paper-ink`.
+  The pattern to watch for: it's not just text-color classes that break
+  this way — **any app-wide component class** (buttons, pills, badges,
+  whatever gets added next) breaks the instant it's dropped inside
+  `.sheet`, just via a different visual symptom depending on whether the
+  component supplies its own background or inherits the paper's. Before
+  adding anything to `.sheet`, check whether its classes reference
+  `--cream*`/`--panel*`/`--line*`/`--pit`/`--indigo` anywhere in their
+  CSS — if so, it needs paper tokens or a `.sheet`-scoped override, not a
+  pass, and check the result in an actual browser in light theme, not by
+  reading the values.
+
+---
+
 ## Feature set frozen at the start of 2.0 (historical snapshot — NOT current)
 
 **This section is not maintained and does not describe the app's current
