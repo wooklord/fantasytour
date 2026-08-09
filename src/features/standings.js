@@ -13,6 +13,67 @@ import { computeStandings, rankStandings, TIEBREAK_SHORT_LABELS } from "../core/
 // lives on the shared state object instead of a bare global.
 export function setBoardSeason(v){ state.boardSeason = v; renderBoard(); }
 
+// ---------- podium arrangement ----------
+// Traditional centered-podium layout: a lone best tier centers and rises
+// above flanking lower tiers (better rank flanks left — "silver left, gold
+// center raised, bronze right"); a 2-way tie for best splits to flank
+// instead (both raised), with whatever tier survives next centered at
+// normal height as the runner-up; a 3-way tie for best has no single tier
+// to raise above anything, so it renders level instead. Deliberately
+// structural, not rank-literal — "top"/"flank" mean whichever tiers
+// actually survive compactPodiumTiers() below, not literally gold/silver/
+// bronze (an oversized gold tier can itself compact away, leaving silver as
+// the surviving "top"). Medal COLOR still always follows resolved rank
+// (tierFor in renderBoard), kept entirely independent of this positional
+// logic.
+function arrangePodium(tiers){
+  if (!tiers.length) return [];
+  const [top, ...rest] = tiers;
+  if (top.items.length >= 3) return top.items.map(o => ({ o, elevated:false }));
+  if (top.items.length === 2){
+    const [left, right] = top.items;
+    const runner = rest[0]?.items[0];
+    const boxes = [{ o:left, elevated:true }];
+    if (runner) boxes.push({ o:runner, elevated:false });
+    boxes.push({ o:right, elevated:true });
+    return boxes;
+  }
+  if (!rest.length) return [{ o:top.items[0], elevated:true }];
+  if (rest.length === 1){
+    const f = rest[0];
+    return f.items.length === 2
+      ? [{ o:f.items[0], elevated:false }, { o:top.items[0], elevated:true }, { o:f.items[1], elevated:false }]
+      : [{ o:f.items[0], elevated:false }, { o:top.items[0], elevated:true }];
+  }
+  return [{ o:rest[0].items[0], elevated:false }, { o:top.items[0], elevated:true }, { o:rest[1].items[0], elevated:false }];
+}
+
+// The boxed podium must never wrap onto a second line — a wrap would put
+// gold below a lower tier, breaking the arrangement above entirely. Fixed
+// at 3 regardless of breakpoint: desktop's larger icons (bigPx/smallPx
+// below) cost more row width than its larger panel gains, so a
+// width-derived ceiling would need to be SMALLER on desktop than phone —
+// an inconsistent payoff not worth tuning per breakpoint.
+const PODIUM_ROW_MAX = 3;
+// Replaces the old per-tier cap: an oversized single tier isn't a special
+// case, it's just a tier already over PODIUM_ROW_MAX on its own. Compacts
+// whole tiers (never splits one) until the boxed total fits; ties in size
+// compact the worse (higher) rank number first, so gold survives longest.
+function compactPodiumTiers(tiers){
+  let boxed = tiers.slice();
+  const compact = [];
+  while (boxed.reduce((n,t) => n + t.items.length, 0) > PODIUM_ROW_MAX){
+    let victim = boxed[0];
+    for (const t of boxed){
+      if (t.items.length > victim.items.length || (t.items.length === victim.items.length && t.rank > victim.rank)) victim = t;
+    }
+    boxed = boxed.filter(t => t !== victim);
+    compact.push(victim);
+  }
+  compact.sort((a,b) => a.rank - b.rank);
+  return { boxed, compact };
+}
+
 export async function renderBoard(){
   clearTimersFor("board"); state.tab = "board"; markTab();
   const [sc, allShows, seasons] = await Promise.all([
@@ -77,11 +138,19 @@ export async function renderBoard(){
   // means anything, so any group sharing a rank sorts by name instead of
   // leaving that arbitrary order on display. Applies everywhere ties show
   // up — Casual's plain equal-points ties included, not just Official's.
+  // sensitivity:'accent' makes this explicitly case-insensitive (real
+  // roster names range from "alhooks13" to "The Judge" — a plain compare
+  // would sort every capitalized name before every lowercase one) while
+  // still distinguishing accented letters. This is the ONLY place
+  // within-tie order gets decided: the podium below (both the boxed
+  // arrangement and the compacted-tier lists) reads tiers straight off
+  // this same sorted `order`, so it never needs its own tie-sort — and
+  // can't drift out of sync with the table showing the same tie.
   for (let i = 0; i < order.length; ){
     let j = i;
     while (j < order.length && order[j].rank === order[i].rank) j++;
     if (j - i > 1) order.slice(i, j)
-      .sort((a,b) => (pname[a.id]||"").localeCompare(pname[b.id]||""))
+      .sort((a,b) => (pname[a.id]||"").localeCompare(pname[b.id]||"", undefined, { sensitivity:"accent" }))
       .forEach((o,k) => order[i+k] = o);
     i = j;
   }
@@ -114,21 +183,7 @@ export async function renderBoard(){
   const podBox = (o, big) => `<div class="pod ${big?"first":""}">${
       isOfficial ? trophy(big?bigPx:smallPx, tierFor(o)) : rankNumeral(big?bigPx:smallPx, tierFor(o), o.rank)
     }<b>${esc(pname[o.id]||"?")}</b></div>`;
-  // Rank order, left to right, best first — ties already sort adjacent (the
-  // shared-rank alphabetical pass above runs on `order` itself, so this
-  // arrangement inherits it for free). Replaces the old centered/flanking
-  // layout, which only ever made sense for exactly 3 boxes: once any tier
-  // could grow past what three fixed slots (left/center/right) could
-  // express, that layout started placing the winner arbitrarily (e.g. 3rd
-  // of 4 boxes) instead of reading as centered. One rule that always holds
-  // beats two that only agree in the 3-box case.
   const podiumEntries = order.filter(o => o.rank <= 3);
-  const topGroup = podiumEntries.filter(o => o.rank === 1);
-  // Elevation is a direct function of resolved rank and how many players
-  // hold rank 1 — a 3+-way tie for 1st has no single top to raise above
-  // the others, so none of them elevate; a solo or 2-way tie for 1st still
-  // reads as the raised leftmost box(es).
-  const isElevated = o => o.rank === 1 && topGroup.length <= 2;
   // Placeholder empty state: before ANY non-zero score exists among these
   // players (not just "before the first show finalizes" — a finalized
   // show where everyone blanked leaves the exact same all-zero tie), the
@@ -142,29 +197,33 @@ export async function renderBoard(){
     }</div>`;
   // Bounding a genuine tie without hiding anyone: the podium only ever
   // shows tiers 1/2/3 (podiumEntries above), so there are at most 3 tiers
-  // to decide on, each independently. A tier with more than RANK_GROUP_MAX
-  // people collapses to one compact "icon + comma-separated names" row —
-  // no per-player box, no elevation — instead of rendering a wall of
-  // trophies (this is what once rendered seven full-size golds for an
-  // all-zero tie, and still would for any real tie that size). A tier at or
-  // under the cap stays fully boxed even sitting right next to a collapsed
-  // one — a 2-way tie for 1st isn't penalized just because 3rd place has a
-  // crowd. The full standings table below is unaffected either way.
-  const RANK_GROUP_MAX = 4;
+  // to decide on. compactPodiumTiers() collapses whole tiers to one compact
+  // column (icon + stacked names, see compactHtml below) — no per-player
+  // box, no elevation — until the boxed row's total fits PODIUM_ROW_MAX
+  // (this is what once rendered seven full-size golds for an all-zero tie,
+  // and still would for any real tie that size). A tier that fits stays
+  // fully boxed even sitting right next to a collapsed one — a 2-way tie
+  // for 1st isn't penalized just because 3rd place has a crowd. The full
+  // standings table below is unaffected either way.
   const tiers = [];
   for (const o of podiumEntries){
     const t = tiers[tiers.length - 1];
     if (t && t.rank === o.rank) t.items.push(o); else tiers.push({ rank: o.rank, items: [o] });
   }
-  const boxedTiers = tiers.filter(t => t.items.length <= RANK_GROUP_MAX);
-  const compactTiers = tiers.filter(t => t.items.length > RANK_GROUP_MAX);
+  const { boxed: boxedTiers, compact: compactTiers } = compactPodiumTiers(tiers);
   const boxedHtml = boxedTiers.length
-    ? `<div class="podium">${boxedTiers.flatMap(t => t.items).map(o => podBox(o, isElevated(o))).join("")}</div>`
+    ? `<div class="podium">${arrangePodium(boxedTiers).map(({o,elevated}) => podBox(o, elevated)).join("")}</div>`
     : "";
+  // Names stack vertically under the tier's icon rather than running as one
+  // comma-separated line beside it — a long line wraps mid-list at an
+  // arbitrary point that shifts with viewport width, where a stacked name
+  // always gets its own line regardless of width or length. Costs a couple
+  // of lines' height for a small tie (2-3 names), but degrades predictably
+  // for a large one instead of reflowing unpredictably.
   const compactHtml = compactTiers.length
-    ? `<div class="podium-compact">${compactTiers.map(t => `<div class="pod-row">${
-        isOfficial ? trophy(32, tierFor(t.items[0])) : rankNumeral(32, tierFor(t.items[0]), t.rank)
-      }<span class="pod-names">${t.items.map(o => esc(pname[o.id]||"?")).join(", ")}</span></div>`).join("")}</div>`
+    ? `<div class="podium-compact">${compactTiers.map(t => `<div class="pod-col">${
+        isOfficial ? trophy(44, tierFor(t.items[0])) : rankNumeral(44, tierFor(t.items[0]), t.rank)
+      }<div class="pod-names">${t.items.map(o => `<div>${esc(pname[o.id]||"?")}</div>`).join("")}</div></div>`).join("")}</div>`
     : "";
   const podium = !order.length
     ? ""

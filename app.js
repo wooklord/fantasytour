@@ -914,6 +914,41 @@ Save anyway?`)) return;
     state.boardSeason = v;
     renderBoard();
   }
+  function arrangePodium(tiers) {
+    var _a;
+    if (!tiers.length) return [];
+    const [top, ...rest] = tiers;
+    if (top.items.length >= 3) return top.items.map((o) => ({ o, elevated: false }));
+    if (top.items.length === 2) {
+      const [left, right] = top.items;
+      const runner = (_a = rest[0]) == null ? void 0 : _a.items[0];
+      const boxes = [{ o: left, elevated: true }];
+      if (runner) boxes.push({ o: runner, elevated: false });
+      boxes.push({ o: right, elevated: true });
+      return boxes;
+    }
+    if (!rest.length) return [{ o: top.items[0], elevated: true }];
+    if (rest.length === 1) {
+      const f = rest[0];
+      return f.items.length === 2 ? [{ o: f.items[0], elevated: false }, { o: top.items[0], elevated: true }, { o: f.items[1], elevated: false }] : [{ o: f.items[0], elevated: false }, { o: top.items[0], elevated: true }];
+    }
+    return [{ o: rest[0].items[0], elevated: false }, { o: top.items[0], elevated: true }, { o: rest[1].items[0], elevated: false }];
+  }
+  var PODIUM_ROW_MAX = 3;
+  function compactPodiumTiers(tiers) {
+    let boxed = tiers.slice();
+    const compact = [];
+    while (boxed.reduce((n, t) => n + t.items.length, 0) > PODIUM_ROW_MAX) {
+      let victim = boxed[0];
+      for (const t of boxed) {
+        if (t.items.length > victim.items.length || t.items.length === victim.items.length && t.rank > victim.rank) victim = t;
+      }
+      boxed = boxed.filter((t) => t !== victim);
+      compact.push(victim);
+    }
+    compact.sort((a, b) => a.rank - b.rank);
+    return { boxed, compact };
+  }
   async function renderBoard() {
     var _a, _b, _c, _d;
     clearTimersFor("board");
@@ -949,7 +984,7 @@ Save anyway?`)) return;
     for (let i = 0; i < order.length; ) {
       let j = i;
       while (j < order.length && order[j].rank === order[i].rank) j++;
-      if (j - i > 1) order.slice(i, j).sort((a, b) => (pname[a.id] || "").localeCompare(pname[b.id] || "")).forEach((o, k) => order[i + k] = o);
+      if (j - i > 1) order.slice(i, j).sort((a, b) => (pname[a.id] || "").localeCompare(pname[b.id] || "", void 0, { sensitivity: "accent" })).forEach((o, k) => order[i + k] = o);
       i = j;
     }
     const rows = order.map((o) => [o.id, T[o.id]]);
@@ -964,21 +999,17 @@ Save anyway?`)) return;
     const bigPx = narrow ? 76 : 118, smallPx = narrow ? 54 : 82;
     const podBox = (o, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? bigPx : smallPx, tierFor(o)) : rankNumeral(big ? bigPx : smallPx, tierFor(o), o.rank)}<b>${esc(pname[o.id] || "?")}</b></div>`;
     const podiumEntries = order.filter((o) => o.rank <= 3);
-    const topGroup = podiumEntries.filter((o) => o.rank === 1);
-    const isElevated = (o) => o.rank === 1 && topGroup.length <= 2;
     const hasAnyScore = order.some((o) => o.points > 0);
     const placeholderBox = (tier, rank, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? bigPx : smallPx, tier) : rankNumeral(big ? bigPx : smallPx, tier, rank)}</div>`;
-    const RANK_GROUP_MAX = 4;
     const tiers = [];
     for (const o of podiumEntries) {
       const t = tiers[tiers.length - 1];
       if (t && t.rank === o.rank) t.items.push(o);
       else tiers.push({ rank: o.rank, items: [o] });
     }
-    const boxedTiers = tiers.filter((t) => t.items.length <= RANK_GROUP_MAX);
-    const compactTiers = tiers.filter((t) => t.items.length > RANK_GROUP_MAX);
-    const boxedHtml = boxedTiers.length ? `<div class="podium">${boxedTiers.flatMap((t) => t.items).map((o) => podBox(o, isElevated(o))).join("")}</div>` : "";
-    const compactHtml = compactTiers.length ? `<div class="podium-compact">${compactTiers.map((t) => `<div class="pod-row">${isOfficial ? trophy(32, tierFor(t.items[0])) : rankNumeral(32, tierFor(t.items[0]), t.rank)}<span class="pod-names">${t.items.map((o) => esc(pname[o.id] || "?")).join(", ")}</span></div>`).join("")}</div>` : "";
+    const { boxed: boxedTiers, compact: compactTiers } = compactPodiumTiers(tiers);
+    const boxedHtml = boxedTiers.length ? `<div class="podium">${arrangePodium(boxedTiers).map(({ o, elevated }) => podBox(o, elevated)).join("")}</div>` : "";
+    const compactHtml = compactTiers.length ? `<div class="podium-compact">${compactTiers.map((t) => `<div class="pod-col">${isOfficial ? trophy(44, tierFor(t.items[0])) : rankNumeral(44, tierFor(t.items[0]), t.rank)}<div class="pod-names">${t.items.map((o) => `<div>${esc(pname[o.id] || "?")}</div>`).join("")}</div></div>`).join("")}</div>` : "";
     const podium = !order.length ? "" : !hasAnyScore ? `<div class="podium">${placeholderBox("silver", 2, false)}${placeholderBox("gold", 1, true)}${placeholderBox("bronze", 3, false)}</div>` : `<div class="podium-wrap">${boxedHtml}${compactHtml}</div>`;
     const statRows = rows.filter(([, r]) => r.shows > 0).sort((a, b) => b[1].scoped / b[1].shows - a[1].scoped / a[1].shows);
     $("#main").innerHTML = `
