@@ -475,9 +475,10 @@
       <button class="revertlink" id="revert-link">Revert to saved</button>
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
-      <p class="muted" style="font-size:.75rem;margin:2px 0 0">numbers are points per slot</p>
+      <p style="font-size:.75rem;margin:2px 0 0;color:var(--paper-ink-soft)">numbers are points per slot</p>
       <button class="savebtn" id="save">Lock 'em in</button>
-      <div class="countbig">${state.cfg.voting_override === "open" ? "Admin override \u2014 voting open" : `Locks ${fmtCutoff(show.cutoff_at)} \xB7 <b id="cd"></b>`}</div>
+      <p style="font-size:.75rem;margin:8px 0 0;text-align:center;color:var(--paper-ink-soft)">You can change your picks any time until the cutoff.</p>
+      <div class="countbig">${state.cfg.voting_override === "open" ? "Admin override \u2014 voting open" : `Cutoff ${fmtCutoff(show.cutoff_at)} \xB7 <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
       ${((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" ? laurelSpray() : ""}
     </div>
@@ -740,7 +741,7 @@ Save anyway?`)) return;
       const st = showState(s);
       const cls = { open: "open", live: "live", locked: "locked", final: "final", played: "final" }[st] || "";
       const cd = st === "open" ? countdown(s.cutoff_at) : null;
-      const txt = st === "final" ? "complete" : st === "open" && cd ? "locks in " + cd : st;
+      const txt = st === "final" ? "complete" : st === "open" && cd ? "cutoff in " + cd : st;
       const winHtml = st === "final" && winners[s.id] ? `<div class="win-line">${winBadge(28)} ${winners[s.id].names.map(esc).join(" & ")}</div>` : "";
       const noSeason = isOfficial && !seasonOf(s.showdate);
       const { wk, md } = fmtDateParts(s.showdate);
@@ -790,7 +791,7 @@ Save anyway?`)) return;
       document.querySelectorAll("[data-cd]").forEach((el) => {
         if (!el.dataset.cd) return;
         const cd = countdown(el.dataset.cd);
-        el.textContent = cd ? "locks in " + cd : "locked";
+        el.textContent = cd ? "cutoff in " + cd : "locked";
       });
     }, 1e3));
   }

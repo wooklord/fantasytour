@@ -135,9 +135,10 @@ export async function renderPickSheet(show){
       <button class="revertlink" id="revert-link">Revert to saved</button>
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
-      <p class="muted" style="font-size:.75rem;margin:2px 0 0">numbers are points per slot</p>
+      <p style="font-size:.75rem;margin:2px 0 0;color:var(--paper-ink-soft)">numbers are points per slot</p>
       <button class="savebtn" id="save">Lock 'em in</button>
-      <div class="countbig">${state.cfg.voting_override==='open' ? 'Admin override — voting open' : `Locks ${fmtCutoff(show.cutoff_at)} · <b id="cd"></b>`}</div>
+      <p style="font-size:.75rem;margin:8px 0 0;text-align:center;color:var(--paper-ink-soft)">You can change your picks any time until the cutoff.</p>
+      <div class="countbig">${state.cfg.voting_override==='open' ? 'Admin override — voting open' : `Cutoff ${fmtCutoff(show.cutoff_at)} · <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
       ${currentBracket()?.bracket_kind === "official" ? laurelSpray() : ""}
     </div>

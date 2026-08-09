@@ -180,7 +180,7 @@ export async function renderShows(){
     const st = showState(s);
     const cls = { open:"open", live:"live", locked:"locked", final:"final", played:"final" }[st] || "";
     const cd = st === "open" ? countdown(s.cutoff_at) : null;
-    const txt = st === "final" ? "complete" : (st === "open" && cd ? "locks in " + cd : st);
+    const txt = st === "final" ? "complete" : (st === "open" && cd ? "cutoff in " + cd : st);
     // Always its own line under city/pill, everywhere (Just Played, Recent,
     // and in practice never Upcoming since nothing's final yet there) —
     // used to be Just-Played-only on the theory that Recent's longer list
@@ -253,7 +253,7 @@ export async function renderShows(){
     document.querySelectorAll("[data-cd]").forEach(el => {
       if (!el.dataset.cd) return;
       const cd = countdown(el.dataset.cd);
-      el.textContent = cd ? "locks in " + cd : "locked";
+      el.textContent = cd ? "cutoff in " + cd : "locked";
     });
   }, 1000));
 }
