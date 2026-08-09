@@ -7,6 +7,7 @@ import { fmtDate, fmtCutoff, countdown, clearTimers, clearTimersFor, showState }
 import { trophy, winBadge, laurelSpray } from "../core/trophy.js";
 import { toast } from "../core/toast.js";
 import { currentBracket } from "../core/switcher.js";
+import { SLOT_LABELS, SLOT_TOOLTIPS, FLAT_PICK_TOOLTIP, slotLabelFor } from "../core/slotTypes.js";
 
 export const isWildcard = v => (v||"").trim().toLowerCase() === "any debut";
 
@@ -69,7 +70,11 @@ function prettifySlotKey(key){
 // for rendering a frozen breakdown consistently regardless of DB row order.
 // `order`: configured slots in configured order, then flat picks numerically.
 // Any breakdown slot key missing from `order` (legacy/removed slot) sorts last
-// and falls back to a prettified key rather than the raw key.
+// and falls back to a prettified key rather than the raw key. Label comes
+// from the fixed slotLabelFor() map, not the (now unused, possibly still
+// sitting in old config JSON) admin-typed `s.label` — a slot whose TYPE
+// isn't in that map at all (a genuinely retired type) prettifies its key
+// too, same fallback as the missing-from-order case just above it.
 function breakdownSlotInfo(format){
   const sect = (format === "one_set" && state.cfg.oneset) ? state.cfg.oneset : state.cfg;
   const slots = sect.slots || [];
@@ -77,9 +82,10 @@ function breakdownSlotInfo(format){
   const order = [], label = {};
   slots.forEach(s => {
     order.push(s.key);
+    const base = slotLabelFor(s.type||s.key, format) || prettifySlotKey(s.type||s.key);
     label[s.key] = (coverKeys.length > 1 && coverKeys.includes(s.key))
-      ? `${s.label} ${coverKeys.indexOf(s.key)+1}`
-      : s.label;
+      ? `${base} ${coverKeys.indexOf(s.key)+1}`
+      : base;
   });
   for (let i=1; i<=(sect.flat_picks||0); i++){ order.push("flat"+i); label["flat"+i] = "Pick "+i; }
   return { order, label };
@@ -97,8 +103,11 @@ function sortBySlotOrder(items, order){
 
 export function slotDefs(format){
   const sect = (format === "one_set" && state.cfg.oneset) ? state.cfg.oneset : state.cfg;
-  const slots = (sect.slots||[]).map(s => ({ key:s.key, label:s.label, pts:s.points, type:s.type||s.key }));
-  for (let i=1; i<=(sect.flat_picks||0); i++) slots.push({ key:"flat"+i, label:"Pick "+i, pts:sect.flat_points ?? state.cfg.flat_points ?? 1, flat:true });
+  const slots = (sect.slots||[]).map(s => {
+    const type = s.type||s.key;
+    return { key:s.key, label: slotLabelFor(type, format) || prettifySlotKey(type), tooltip: SLOT_TOOLTIPS[type] || null, pts:s.points, type };
+  });
+  for (let i=1; i<=(sect.flat_picks||0); i++) slots.push({ key:"flat"+i, label:"Pick "+i, tooltip: FLAT_PICK_TOOLTIP, pts:sect.flat_points ?? state.cfg.flat_points ?? 1, flat:true });
   return slots;
 }
 
@@ -112,9 +121,9 @@ export async function renderPickSheet(show){
   const slots = slotDefs(show.format);
   const slotHtml = s => `
     <div class="slotline autocomplete">
-      <label>${esc(s.label)}</label>
+      <label${s.tooltip ? ` title="${esc(s.tooltip)}"` : ""}>${esc(s.label)}</label>
       <input data-slot="${s.key}" data-type="${s.type||s.key}" value="${val(s.key)}" placeholder="${(s.type||s.key)==="cover_pick"?"a cover…":"song…"}" autocomplete="off" spellcheck="false">
-      <span class="pts">${s.pts} pt${s.pts===1?"":"s"}</span>
+      <span class="pts">${s.pts}</span>
       <span class="unsaved" title="Unsaved change — differs from your saved pick">${UNLOCKED_ICON}</span>
     </div>`;
   const structured = slots.filter(s=>!s.flat), flats = slots.filter(s=>s.flat);
@@ -126,6 +135,7 @@ export async function renderPickSheet(show){
       <button class="revertlink" id="revert-link">Revert to saved</button>
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
+      <p class="muted" style="font-size:.75rem;margin:2px 0 0">numbers are points per slot</p>
       <button class="savebtn" id="save">Lock 'em in</button>
       <div class="countbig">${state.cfg.voting_override==='open' ? 'Admin override — voting open' : `Locks ${fmtCutoff(show.cutoff_at)} · <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>

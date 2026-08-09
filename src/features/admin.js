@@ -9,6 +9,7 @@ import { markTab } from "../core/layout.js";
 import { settingsPanelHtml, wireSettingsPanel } from "./settings.js";
 import { currentBracket } from "../core/switcher.js";
 import { TIEBREAK_LABELS } from "../core/tiebreak.js";
+import { SLOT_LABELS, SLOT_TOOLTIPS, ONE_SET_EXCLUDED_TYPES, slotLabelFor } from "../core/slotTypes.js";
 import { venueLocalInputValue, venueLocalToUTC, venueLongName, hasDstTransition } from "../core/venueTime.js";
 
 // Seasons only ever belong to a league's Official bracket, and the season
@@ -120,7 +121,7 @@ export async function renderAdmin(){
     `) : ""}
     ${collapsible("rules-standard", "Game rules — standard shows", `
       <p class="muted">Slotted picks (position matters):</p>
-      <div id="slots">${(cfg.slots||[]).map(sl => adminSlotRow(sl)).join("")}</div>
+      <div id="slots">${(cfg.slots||[]).map(sl => adminSlotRow(sl, "standard")).join("")}</div>
       <button class="btn ghost small" onclick="addSlot('slots')">+ add slot</button>
       <div class="grid2" style="margin-top:14px">
         <div class="field"><label>Flat picks (count)</label><input id="c-flat" type="number" min="0" value="${cfg.flat_picks}"></div>
@@ -139,7 +140,7 @@ export async function renderAdmin(){
     `)}
     ${collapsible("rules-oneset", "Game rules — one-set shows", `
       <p class="muted">Used for shows toggled to "1 set" below. Festival-tagged shows sync in as 1 set automatically.</p>
-      <div id="slots1">${(os.slots||[]).map(sl => adminSlotRow(sl)).join("")}</div>
+      <div id="slots1">${(os.slots||[]).map(sl => adminSlotRow(sl, "one_set")).join("")}</div>
       <button class="btn ghost small" onclick="addSlot('slots1')">+ add slot</button>
       <div class="grid2" style="margin-top:14px">
         <div class="field"><label>Flat picks (count)</label><input id="c1-flat" type="number" min="0" value="${os.flat_picks}"></div>
@@ -361,36 +362,36 @@ export async function loadRoster(){
       </div>`).join("")}`;
   }catch(e){ $("#roster").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
-export const SLOT_TYPES = {
-  opener: "Opener — first song of the show",
-  set1_closer: "Set 1 closer",
-  set2_opener: "Set 2 opener",
-  closer: "Closer — last pre-encore song",
-  encore: "Encore — any encore song",
-  show_closer: "Show closer — final song of the night",
-  second_song: "2nd song of the show",
-  cover_pick: "Cover pick — name a cover, scores if played (repeatable)",
-};
-export function adminSlotRow(sl){
+// Player-facing labels are fixed/code-owned (src/core/slotTypes.js) — the
+// admin only ever picks a TYPE and a point value now. The dropdown option
+// text is built from that same label+tooltip data (not a separately
+// maintained description string), so there's one source of truth instead
+// of two copies that can drift. One-set sections exclude set1_closer/
+// set2_opener entirely (see ONE_SET_EXCLUDED_TYPES) rather than just
+// relabeling them — a one-set show can't ever satisfy either slot.
+export function adminSlotRow(sl, format){
   const t = sl.type || sl.key;
-  let opts = Object.entries(SLOT_TYPES).map(([k,d]) =>
-    `<option value="${k}" ${k===t?"selected":""}>${d}</option>`).join("");
-  if (t && !(t in SLOT_TYPES)) opts += `<option value="${esc(t)}" selected>${esc(t)} (legacy)</option>`;
+  const excluded = format === "one_set" ? ONE_SET_EXCLUDED_TYPES : [];
+  let opts = Object.keys(SLOT_LABELS).filter(k => !excluded.includes(k)).map(k =>
+    `<option value="${k}" ${k===t?"selected":""}>${esc(slotLabelFor(k, format))} — ${esc(SLOT_TOOLTIPS[k])}</option>`).join("");
+  if (t && !(t in SLOT_LABELS)) opts += `<option value="${esc(t)}" selected>${esc(t)} (legacy)</option>`;
   return `<div class="admin-slot">
     <select class="k" title="which position this slot scores against">${opts}</select>
-    <input class="k" placeholder="Label players see" value="${esc(sl.label)}">
     <input class="p" type="number" min="0" value="${sl.points}">
     <button class="btn ghost small" onclick="this.parentElement.remove()">✕</button></div>`;
 }
-export function addSlot(target){ $("#"+target).insertAdjacentHTML("beforeend", adminSlotRow({key:"encore",label:"",points:2})); }
+export function addSlot(target){
+  const format = target === "slots1" ? "one_set" : "standard";
+  $("#"+target).insertAdjacentHTML("beforeend", adminSlotRow({ key:"encore", points:2 }, format));
+}
 export function readSlots(containerId){
   let coverN = 0;
   return [...document.querySelectorAll('#'+containerId+' .admin-slot')].map(r => {
     const type = r.querySelector("select.k").value;
-    const [l, p] = r.querySelectorAll("input");
+    const points = Number(r.querySelector("input.p").value);
     const key = type === "cover_pick" ? "cover" + (++coverN) : type;
-    return { key, type, label: l.value.trim(), points: Number(p.value) };
-  }).filter(sl => sl.type && sl.label);
+    return { key, type, points };
+  }).filter(sl => sl.type);
 }
 // Only rendered on the Official bracket (see renderAdmin) — three ordered
 // slots rather than a drag-reorderable list, matching this codebase's

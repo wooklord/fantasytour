@@ -344,6 +344,34 @@
     return `<div class="laurel-spray">${svg}</div>`;
   }
 
+  // src/core/slotTypes.js
+  var SLOT_LABELS = {
+    opener: "Opener",
+    set1_closer: "Set 1 Closer",
+    set2_opener: "Set 2 Opener",
+    closer: "Set 2 Closer",
+    show_closer: "Final Song",
+    encore: "Encore",
+    second_song: "2nd Song",
+    cover_pick: "Cover"
+  };
+  var SLOT_TOOLTIPS = {
+    opener: "First song of the show",
+    set1_closer: "Last song of set 1",
+    set2_opener: "First song of set 2",
+    closer: "Last song before the encore",
+    show_closer: "Last song of the show, encore included",
+    encore: "Any encore song",
+    second_song: "Second song of the show",
+    cover_pick: "A cover the band has played before"
+  };
+  var FLAT_PICK_TOOLTIP = "Any song, any position";
+  var ONE_SET_EXCLUDED_TYPES = ["set1_closer", "set2_opener"];
+  function slotLabelFor(type, format) {
+    if (type === "closer" && format === "one_set") return "Closer";
+    return SLOT_LABELS[type] || null;
+  }
+
   // src/features/picks.js
   var isWildcard = (v) => (v || "").trim().toLowerCase() === "any debut";
   var UNLOCKED_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
@@ -391,7 +419,8 @@
     const order = [], label = {};
     slots.forEach((s) => {
       order.push(s.key);
-      label[s.key] = coverKeys.length > 1 && coverKeys.includes(s.key) ? `${s.label} ${coverKeys.indexOf(s.key) + 1}` : s.label;
+      const base = slotLabelFor(s.type || s.key, format) || prettifySlotKey(s.type || s.key);
+      label[s.key] = coverKeys.length > 1 && coverKeys.includes(s.key) ? `${base} ${coverKeys.indexOf(s.key) + 1}` : base;
     });
     for (let i = 1; i <= (sect.flat_picks || 0); i++) {
       order.push("flat" + i);
@@ -411,8 +440,11 @@
   function slotDefs(format) {
     var _a, _b;
     const sect = format === "one_set" && state.cfg.oneset ? state.cfg.oneset : state.cfg;
-    const slots = (sect.slots || []).map((s) => ({ key: s.key, label: s.label, pts: s.points, type: s.type || s.key }));
-    for (let i = 1; i <= (sect.flat_picks || 0); i++) slots.push({ key: "flat" + i, label: "Pick " + i, pts: (_b = (_a = sect.flat_points) != null ? _a : state.cfg.flat_points) != null ? _b : 1, flat: true });
+    const slots = (sect.slots || []).map((s) => {
+      const type = s.type || s.key;
+      return { key: s.key, label: slotLabelFor(type, format) || prettifySlotKey(type), tooltip: SLOT_TOOLTIPS[type] || null, pts: s.points, type };
+    });
+    for (let i = 1; i <= (sect.flat_picks || 0); i++) slots.push({ key: "flat" + i, label: "Pick " + i, tooltip: FLAT_PICK_TOOLTIP, pts: (_b = (_a = sect.flat_points) != null ? _a : state.cfg.flat_points) != null ? _b : 1, flat: true });
     return slots;
   }
   async function renderPickSheet(show) {
@@ -429,9 +461,9 @@
     const slots = slotDefs(show.format);
     const slotHtml = (s) => `
     <div class="slotline autocomplete">
-      <label>${esc(s.label)}</label>
+      <label${s.tooltip ? ` title="${esc(s.tooltip)}"` : ""}>${esc(s.label)}</label>
       <input data-slot="${s.key}" data-type="${s.type || s.key}" value="${val(s.key)}" placeholder="${(s.type || s.key) === "cover_pick" ? "a cover\u2026" : "song\u2026"}" autocomplete="off" spellcheck="false">
-      <span class="pts">${s.pts} pt${s.pts === 1 ? "" : "s"}</span>
+      <span class="pts">${s.pts}</span>
       <span class="unsaved" title="Unsaved change \u2014 differs from your saved pick">${UNLOCKED_ICON}</span>
     </div>`;
     const structured = slots.filter((s) => !s.flat), flats = slots.filter((s) => s.flat);
@@ -443,6 +475,7 @@
       <button class="revertlink" id="revert-link">Revert to saved</button>
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
+      <p class="muted" style="font-size:.75rem;margin:2px 0 0">numbers are points per slot</p>
       <button class="savebtn" id="save">Lock 'em in</button>
       <div class="countbig">${state.cfg.voting_override === "open" ? "Admin override \u2014 voting open" : `Locks ${fmtCutoff(show.cutoff_at)} \xB7 <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
@@ -1143,7 +1176,7 @@ Save anyway?`)) return;
     `) : ""}
     ${collapsible("rules-standard", "Game rules \u2014 standard shows", `
       <p class="muted">Slotted picks (position matters):</p>
-      <div id="slots">${(cfg.slots || []).map((sl) => adminSlotRow(sl)).join("")}</div>
+      <div id="slots">${(cfg.slots || []).map((sl) => adminSlotRow(sl, "standard")).join("")}</div>
       <button class="btn ghost small" onclick="addSlot('slots')">+ add slot</button>
       <div class="grid2" style="margin-top:14px">
         <div class="field"><label>Flat picks (count)</label><input id="c-flat" type="number" min="0" value="${cfg.flat_picks}"></div>
@@ -1162,7 +1195,7 @@ Save anyway?`)) return;
     `)}
     ${collapsible("rules-oneset", "Game rules \u2014 one-set shows", `
       <p class="muted">Used for shows toggled to "1 set" below. Festival-tagged shows sync in as 1 set automatically.</p>
-      <div id="slots1">${(os.slots || []).map((sl) => adminSlotRow(sl)).join("")}</div>
+      <div id="slots1">${(os.slots || []).map((sl) => adminSlotRow(sl, "one_set")).join("")}</div>
       <button class="btn ghost small" onclick="addSlot('slots1')">+ add slot</button>
       <div class="grid2" style="margin-top:14px">
         <div class="field"><label>Flat picks (count)</label><input id="c1-flat" type="number" min="0" value="${os.flat_picks}"></div>
@@ -1398,37 +1431,28 @@ OK = remove + ban \xB7 Cancel = remove only`);
       $("#roster").innerHTML = `<p class="err">${esc(e.message)}</p>`;
     }
   }
-  var SLOT_TYPES = {
-    opener: "Opener \u2014 first song of the show",
-    set1_closer: "Set 1 closer",
-    set2_opener: "Set 2 opener",
-    closer: "Closer \u2014 last pre-encore song",
-    encore: "Encore \u2014 any encore song",
-    show_closer: "Show closer \u2014 final song of the night",
-    second_song: "2nd song of the show",
-    cover_pick: "Cover pick \u2014 name a cover, scores if played (repeatable)"
-  };
-  function adminSlotRow(sl) {
+  function adminSlotRow(sl, format) {
     const t = sl.type || sl.key;
-    let opts = Object.entries(SLOT_TYPES).map(([k, d]) => `<option value="${k}" ${k === t ? "selected" : ""}>${d}</option>`).join("");
-    if (t && !(t in SLOT_TYPES)) opts += `<option value="${esc(t)}" selected>${esc(t)} (legacy)</option>`;
+    const excluded = format === "one_set" ? ONE_SET_EXCLUDED_TYPES : [];
+    let opts = Object.keys(SLOT_LABELS).filter((k) => !excluded.includes(k)).map((k) => `<option value="${k}" ${k === t ? "selected" : ""}>${esc(slotLabelFor(k, format))} \u2014 ${esc(SLOT_TOOLTIPS[k])}</option>`).join("");
+    if (t && !(t in SLOT_LABELS)) opts += `<option value="${esc(t)}" selected>${esc(t)} (legacy)</option>`;
     return `<div class="admin-slot">
     <select class="k" title="which position this slot scores against">${opts}</select>
-    <input class="k" placeholder="Label players see" value="${esc(sl.label)}">
     <input class="p" type="number" min="0" value="${sl.points}">
     <button class="btn ghost small" onclick="this.parentElement.remove()">\u2715</button></div>`;
   }
   function addSlot(target) {
-    $("#" + target).insertAdjacentHTML("beforeend", adminSlotRow({ key: "encore", label: "", points: 2 }));
+    const format = target === "slots1" ? "one_set" : "standard";
+    $("#" + target).insertAdjacentHTML("beforeend", adminSlotRow({ key: "encore", points: 2 }, format));
   }
   function readSlots(containerId) {
     let coverN = 0;
     return [...document.querySelectorAll("#" + containerId + " .admin-slot")].map((r) => {
       const type = r.querySelector("select.k").value;
-      const [l, p] = r.querySelectorAll("input");
+      const points = Number(r.querySelector("input.p").value);
       const key = type === "cover_pick" ? "cover" + ++coverN : type;
-      return { key, type, label: l.value.trim(), points: Number(p.value) };
-    }).filter((sl) => sl.type && sl.label);
+      return { key, type, points };
+    }).filter((sl) => sl.type);
   }
   function tiebreakerSelectRow(idx, current) {
     const opts = ["", ...Object.keys(TIEBREAK_LABELS)].map((k) => `<option value="${k}" ${k === current ? "selected" : ""}>${k ? esc(TIEBREAK_LABELS[k]) : "None"}</option>`).join("");

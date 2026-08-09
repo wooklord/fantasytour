@@ -242,8 +242,17 @@ html[data-theme="light"] .panel.live-halo{
 .sheet::after{left:auto;right:12%;transform:rotate(5deg)}
 .sheet h2{font-size:1.5rem;font-variation-settings:'SOFT' 100,'WONK' 1;margin-bottom:2px;overflow-wrap:anywhere}
 .sheet .sub{font-family:var(--mono);font-size:.78rem;color:var(--paper-ink-soft);margin-bottom:16px;text-transform:uppercase;letter-spacing:1px;overflow-wrap:anywhere}
-.slotline{display:flex;align-items:baseline;gap:10px;margin:14px 0}
-.slotline label{font-family:'Fraunces',serif;font-weight:700;font-size:1rem;min-width:86px}
+/* position:relative anchors the absolutely-positioned .unsaved marker
+   (below) — everything else here is normal flex flow. */
+.slotline{position:relative;display:flex;align-items:baseline;gap:10px;margin:14px 0}
+/* Sized to its own text (flex:none = never grow, never shrink from its
+   content width), not a shared min-width — the slot-label set is now a
+   fixed, known vocabulary (src/core/slotTypes.js), so a row using a short
+   label ("Opener") isn't taxed for a long one ("Set 2 Opener") elsewhere
+   in the same sheet. white-space:nowrap keeps a two/three-word label from
+   wrapping onto its own second line; the input (flex:1, min-width:0)
+   is what absorbs the space difference between rows, not the label. */
+.slotline label{font-family:'Fraunces',serif;font-weight:700;font-size:1rem;flex:none;white-space:nowrap}
 .slotline .pts{font-family:var(--mono);font-size:.7rem;color:var(--paper-ink-soft);border:1px solid var(--paper-ink-soft);border-radius:999px;padding:1px 7px;white-space:nowrap}
 .slotline input{flex:1;min-width:0;background:transparent;border:none;border-bottom:2px dashed var(--paper-ink-soft);color:var(--paper-ink);padding:4px 2px;font-size:1rem;font-family:'Outfit'}
 .slotline input:focus{outline:none;border-bottom-color:var(--yolk-deep);border-bottom-style:solid}
@@ -255,9 +264,14 @@ html[data-theme="light"] .panel.live-halo{
    which codepoint it actually was. `currentColor` picks up the --paper-
    ink-soft set here — this sheet is the theme-invariant cream paper card,
    so --yolk/--coral (which flip with the app theme) would be wrong here.
-   Always in the DOM, just invisible (opacity, not display) so a slot going
-   dirty/clean never shifts the row width or wraps the line. */
-.slotline .unsaved{flex:none;width:18px;display:inline-flex;align-items:center;justify-content:center;opacity:0;color:var(--paper-ink-soft)}
+   position:absolute, not a flex sibling — it used to cost its own width
+   PLUS a flex `gap` on every row, all the time, even clean (measured:
+   ~28px/row). Floating it into the sheet's own right padding (which is
+   otherwise empty space) reclaims that permanently instead of just
+   shrinking it, and it's even more shift-proof than the old flex slot was:
+   fully out of flow, so appearing/disappearing truly cannot move a
+   sibling, ever. */
+.slotline .unsaved{position:absolute;right:-20px;top:50%;transform:translateY(-50%);width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;opacity:0;color:var(--paper-ink-soft);pointer-events:none}
 .slotline.dirty .unsaved{opacity:1}
 /* Hidden until the sheet has at least one dirty slot (toggled on .sheet
    itself, not per-button, since it has to reflect the whole sheet). Sits

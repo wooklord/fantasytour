@@ -668,6 +668,19 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   informed. Especially the three closers (a player recently lost points picking Show
   Closer when they meant Set 2 Closer), the Any Debut wildcard, and Cover Pick's
   covers-only catalog restriction.
+  **Half-built, not done**: slot labels moved from admin-editable free text to a
+  fixed, code-owned set (`src/core/slotTypes.js` — `SLOT_LABELS`/`SLOT_TOOLTIPS`),
+  already format-aware (one-set excludes `set1_closer`/`set2_opener` outright since
+  they're structurally impossible there, and relabels `closer` to plain "Closer"
+  instead of "Set 2 Closer"). The tooltip TEXT this item needs already exists as
+  part of that same module — what's still missing is a real tap-viable surface for
+  it. Both the pick sheet's slot label and the admin type dropdown's options
+  currently only carry that text as a native `title=` attribute as a stopgap, which
+  is close to useless on a touch device (no hover, long-press doesn't reliably
+  surface it) — a real problem since this app is mobile-first. This item should
+  replace those `title` attributes with an actual tap/click affordance (an "ⓘ" or
+  similar) on both the player and admin surfaces, reading from the same
+  `SLOT_TOOLTIPS` map rather than inventing new copy.
 - **Admin tooltips on the config screens** — the same slot definitions plus the rule
   mechanics a game runner controls: partial credit, perfect-sheet bonus, wildcards,
   the duplicates warning above, the best-result-across-replays rule, master override,
