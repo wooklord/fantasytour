@@ -423,13 +423,15 @@
     }
     const dKey = draftKey(show.id);
     const draft = JSON.parse(localStorage.getItem(dKey) || "null");
-    const val = (k) => esc((draft && draft[k] != null ? draft[k] : (mine.find((p) => p.slot === k) || {}).songname) || "");
+    const savedVal = (k) => ((mine.find((p) => p.slot === k) || {}).songname || "").trim();
+    const val = (k) => esc((draft && draft[k] != null ? draft[k] : savedVal(k)) || "");
     const slots = slotDefs(show.format);
     const slotHtml = (s) => `
     <div class="slotline autocomplete">
       <label>${esc(s.label)}</label>
       <input data-slot="${s.key}" data-type="${s.type || s.key}" value="${val(s.key)}" placeholder="${(s.type || s.key) === "cover_pick" ? "a cover\u2026" : "song\u2026"}" autocomplete="off" spellcheck="false">
       <span class="pts">${s.pts} pt${s.pts === 1 ? "" : "s"}</span>
+      <span class="unsaved" title="Unsaved change \u2014 differs from your saved pick">\u{1F513}</span>
     </div>`;
     const structured = slots.filter((s) => !s.flat), flats = slots.filter((s) => s.flat);
     $("#main").innerHTML = `
@@ -437,6 +439,7 @@
     <div class="sheet">
       <h2>${esc(show.venue || "TBA")}</h2>
       <div class="sub">${fmtDate(show.showdate)} \xB7 ${esc(show.city || "")}${show.state ? ", " + esc(show.state) : ""}${show.format === "one_set" ? " \xB7 FESTIVAL SET" : ""}</div>
+      <button class="revertlink" id="revert-link">Revert to saved</button>
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
       <button class="savebtn" id="save">Lock 'em in</button>
@@ -446,14 +449,28 @@
     </div>
     ${footerHtml()}`;
     document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
-    document.querySelectorAll(".slotline input").forEach((inp) => inp.addEventListener("input", () => {
-      const d = {};
-      document.querySelectorAll(".slotline input").forEach((i) => {
-        if (i.value.trim()) d[i.dataset.slot] = i.value;
+    const sheetEl = $("#main").querySelector(".sheet");
+    const syncDirty = () => {
+      const snapshot = {};
+      let anyDirty = false;
+      document.querySelectorAll(".slotline input").forEach((inp) => {
+        const dirty = inp.value.trim() !== savedVal(inp.dataset.slot);
+        snapshot[inp.dataset.slot] = inp.value;
+        inp.closest(".slotline").classList.toggle("dirty", dirty);
+        if (dirty) anyDirty = true;
       });
-      localStorage.setItem(dKey, JSON.stringify(d));
-    }));
+      if (anyDirty) localStorage.setItem(dKey, JSON.stringify(snapshot));
+      else localStorage.removeItem(dKey);
+      sheetEl.classList.toggle("dirty", anyDirty);
+    };
+    document.querySelectorAll(".slotline input").forEach((inp) => inp.addEventListener("input", syncDirty));
+    syncDirty();
     $("#save").onclick = savePicks;
+    $("#revert-link").onclick = () => {
+      if (!confirm("Discard your unsaved changes and revert every slot to your last saved picks?")) return;
+      localStorage.removeItem(dKey);
+      openShow(show.id);
+    };
     if (state.cfg.voting_override !== "open" && show.cutoff_at) state.timers.push(setInterval(() => {
       const cd = countdown(show.cutoff_at);
       if (cd) $("#cd").textContent = cd + " left";
@@ -530,6 +547,7 @@ Save anyway?`)) return;
       await rpc("submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: state.currentShow.id, p_picks: picks });
       localStorage.removeItem(draftKey(state.currentShow.id));
       toast("Picks saved \u2714", "score");
+      openShow(state.currentShow.id);
     } catch (e) {
       $("#p-err").textContent = e.message;
     }

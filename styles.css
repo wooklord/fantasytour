@@ -247,6 +247,21 @@ html[data-theme="light"] .panel.live-halo{
 .slotline .pts{font-family:var(--mono);font-size:.7rem;color:var(--paper-ink-soft);border:1px solid var(--paper-ink-soft);border-radius:999px;padding:1px 7px;white-space:nowrap}
 .slotline input{flex:1;min-width:0;background:transparent;border:none;border-bottom:2px dashed var(--paper-ink-soft);color:var(--paper-ink);padding:4px 2px;font-size:1rem;font-family:'Outfit'}
 .slotline input:focus{outline:none;border-bottom-color:var(--yolk-deep);border-bottom-style:solid}
+/* Unlocked-padlock marker: pairs with the save button's "Lock 'em in"
+   copy — the icon and the button describe the same state from opposite
+   ends. Always in the DOM, just invisible (opacity, not display) so a
+   slot going dirty/clean never shifts the row width or wraps the line.
+   --paper-ink-soft, not --yolk/--coral — this sheet is the theme-invariant
+   cream paper card, and those two tokens flip with the app theme. */
+.slotline .unsaved{flex:none;width:18px;text-align:center;font-size:.82rem;opacity:0;color:var(--paper-ink-soft)}
+.slotline.dirty .unsaved{opacity:1}
+/* Hidden until the sheet has at least one dirty slot (toggled on .sheet
+   itself, not per-button, since it has to reflect the whole sheet). Sits
+   under the date line at the TOP of the card, deliberately far from
+   .savebtn at the bottom — a quiet text link, not a second button
+   competing with "Lock 'em in" for attention. */
+.sheet .revertlink{display:none;background:none;border:none;color:var(--paper-ink-soft);font-size:.78rem;text-decoration:underline;padding:0;margin:2px 0 0;cursor:pointer}
+.sheet.dirty .revertlink{display:inline-block}
 .sheet .divider{border-top:1px solid rgba(43,33,64,.2);margin:18px 0 6px;padding-top:10px;font-family:var(--mono);font-size:.72rem;color:var(--paper-ink-soft);letter-spacing:1px;text-transform:uppercase}
 .savebtn{width:100%;margin-top:18px;background:var(--paper-ink);color:var(--paper);border:none;border-radius:10px;padding:14px;font-size:1.05rem;font-weight:700;font-family:'Fraunces',serif;letter-spacing:.5px}
 .savebtn:disabled{opacity:.45}
