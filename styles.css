@@ -249,11 +249,15 @@ html[data-theme="light"] .panel.live-halo{
 .slotline input:focus{outline:none;border-bottom-color:var(--yolk-deep);border-bottom-style:solid}
 /* Unlocked-padlock marker: pairs with the save button's "Lock 'em in"
    copy — the icon and the button describe the same state from opposite
-   ends. Always in the DOM, just invisible (opacity, not display) so a
-   slot going dirty/clean never shifts the row width or wraps the line.
-   --paper-ink-soft, not --yolk/--coral — this sheet is the theme-invariant
-   cream paper card, and those two tokens flip with the app theme. */
-.slotline .unsaved{flex:none;width:18px;text-align:center;font-size:.82rem;opacity:0;color:var(--paper-ink-soft)}
+   ends. A line-icon SVG (picks.js's UNLOCKED_ICON), not the 🔓 emoji — at
+   this size the emoji's open-shackle detail (the only thing distinguishing
+   it from just "a padlock") disappears, so it read as locked regardless of
+   which codepoint it actually was. `currentColor` picks up the --paper-
+   ink-soft set here — this sheet is the theme-invariant cream paper card,
+   so --yolk/--coral (which flip with the app theme) would be wrong here.
+   Always in the DOM, just invisible (opacity, not display) so a slot going
+   dirty/clean never shifts the row width or wraps the line. */
+.slotline .unsaved{flex:none;width:18px;display:inline-flex;align-items:center;justify-content:center;opacity:0;color:var(--paper-ink-soft)}
 .slotline.dirty .unsaved{opacity:1}
 /* Hidden until the sheet has at least one dirty slot (toggled on .sheet
    itself, not per-button, since it has to reflect the whole sheet). Sits

@@ -10,6 +10,16 @@ import { currentBracket } from "../core/switcher.js";
 
 export const isWildcard = v => (v||"").trim().toLowerCase() === "any debut";
 
+// An open-padlock emoji (🔓) technically IS the "unlocked" codepoint, but at
+// the ~14px this renders inline next to a slot it reads as just "a padlock"
+// — the open-shackle detail that actually conveys "unlocked" disappears at
+// that size (confirmed by rendering both the locked/unlocked emoji at real
+// size side by side). A line icon with the shackle swung open and clearly
+// disconnected from the body holds up at small size in a way the emoji
+// didn't, and inherits `color` instead of depending on whatever emoji font
+// the viewer's device happens to render with.
+const UNLOCKED_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
+
 export function draftKey(showId){ return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`; }
 
 export async function openShow(id){
@@ -105,7 +115,7 @@ export async function renderPickSheet(show){
       <label>${esc(s.label)}</label>
       <input data-slot="${s.key}" data-type="${s.type||s.key}" value="${val(s.key)}" placeholder="${(s.type||s.key)==="cover_pick"?"a cover…":"song…"}" autocomplete="off" spellcheck="false">
       <span class="pts">${s.pts} pt${s.pts===1?"":"s"}</span>
-      <span class="unsaved" title="Unsaved change — differs from your saved pick">\u{1F513}</span>
+      <span class="unsaved" title="Unsaved change — differs from your saved pick">${UNLOCKED_ICON}</span>
     </div>`;
   const structured = slots.filter(s=>!s.flat), flats = slots.filter(s=>s.flat);
   $("#main").innerHTML = `

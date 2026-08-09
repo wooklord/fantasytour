@@ -346,6 +346,7 @@
 
   // src/features/picks.js
   var isWildcard = (v) => (v || "").trim().toLowerCase() === "any debut";
+  var UNLOCKED_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
   function draftKey(showId) {
     return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`;
   }
@@ -431,7 +432,7 @@
       <label>${esc(s.label)}</label>
       <input data-slot="${s.key}" data-type="${s.type || s.key}" value="${val(s.key)}" placeholder="${(s.type || s.key) === "cover_pick" ? "a cover\u2026" : "song\u2026"}" autocomplete="off" spellcheck="false">
       <span class="pts">${s.pts} pt${s.pts === 1 ? "" : "s"}</span>
-      <span class="unsaved" title="Unsaved change \u2014 differs from your saved pick">\u{1F513}</span>
+      <span class="unsaved" title="Unsaved change \u2014 differs from your saved pick">${UNLOCKED_ICON}</span>
     </div>`;
     const structured = slots.filter((s) => !s.flat), flats = slots.filter((s) => s.flat);
     $("#main").innerHTML = `
