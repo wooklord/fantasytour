@@ -1645,7 +1645,9 @@ OK = remove + ban \xB7 Cancel = remove only`);
         toast(`You're at ${p.new.points} pts for this show`, "score");
       }
       if (state.tab === "board") renderBoard();
-    }).subscribe();
+    }).subscribe((status, err) => {
+      if (status !== "SUBSCRIBED") console.warn("[realtime] channel status:", status, err || "");
+    });
     if (!visListenerAttached) {
       visListenerAttached = true;
       document.addEventListener("visibilitychange", () => {

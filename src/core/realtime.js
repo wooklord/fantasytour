@@ -66,7 +66,14 @@ export function subscribeRealtime(){
       }
       if (state.tab === "board") renderBoard();
     })
-    .subscribe();
+    // This class of failure is invisible by design otherwise: a channel
+    // whose postgres_changes registration silently fails (e.g. subscribing
+    // to a table absent from the publication — see the CLAUDE.md gotcha)
+    // still reports SUBSCRIBED, since that status only reflects the
+    // channel/socket join, not whether change events are actually being
+    // delivered. A warning on any OTHER status is the only client-visible
+    // signal something's wrong.
+    .subscribe((status, err) => { if (status !== "SUBSCRIBED") console.warn("[realtime] channel status:", status, err || ""); });
   // Only ever attached once — subscribeRealtime() itself runs again on every
   // bracket switch, and a second document listener would fire refreshCurrent()
   // multiple times per visibility change.

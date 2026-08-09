@@ -1,0 +1,26 @@
+-- scores and league_shows were missing from the supabase_realtime
+-- publication (likely dropped or never re-added during Stage A's schema
+-- rebuild) even though realtime.js has always subscribed to postgres_changes
+-- on both. Consequence was worse than "those two toasts don't fire": every
+-- postgres_changes subscription lives on ONE shared channel
+-- (`live-${bracketId}`), and subscribing to a table absent from the
+-- publication silently kills postgres_changes delivery for every OTHER
+-- binding on that same channel too — the channel still reports SUBSCRIBED
+-- (that only reflects the channel/socket join, not the postgres_changes
+-- registration), so nothing in the client-visible state indicated a
+-- problem. This is what actually broke the song-by-song setlist toasts and
+-- season-winner toasts, not anything specific to setlist_songs/seasons
+-- themselves — confirmed by direct isolation (see CLAUDE.md's realtime
+-- gotcha for the full writeup).
+--
+-- Verified safe before running: added `scores` to the publication alone,
+-- with NO SELECT policy (scores/league_shows still have zero public RLS
+-- policies, by Stage A's original design — scoped reads go through RPCs),
+-- subscribed an anon-key client directly to it, and forced a real value
+-- change. Zero events reached the client — not an empty or redacted
+-- payload, nothing at all. Publication membership and RLS are independent
+-- gates; this migration only opens the first one. scores/league_shows
+-- realtime toasts remain non-functional (RLS still blocks them) — that's
+-- unchanged and intentional, a separate decision for later, not a
+-- regression introduced here.
+alter publication supabase_realtime add table scores, league_shows;
