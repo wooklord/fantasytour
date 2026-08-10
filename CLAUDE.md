@@ -473,13 +473,11 @@ pile; podium version has the medal egg inside.
   **also done** — a "Reopen" button in admin.js's Shows & cutoffs panel, next to
   Finalize on any show with `status === 'final'`; smoke-tested against the real
   Boston 7/31 show (see the closer-family scoring fix note above). **`cutoff_changed`
-  did NOT get the same treatment** — the edge action itself is fully built
-  (`index.ts`'s `cutoffChanged()`, auth-gated, posts a Discord notice) and routed,
-  but `admin.js`'s `saveCutoff()` only calls the plain `admin_set_cutoff` RPC and
-  never touches the edge action. No Discord notice fires today when a cutoff
-  changes — of the three authenticated edge actions (`reopen`/`cutoff_changed`/
-  `finalize`), this is the one that's genuinely orphaned on the frontend side,
-  confirmed by direct re-check, not assumed from the other two being done.
+  is wired too now (Session 1, commit `2816d66`)** — `admin.js`'s `saveCutoff()`
+  fires the edge action (fire-and-forget, `.catch(() => {})` so a failed Discord
+  notice can't read as a failed cutoff save) right after `admin_set_cutoff`
+  succeeds. All three authenticated edge actions (`reopen`/`cutoff_changed`/
+  `finalize`) now have a real frontend caller — none is orphaned anymore.
 - **Slot labels in setlists & notifications**: setlist view shows all slot labels
   ("Laurel — Opener"); live toasts tag ONLY unambiguous-when-they-happen slots
   (opener, set2_opener, encore) + debut. Closer/show_closer are positional so only
@@ -835,29 +833,47 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   though — `added_at` is only ever consumed as a scoring input
   (`rosterJoinDates` in `standings.js`), never rendered anywhere a player or
   admin would see it directly.
-- **Player tooltips on pick-sheet slots** — plain-language definitions so bets are
-  informed. Especially the three closers (a player recently lost points picking Show
-  Closer when they meant Set 2 Closer), the Any Debut wildcard, and Cover Pick's
-  covers-only catalog restriction.
-  **Half-built, not done**: slot labels moved from admin-editable free text to a
-  fixed, code-owned set (`src/core/slotTypes.js` — `SLOT_LABELS`/`SLOT_TOOLTIPS`),
-  already format-aware (one-set excludes `set1_closer`/`set2_opener` outright since
-  they're structurally impossible there, and relabels `closer` to plain "Closer"
-  instead of "Set 2 Closer"). The tooltip TEXT this item needs already exists as
-  part of that same module — what's still missing is a real tap-viable surface for
-  it. Both the pick sheet's slot label and the admin type dropdown's options
-  currently only carry that text as a native `title=` attribute as a stopgap, which
-  is close to useless on a touch device (no hover, long-press doesn't reliably
-  surface it) — a real problem since this app is mobile-first. This item should
-  replace those `title` attributes with an actual tap/click affordance (an "ⓘ" or
-  similar) on both the player and admin surfaces, reading from the same
-  `SLOT_TOOLTIPS` map rather than inventing new copy.
-- **Admin tooltips on the config screens** — the same slot definitions plus the rule
-  mechanics a game runner controls: partial credit, perfect-sheet bonus, wildcards,
-  the duplicates warning above, the best-result-across-replays rule, master override,
-  format toggle, and (in 2.0) the Official opt-out mechanic. Important because 2.0
-  delegates leagues to admins who didn't build the game. Write the slot definitions
-  once and surface them in both the player and admin surfaces.
+- **Player tooltips on pick-sheet slots — superseded by "The Rules" card, not the
+  tap-affordance this bullet used to describe.** The plan here used to be: replace
+  the pick sheet's `title=` attribute (useless on a touch device — no hover,
+  long-press doesn't reliably surface it) with a tappable "ⓘ" next to each slot
+  label. **That "ⓘ" was actually built (Session 2, commit `2102a7b`), then removed
+  one commit later (`8889bdc`)** — it read as visually cluttering the slot labels,
+  and was scrapped rather than iterated on. If you're reading an older copy of this
+  note or working from memory: don't rebuild it, it was tried and rejected on
+  sight, not abandoned half-finished.
+
+  **What shipped instead: "The Rules" card.** A second `.sheet`-styled paper card
+  renders below the pick sheet in `renderPickSheet()` (`src/features/picks.js`) —
+  same cream-stock/tape/shadow treatment, but with its own fixed tape
+  rotation/offset and card tilt (`.rules-sheet` overrides in `styles.css`) so it
+  reads as a second sheet taped up separately by the same hand, not the pick
+  sheet's own tape rendered twice. Two parts, built to different degrees:
+  1. **Auto-generated slot definitions — built.** One row per distinct label, read
+     straight from `SLOT_TOOLTIPS` via the same `slotDefs()` the pick sheet itself
+     renders from, so the card can't drift out of sync with whatever slots this
+     bracket's config actually has active. A repeated slot type (two Cover Pick
+     slots, say) or several flat picks collapse into a single row rather than
+     repeating identical tooltip text. The points-per-slot note that used to sit
+     under the pick-sheet inputs moved here too.
+  2. **Admin-authored custom rules — NOT built, despite how this might read
+     elsewhere.** The plan discussed (bracket-wide `custom_rules: string[]` in
+     `brackets.config`, discrete admin-editable lines rather than freeform text) was
+     never implemented — confirmed directly, zero matches for `custom_rules`
+     anywhere in the repo. No config key, no admin UI, no soft cap was ever decided
+     (that question was never reached). Still fully open work.
+
+  Admin-side tooltips needed no equivalent fix and never did: `admin.js`'s
+  `adminSlotRow()` already bakes `SLOT_TOOLTIPS` text directly into each
+  `<option>`'s own visible label (confirmed in the source) — a different,
+  already-working mechanism, not the same `title=` stopgap the player side had.
+- **Admin tooltips on the config screens — still open, scope narrower than
+  written.** Slot definitions on the admin side needed no work, per the bullet
+  above. What's still missing is explanatory copy for the *rule mechanics* a game
+  runner controls but didn't design: partial credit, perfect-sheet bonus,
+  wildcards, the duplicates warning above, the best-result-across-replays rule,
+  master override, format toggle, and (in 2.0) the Official opt-out mechanic.
+  Important because 2.0 delegates leagues to admins who didn't build the game.
 - **Standings default season selection — built.** `src/features/standings.js`'s
   `renderBoard()` implements this priority order:
   1. If a season is currently active (today inside its date range) → default to
@@ -931,14 +947,17 @@ this is the condensed, durable record so the roadmap survives a context boundary
 - **Step 0, before Session 1:** this section itself, committed first, specifically
   so the roadmap can't be lost across a context boundary the way the work it
   describes already was once.
-- **Session 1 — admin edge-action wiring:** wire `cutoff_changed` into
-  `saveCutoff()`; fix the 500-vs-401/403 auth status codes (`reopen`/
-  `cutoff_changed`/`finalize` share one `catch` today).
-- **Session 2 — pick-sheet & setlist surface:** C2c tap-affordance tooltips
-  (player + admin, reading from `slotTypes.js`'s already-written
-  `SLOT_TOOLTIPS`); a debut GUI flag mirroring the existing `is_encore` pattern in
-  `realtime.js`'s live song toast and `picks.js`'s setlist view (footnote trivia
-  was descoped in favor of this — see the note above).
+- **Session 1 — admin edge-action wiring: done** (commit `2816d66`). `cutoff_changed`
+  is wired into `saveCutoff()`; the 500-vs-401/403 auth status codes are fixed and
+  verified live against the deployed function (see the "Fixed" gotcha above).
+- **Session 2 — pick-sheet & setlist surface: done, but not as planned above**
+  (commits `2102a7b`, `8889bdc`). The debut GUI flag shipped exactly as described —
+  same `is_encore` pattern, in both `realtime.js`'s live song toast and
+  `picks.js`'s setlist view. The C2c tap-affordance tooltips did NOT ship as
+  planned: the "ⓘ" was built, then removed one commit later for looking visually
+  cluttered, and replaced with a different mechanism — "The Rules" card (see the
+  rewritten tooltip bullet above). Its auto-generated half is done; its
+  admin-authored custom-rules half is not built.
 - **Session 3 — the ping table (decision 4):** sequenced right after Session 2
   since both touch `realtime.js`.
 - **Session 4 — auth + Global console, manual-approval execution mode** (touches
