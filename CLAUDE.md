@@ -356,6 +356,37 @@ before assuming a change is covered just because the suite is green:
   CSS — if so, it needs paper tokens or a `.sheet`-scoped override, not a
   pass, and check the result in an actual browser in light theme, not by
   reading the values.
+- **The boxed podium row (`standings.js`) is width-sensitive in a way that
+  breaks only inside a specific window-width band, not "on mobile" or "on
+  desktop"** — the kind of bug that gets reported as random/flaky rather
+  than traced to a cause, so the arithmetic that makes it obvious is worth
+  keeping written down rather than re-derived next time trophy sizing
+  changes. The row must never wrap (a wrap can put gold below a lower
+  tier, breaking `arrangePodium`'s arrangement), and whether it wraps is a
+  function of BOTH the icon px size (`bigPx`/`smallPx`) AND `.podium`'s
+  gap (styles.css) against whatever container it's actually sitting in —
+  three sizing tiers exist today because that available width is not the
+  same thing at every breakpoint:
+  - Phone, `<=420px` width: 96/68px icons, 8px gap (available width ~258px
+    at a real 324px phone).
+  - Desktop, `901-1279px` viewport width: 83/58px icons, 8px gap.
+  - Desktop, `>=1280px` viewport width: 118/82px icons, 28px gap
+    (unchanged from before this note existed).
+  The middle tier exists because desktop's OWN narrowest real width
+  (901px, the mobile/desktop breakpoint) is a genuinely separate
+  constraint from phone's, not a smaller version of the same one: the
+  podium sits inside `#cols`' grid column there, not `.wrap`, and at
+  901px that column's available width is 224px. The pre-fix icon sizing
+  (118/82) needed 318px of icon ALONE at that width — 94px over, before
+  any gap is even added — which is the concrete reason a bigger gap
+  can't be the fix on desktop the way it is on phone: no gap value
+  subtracts a negative number. Verified directly (not just by this
+  arithmetic) that the wrap actually spans the whole 901-1279px range,
+  not just the instant at the breakpoint, and that 1280px+ has real
+  margin (344px available vs 338px needed) and needs no change. Below
+  901px desktop's grid never renders at all (`isDesktop()` in
+  `core/dom.js` is `min-width:901px`) — that's phone/tablet's `.wrap`
+  instead, covered by the first tier.
 
 ---
 

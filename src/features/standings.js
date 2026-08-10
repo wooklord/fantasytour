@@ -173,8 +173,23 @@ export async function renderBoard(){
   // wrap-caused illusion, not a sizing bug). Shrinking both sizes on
   // narrow viewports (paired with .podium's tighter gap there, styles.css)
   // is what actually keeps 3 boxes on one row.
+  //
+  // A second, independent instance of the same constraint exists on
+  // desktop, measured directly rather than assumed: at the narrowest real
+  // desktop width (901px, the mobile/desktop breakpoint), the podium's
+  // available width is 224px, but 118+82+118 is 318px of icon ALONE —
+  // 94px over, before any gap is even added. No gap value can close a
+  // 94px deficit, so unlike the phone case, shrinking the gap alone
+  // cannot fix this one; the icons themselves have to shrink for that
+  // band. Verified this holds up to 1279px (not just right at 901) —
+  // 1280px+ is where 118/82/28 gets real margin again (344px available
+  // vs 338px needed) and can stay exactly as-is. Below 901px the layout
+  // is mobile's single-column `.wrap`, not this grid column, so it's
+  // covered by the `narrow`/non-narrow phone branch above instead.
   const narrow = window.matchMedia("(max-width:420px)").matches;
-  const bigPx = narrow ? 76 : 118, smallPx = narrow ? 54 : 82;
+  const desktopNarrow = window.matchMedia("(min-width:901px) and (max-width:1279px)").matches;
+  const bigPx = narrow ? 96 : desktopNarrow ? 83 : 118;
+  const smallPx = narrow ? 68 : desktopNarrow ? 58 : 82;
   // No points line here — the table right below already shows the score,
   // so repeating it on the podium was pure noise. Casual has no
   // seasons/tiebreakers to signify, so it gets a plain rank numeral in the

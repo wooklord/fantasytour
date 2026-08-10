@@ -322,8 +322,14 @@ html[data-theme="light"] .panel.live-halo{
 /* standings.js shrinks the trophy/numeral px size on narrow viewports to
    match — this just tightens the gap between boxes to go with it, so 3
    boxes (even 2 elevated + 1 not) reliably fit one row on a real phone
-   instead of the third wrapping to its own line. */
-@media (max-width:420px){ .podium{gap:8px} }
+   instead of the third wrapping to its own line. The second band
+   (901-1279px) is the equivalent fix for desktop's OWN narrowest real
+   width, on the #cols grid rather than .wrap — same 8px value, reused
+   rather than invented, because desktop's icon sizing in that band
+   (standings.js's desktopNarrow branch) was chosen assuming this same
+   tightened gap; widening it back to 28px here without shrinking the
+   icons further would just reopen the wrap this pairing exists to close. */
+@media (max-width:420px), (min-width:901px) and (max-width:1279px){ .podium{gap:8px} }
 .lb{width:100%;border-collapse:collapse}
 .lb td,.lb th{padding:10px 8px;text-align:left;border-bottom:1px dashed var(--dash)}
 .lb th{font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--cream-dim);font-weight:600}
