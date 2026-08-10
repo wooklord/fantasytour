@@ -9,14 +9,6 @@ import { toast } from "../core/toast.js";
 import { currentBracket } from "../core/switcher.js";
 import { SLOT_LABELS, SLOT_TOOLTIPS, FLAT_PICK_TOOLTIP, slotLabelFor } from "../core/slotTypes.js";
 
-// Tap affordance for a slot's tooltip (replaces a plain title= attribute,
-// which doesn't work on a touch device — no hover, and long-press doesn't
-// reliably surface it either). Reads the text back off the button's own
-// data-tip rather than embedding it in the onclick call, so tooltip text
-// with quotes/apostrophes ("A cover the band's played before") can't break
-// the inline handler.
-export function showTip(el){ toast(el.dataset.tip); }
-
 // Case/whitespace-insensitive song-name comparison — the catalog
 // (songs_cache, synced from The Carton) has real entries with stray
 // leading/trailing whitespace (confirmed: 7 of 363 rows as of this
@@ -141,12 +133,25 @@ export async function renderPickSheet(show){
   const slots = slotDefs(show.format);
   const slotHtml = s => `
     <div class="slotline autocomplete">
-      <label>${esc(s.label)}${s.tooltip ? `<button type="button" class="tip" data-tip="${esc(s.tooltip)}" onclick="showTip(this)" aria-label="What is ${esc(s.label)}?">ⓘ</button>` : ""}</label>
+      <label>${esc(s.label)}</label>
       <input data-slot="${s.key}" data-type="${s.type||s.key}" value="${val(s.key)}" placeholder="${(s.type||s.key)==="cover_pick"?"a cover…":"song…"}" autocomplete="off" spellcheck="false">
       <span class="pts">${s.pts}</span>
       <span class="unsaved" title="Unsaved change — differs from your saved pick">${UNLOCKED_ICON}</span>
     </div>`;
   const structured = slots.filter(s=>!s.flat), flats = slots.filter(s=>s.flat);
+  // "The Rules" companion card: one definition per distinct label (a
+  // second Cover Pick slot, or several flat picks, share one row rather
+  // than repeating the same tooltip text) — auto-generated from whatever
+  // slots this bracket's config actually has active, so it can't drift
+  // out of sync with the sheet above it the way admin-typed free text
+  // could. Custom per-bracket rules text is a separate, not-yet-built
+  // second half of this card.
+  const ruleDefs = (() => {
+    const seen = new Set();
+    const defs = structured.filter(s => !seen.has(s.label) && seen.add(s.label)).map(s => ({ term: s.label, desc: s.tooltip }));
+    if (flats.length) defs.push({ term: flats.length > 1 ? `Pick 1–${flats.length}` : "Pick", desc: FLAT_PICK_TOOLTIP });
+    return defs;
+  })();
   $("#main").innerHTML = `
     <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button></p>
     <div class="sheet">
@@ -155,12 +160,18 @@ export async function renderPickSheet(show){
       <button class="revertlink" id="revert-link">Revert to saved</button>
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
-      <p style="font-size:.75rem;margin:2px 0 0;color:var(--paper-ink-soft)">numbers are points per slot</p>
       <button class="savebtn" id="save">Lock 'em in</button>
       <p style="font-size:.75rem;margin:8px 0 0;text-align:center;color:var(--paper-ink-soft)">You can change your picks any time until the cutoff.</p>
       <div class="countbig">${state.cfg.voting_override==='open' ? 'Admin override — voting open' : `Cutoff ${fmtCutoff(show.cutoff_at)} · <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
       ${currentBracket()?.bracket_kind === "official" ? laurelSpray() : ""}
+    </div>
+    <div class="sheet rules-sheet">
+      <h2>The Rules</h2>
+      <div class="ruledefs">
+        ${ruleDefs.map(d => `<div class="ruledef"><span class="rd-term">${esc(d.term)}</span><span class="rd-desc">${esc(d.desc||"")}</span></div>`).join("")}
+      </div>
+      <p class="rulenote">Numbers on the pick sheet are points per slot.</p>
     </div>
     ${footerHtml()}`;
   document.querySelectorAll(".slotline input").forEach(attachAutocomplete);

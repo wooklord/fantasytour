@@ -253,11 +253,6 @@ html[data-theme="light"] .panel.live-halo{
    wrapping onto its own second line; the input (flex:1, min-width:0)
    is what absorbs the space difference between rows, not the label. */
 .slotline label{font-family:'Fraunces',serif;font-weight:700;font-size:1rem;flex:none;white-space:nowrap}
-/* Tap affordance for the slot tooltip — replaces a title= attribute, which
-   doesn't work on a touch device. Paper tokens (not --cream*/--panel*),
-   same reason as everything else inside .sheet: this sits on the
-   theme-invariant paper card, not the app's own flipping theme. */
-.slotline label .tip{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:4px;border:1px solid var(--paper-ink-soft);border-radius:50%;background:transparent;color:var(--paper-ink-soft);font-size:.62rem;line-height:1;font-family:'Outfit';font-weight:600;padding:0;vertical-align:2px}
 .slotline .pts{font-family:var(--mono);font-size:.7rem;color:var(--paper-ink-soft);border:1px solid var(--paper-ink-soft);border-radius:999px;padding:1px 7px;white-space:nowrap}
 .slotline input{flex:1;min-width:0;background:transparent;border:none;border-bottom:2px dashed var(--paper-ink-soft);color:var(--paper-ink);padding:4px 2px;font-size:1rem;font-family:'Outfit'}
 .slotline input:focus{outline:none;border-bottom-color:var(--yolk-deep);border-bottom-style:solid}
@@ -286,6 +281,30 @@ html[data-theme="light"] .panel.live-halo{
 .sheet .revertlink{display:none;background:none;border:none;color:var(--paper-ink-soft);font-size:.78rem;text-decoration:underline;padding:0;margin:2px 0 0;cursor:pointer}
 .sheet.dirty .revertlink{display:inline-block}
 .sheet .divider{border-top:1px solid rgba(43,33,64,.2);margin:18px 0 6px;padding-top:10px;font-family:var(--mono);font-size:.72rem;color:var(--paper-ink-soft);letter-spacing:1px;text-transform:uppercase}
+/* "The Rules" companion card — same .sheet paper treatment (cream stock,
+   tape corners, shadow, rotation), just a second instance below the pick
+   sheet, so it reads as a companion page rather than a different
+   component. Paper tokens only throughout, same reason as everything
+   else inside .sheet: this sits on the theme-invariant paper card, not
+   the app's own flipping theme. Term column sizes to its own content
+   (flex:none) rather than a shared min-width, same reasoning already
+   applied to .slotline label above — a short term ("Encore") shouldn't
+   be taxed for a long one ("Set 2 Closer") elsewhere in the same list. */
+.rules-sheet .ruledef{display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px dashed rgba(43,33,64,.15)}
+.rules-sheet .ruledef:last-child{border-bottom:none}
+.rules-sheet .rd-term{font-family:'Fraunces',serif;font-weight:700;flex:none;white-space:nowrap;color:var(--paper-ink)}
+.rules-sheet .rd-desc{flex:1;min-width:0;color:var(--paper-ink-soft);font-size:.92rem}
+.rules-sheet .rulenote{font-size:.75rem;margin:14px 0 0;color:var(--paper-ink-soft)}
+/* Deliberately varied from .sheet's own tilt/tape — identical placement
+   on two stacked sheets read as one component rendered twice, not two
+   pages taped up separately. Kept small (a couple degrees, a few % of
+   position, a few px of width) so it reads as the same hand at a
+   different moment, not a different design. Fixed values, not random —
+   a card that shifts angle on every render would be distracting rather
+   than natural. */
+.rules-sheet{transform:rotate(.6deg)}
+.rules-sheet::before{width:78px;top:-10px;left:19%;transform:rotate(-7deg)}
+.rules-sheet::after{width:92px;top:-13px;right:17%;transform:rotate(3deg)}
 .savebtn{width:100%;margin-top:18px;background:var(--paper-ink);color:var(--paper);border:none;border-radius:10px;padding:14px;font-size:1.05rem;font-weight:700;font-family:'Fraunces',serif;letter-spacing:.5px}
 .savebtn:disabled{opacity:.45}
 .countbig{font-family:var(--mono);text-align:center;margin:6px 0 0;font-size:.85rem;color:var(--paper-ink-soft)}

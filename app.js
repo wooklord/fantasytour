@@ -373,9 +373,6 @@
   }
 
   // src/features/picks.js
-  function showTip(el) {
-    toast(el.dataset.tip);
-  }
   var normSong = (v) => (v || "").trim().toLowerCase();
   var isWildcard = (v) => normSong(v) === "any debut";
   var UNLOCKED_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
@@ -465,12 +462,18 @@
     const slots = slotDefs(show.format);
     const slotHtml = (s) => `
     <div class="slotline autocomplete">
-      <label>${esc(s.label)}${s.tooltip ? `<button type="button" class="tip" data-tip="${esc(s.tooltip)}" onclick="showTip(this)" aria-label="What is ${esc(s.label)}?">\u24D8</button>` : ""}</label>
+      <label>${esc(s.label)}</label>
       <input data-slot="${s.key}" data-type="${s.type || s.key}" value="${val(s.key)}" placeholder="${(s.type || s.key) === "cover_pick" ? "a cover\u2026" : "song\u2026"}" autocomplete="off" spellcheck="false">
       <span class="pts">${s.pts}</span>
       <span class="unsaved" title="Unsaved change \u2014 differs from your saved pick">${UNLOCKED_ICON}</span>
     </div>`;
     const structured = slots.filter((s) => !s.flat), flats = slots.filter((s) => s.flat);
+    const ruleDefs = (() => {
+      const seen = /* @__PURE__ */ new Set();
+      const defs = structured.filter((s) => !seen.has(s.label) && seen.add(s.label)).map((s) => ({ term: s.label, desc: s.tooltip }));
+      if (flats.length) defs.push({ term: flats.length > 1 ? `Pick 1\u2013${flats.length}` : "Pick", desc: FLAT_PICK_TOOLTIP });
+      return defs;
+    })();
     $("#main").innerHTML = `
     <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button></p>
     <div class="sheet">
@@ -479,12 +482,18 @@
       <button class="revertlink" id="revert-link">Revert to saved</button>
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
-      <p style="font-size:.75rem;margin:2px 0 0;color:var(--paper-ink-soft)">numbers are points per slot</p>
       <button class="savebtn" id="save">Lock 'em in</button>
       <p style="font-size:.75rem;margin:8px 0 0;text-align:center;color:var(--paper-ink-soft)">You can change your picks any time until the cutoff.</p>
       <div class="countbig">${state.cfg.voting_override === "open" ? "Admin override \u2014 voting open" : `Cutoff ${fmtCutoff(show.cutoff_at)} \xB7 <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
       ${((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" ? laurelSpray() : ""}
+    </div>
+    <div class="sheet rules-sheet">
+      <h2>The Rules</h2>
+      <div class="ruledefs">
+        ${ruleDefs.map((d) => `<div class="ruledef"><span class="rd-term">${esc(d.term)}</span><span class="rd-desc">${esc(d.desc || "")}</span></div>`).join("")}
+      </div>
+      <p class="rulenote">Numbers on the pick sheet are points per slot.</p>
     </div>
     ${footerHtml()}`;
     document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
@@ -1773,7 +1782,6 @@ OK = remove + ban \xB7 Cancel = remove only`);
     doLogin,
     doRegister,
     openShow,
-    showTip,
     renderShows,
     setBoardSeason,
     loadRoster,
