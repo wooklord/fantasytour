@@ -144,14 +144,17 @@ export async function renderPickSheet(show){
   // than repeating the same tooltip text) — auto-generated from whatever
   // slots this bracket's config actually has active, so it can't drift
   // out of sync with the sheet above it the way admin-typed free text
-  // could. Custom per-bracket rules text is a separate, not-yet-built
-  // second half of this card.
+  // could. Custom rules are bracket-wide (admin.js's readCustomRules(),
+  // stored on brackets.config directly, not per-format like slots) — no
+  // "House rules" divider at all when the admin hasn't written any,
+  // rather than an empty header.
   const ruleDefs = (() => {
     const seen = new Set();
     const defs = structured.filter(s => !seen.has(s.label) && seen.add(s.label)).map(s => ({ term: s.label, desc: s.tooltip }));
     if (flats.length) defs.push({ term: flats.length > 1 ? `Pick 1–${flats.length}` : "Pick", desc: FLAT_PICK_TOOLTIP });
     return defs;
   })();
+  const customRules = state.cfg.custom_rules || [];
   $("#main").innerHTML = `
     <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button></p>
     <div class="sheet">
@@ -171,6 +174,7 @@ export async function renderPickSheet(show){
       <div class="ruledefs">
         ${ruleDefs.map(d => `<div class="ruledef"><span class="rd-term">${esc(d.term)}</span><span class="rd-desc">${esc(d.desc||"")}</span></div>`).join("")}
       </div>
+      ${customRules.length ? `<div class="divider">House rules</div><ul class="customrules">${customRules.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
       <p class="rulenote">Numbers on the pick sheet are points per slot.</p>
     </div>
     ${footerHtml()}`;

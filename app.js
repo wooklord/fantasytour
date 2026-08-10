@@ -474,6 +474,7 @@
       if (flats.length) defs.push({ term: flats.length > 1 ? `Pick 1\u2013${flats.length}` : "Pick", desc: FLAT_PICK_TOOLTIP });
       return defs;
     })();
+    const customRules = state.cfg.custom_rules || [];
     $("#main").innerHTML = `
     <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button></p>
     <div class="sheet">
@@ -493,6 +494,7 @@
       <div class="ruledefs">
         ${ruleDefs.map((d) => `<div class="ruledef"><span class="rd-term">${esc(d.term)}</span><span class="rd-desc">${esc(d.desc || "")}</span></div>`).join("")}
       </div>
+      ${customRules.length ? `<div class="divider">House rules</div><ul class="customrules">${customRules.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
       <p class="rulenote">Numbers on the pick sheet are points per slot.</p>
     </div>
     ${footerHtml()}`;
@@ -1142,6 +1144,26 @@ Save anyway?`)) return;
     var _a;
     return (_a = state.leagues.find((l) => l.league_id === state.currentLeagueId && l.bracket_kind === "official")) == null ? void 0 : _a.bracket_id;
   }
+  var CUSTOM_RULES_MAX = 10;
+  var CUSTOM_RULE_MAXLEN = 140;
+  function customRuleRow(text) {
+    return `<div class="admin-slot">
+    <input class="rule-text" maxlength="${CUSTOM_RULE_MAXLEN}" value="${esc(text || "")}" placeholder="e.g. No repeating a cover pick within the same show" oninput="checkRuleCap()">
+    <button class="btn ghost small" onclick="this.parentElement.remove(); checkRuleCap()">\u2715</button></div>`;
+  }
+  function addCustomRule() {
+    const box = $("#customrules");
+    if (box.children.length >= CUSTOM_RULES_MAX) return;
+    box.insertAdjacentHTML("beforeend", customRuleRow());
+    checkRuleCap();
+  }
+  function checkRuleCap() {
+    const btn = $("#add-rule-btn");
+    if (btn) btn.disabled = $("#customrules").children.length >= CUSTOM_RULES_MAX;
+  }
+  function readCustomRules() {
+    return [...document.querySelectorAll("#customrules .rule-text")].map((i) => i.value.trim().slice(0, CUSTOM_RULE_MAXLEN)).filter(Boolean).slice(0, CUSTOM_RULES_MAX);
+  }
   var sectionState = {};
   try {
     sectionState = JSON.parse(localStorage.getItem("ft_admin_sections") || "{}");
@@ -1222,6 +1244,15 @@ Save anyway?`)) return;
       </div>
       <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros \u2014 any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins \u2014 per-show ties still share the crown. Highest single-show score.</p>
     `) : ""}
+    ${collapsible("rules-custom", "Custom rules", `
+      <p class="muted">Bracket-wide house rules, shown on the pick sheet's "The Rules"
+        card below the auto-generated slot definitions. Casual and Official can each
+        have their own. Up to ${CUSTOM_RULES_MAX} rules, ${CUSTOM_RULE_MAXLEN}
+        characters each.</p>
+      <div id="customrules">${(cfg.custom_rules || []).map(customRuleRow).join("")}</div>
+      <button class="btn ghost small" id="add-rule-btn" onclick="addCustomRule()"
+        ${(cfg.custom_rules || []).length >= CUSTOM_RULES_MAX ? "disabled" : ""}>+ add rule</button>
+    `)}
     ${collapsible("rules-standard", "Game rules \u2014 standard shows", `
       <p class="muted">Slotted picks (position matters):</p>
       <div id="slots">${(cfg.slots || []).map((sl) => adminSlotRow(sl, "standard")).join("")}</div>
@@ -1532,6 +1563,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
     const tiebreakers = readTiebreakers();
     const data = {
       slots,
+      custom_rules: readCustomRules(),
       flat_picks: Number($("#c-flat").value),
       flat_points: Number($("#c-flatpts").value),
       partial_credit: $("#c-partial").value === "true",
@@ -1803,6 +1835,8 @@ OK = remove + ban \xB7 Cancel = remove only`);
     toggleRoster,
     setRosterMember,
     toggleSection,
+    addCustomRule,
+    checkRuleCap,
     switchToBracket,
     switchToLeague
   });

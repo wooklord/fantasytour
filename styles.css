@@ -295,6 +295,10 @@ html[data-theme="light"] .panel.live-halo{
 .rules-sheet .rd-term{font-family:'Fraunces',serif;font-weight:700;flex:none;white-space:nowrap;color:var(--paper-ink)}
 .rules-sheet .rd-desc{flex:1;min-width:0;color:var(--paper-ink-soft);font-size:.92rem}
 .rules-sheet .rulenote{font-size:.75rem;margin:14px 0 0;color:var(--paper-ink-soft)}
+/* Admin-authored bracket-wide extra rules — paper tokens throughout, same
+   reason as everything else in this card. */
+.rules-sheet .customrules{list-style:disc;margin:4px 0 0;padding-left:22px}
+.rules-sheet .customrules li{color:var(--paper-ink);font-size:.92rem;margin:6px 0}
 /* Deliberately varied from .sheet's own tilt/tape — identical placement
    on two stacked sheets read as one component rendered twice, not two
    pages taped up separately. Kept small (a couple degrees, a few % of
@@ -403,6 +407,7 @@ html[data-theme="light"] .panel.live-halo{
 .admin-slot{display:flex;gap:8px;margin:6px 0;flex-wrap:wrap}
 .admin-slot input,.admin-slot select{background:var(--pit);border:1px solid var(--line2);border-radius:8px;color:var(--cream);padding:8px 10px;font-size:.85rem}
 .admin-slot select.k,.admin-slot input.k{flex:1 1 130px;min-width:0}.admin-slot input.p{width:64px;font-family:var(--mono)}
+.admin-slot input.rule-text{flex:1 1 auto;min-width:0}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
 /* ---------- toasts ---------- */

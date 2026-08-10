@@ -21,6 +21,36 @@ function officialBracketId(){
   return state.leagues.find(l => l.league_id === state.currentLeagueId && l.bracket_kind === "official")?.bracket_id;
 }
 
+// Bracket-wide custom rules (brackets.config's custom_rules: string[]) — a
+// soft cap enforced client-side by disabling the add button at the limit,
+// not by rejecting a save that's already over it. `maxlength` on the input
+// stops a typed-past-the-limit line at the source; readCustomRules() still
+// re-slices defensively in case a value ever gets in past that (paste into
+// a devtools-edited input, a future caller, etc.).
+const CUSTOM_RULES_MAX = 10;
+const CUSTOM_RULE_MAXLEN = 140;
+function customRuleRow(text){
+  return `<div class="admin-slot">
+    <input class="rule-text" maxlength="${CUSTOM_RULE_MAXLEN}" value="${esc(text||"")}" placeholder="e.g. No repeating a cover pick within the same show" oninput="checkRuleCap()">
+    <button class="btn ghost small" onclick="this.parentElement.remove(); checkRuleCap()">✕</button></div>`;
+}
+export function addCustomRule(){
+  const box = $("#customrules");
+  if (box.children.length >= CUSTOM_RULES_MAX) return;
+  box.insertAdjacentHTML("beforeend", customRuleRow());
+  checkRuleCap();
+}
+export function checkRuleCap(){
+  const btn = $("#add-rule-btn");
+  if (btn) btn.disabled = $("#customrules").children.length >= CUSTOM_RULES_MAX;
+}
+function readCustomRules(){
+  return [...document.querySelectorAll("#customrules .rule-text")]
+    .map(i => i.value.trim().slice(0, CUSTOM_RULE_MAXLEN))
+    .filter(Boolean)
+    .slice(0, CUSTOM_RULES_MAX);
+}
+
 // Per-device collapse state for the admin panel's sections — same idiom as
 // ft_theme2/ft_bracket_id (core/theme.js, core/switcher.js): a plain
 // localStorage-backed map read once at module load, written back on every
@@ -119,6 +149,15 @@ export async function renderAdmin(){
       </div>
       <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros — any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins — per-show ties still share the crown. Highest single-show score.</p>
     `) : ""}
+    ${collapsible("rules-custom", "Custom rules", `
+      <p class="muted">Bracket-wide house rules, shown on the pick sheet's "The Rules"
+        card below the auto-generated slot definitions. Casual and Official can each
+        have their own. Up to ${CUSTOM_RULES_MAX} rules, ${CUSTOM_RULE_MAXLEN}
+        characters each.</p>
+      <div id="customrules">${(cfg.custom_rules||[]).map(customRuleRow).join("")}</div>
+      <button class="btn ghost small" id="add-rule-btn" onclick="addCustomRule()"
+        ${(cfg.custom_rules||[]).length >= CUSTOM_RULES_MAX ? "disabled" : ""}>+ add rule</button>
+    `)}
     ${collapsible("rules-standard", "Game rules — standard shows", `
       <p class="muted">Slotted picks (position matters):</p>
       <div id="slots">${(cfg.slots||[]).map(sl => adminSlotRow(sl, "standard")).join("")}</div>
@@ -429,6 +468,7 @@ export async function saveConfig(){
   const tiebreakers = readTiebreakers();
   const data = {
     slots,
+    custom_rules: readCustomRules(),
     flat_picks: Number($("#c-flat").value), flat_points: Number($("#c-flatpts").value),
     partial_credit: $("#c-partial").value === "true", partial_points: Number($("#c-partpts").value),
     allow_duplicates: $("#c-dupes").value === "true",
