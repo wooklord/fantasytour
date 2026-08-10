@@ -149,7 +149,7 @@ export async function renderAdmin(){
       </div>
       <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros — any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins — per-show ties still share the crown. Highest single-show score.</p>
     `) : ""}
-    ${collapsible("rules-custom", "Custom rules", `
+    ${collapsible("rules-custom", "House rules", `
       <p class="muted">Bracket-wide house rules, shown on the pick sheet's "The Rules"
         card below the auto-generated slot definitions. Casual and Official can each
         have their own. Up to ${CUSTOM_RULES_MAX} rules, ${CUSTOM_RULE_MAXLEN}

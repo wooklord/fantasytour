@@ -878,7 +878,7 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   2. **Admin-authored custom rules — built.** `custom_rules: string[]` on
      `brackets.config` (bracket-wide, same object `admin_update_config` already
      writes for `slots`/`bonuses`/etc. — not per-format the way `slots`/`oneset`
-     are). Editable as repeatable rows in `admin.js`'s new "Custom rules"
+     are). Editable as repeatable rows in `admin.js`'s new "House rules"
      collapsible (`customRuleRow()`/`addCustomRule()`/`readCustomRules()`),
      positioned ahead of the two format-specific Game rules sections since this
      list applies to both. Soft cap: **10 rules, 140 characters each** — the
