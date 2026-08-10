@@ -164,14 +164,33 @@ async function runMode(mode){
     `themeSeq: ${JSON.stringify(themeEntry?.themeSeq)} stored: ${themeEntry?.themeModeStored}`);
 
   const toastSame = byLabel(log, "realtime-toast-current-league");
-  check("league_shows realtime event for the CURRENT league fires a toast",
+  check("a realtime_pings event for the CURRENT league fires a toast",
     toastSame && toastSame.toasts.length > 0,
     `toasts: ${toastSame?.toasts}`);
 
   const toastOther = byLabel(log, "realtime-toast-other-league");
-  check("league_shows realtime event for a DIFFERENT league does NOT fire a toast",
+  check("a realtime_pings event for a DIFFERENT league does NOT fire a toast",
     toastOther && toastOther.toasts.length === 0,
     `toasts: ${toastOther?.toasts}`);
+
+  // Adding the ping channel is exactly the kind of change that's silently
+  // poisoned a shared channel's OTHER bindings before (see CLAUDE.md's
+  // realtime gotcha) — these three prove setlist_songs/seasons still
+  // deliver after that addition, not just that the new binding works.
+  const toastSong = byLabel(log, "realtime-toast-setlist-song");
+  check("setlist_songs still delivers after adding the ping channel",
+    toastSong && toastSong.toasts.length > 0,
+    `toasts: ${toastSong?.toasts}`);
+
+  const toastSeasonSame = byLabel(log, "realtime-toast-season-current-bracket");
+  check("seasons still delivers for the CURRENT bracket after adding the ping channel",
+    toastSeasonSame && toastSeasonSame.toasts.length > 0,
+    `toasts: ${toastSeasonSame?.toasts}`);
+
+  const toastSeasonOther = byLabel(log, "realtime-toast-season-other-bracket");
+  check("seasons for a DIFFERENT bracket still does NOT fire a toast",
+    toastSeasonOther && toastSeasonOther.toasts.length === 0,
+    `toasts: ${toastSeasonOther?.toasts}`);
 
   check("no crash reached the last-resort error trap",
     !(byLabel(log, "boot")?.html || "").includes("Script failed to load"));

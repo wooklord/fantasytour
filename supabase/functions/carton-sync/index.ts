@@ -107,6 +107,27 @@ async function notifyLeague(leagueName: string, msg: string) {
   }).catch(() => {});
 }
 
+// scores/league_shows have zero public RLS SELECT policies by design (see
+// sql/stage_j_realtime_ping.sql) — their own postgres_changes events never
+// reach an anon-key client. This is the one write path for the ping table
+// that tells such a client "this league+show changed, go refetch" without
+// exposing anything real over the public channel. Called once per real
+// state change (score writes that actually differ, a status flip, a
+// remind/lock/winner_sent stamp, a reopen) — never unconditionally per
+// poll — so a quiet cron tick with nothing new doesn't spam a refetch,
+// the same discipline this file already applies to setlist_songs/scores
+// writes themselves (diff first, write/notify only on a real change).
+async function pingRealtime(leagueId: number, showId: number) {
+  // Best-effort, same as this file's other secondary writes (e.g. the shows
+  // upsert in syncShows) — supabase-js resolves {data,error} rather than
+  // rejecting, so there's nothing to catch; a failed ping just doesn't ping,
+  // it doesn't fail the scoring/notify pass it's reporting on.
+  await supa.from("realtime_pings").upsert(
+    { league_id: leagueId, show_id: showId, updated_at: new Date().toISOString() },
+    { onConflict: "league_id,show_id" },
+  );
+}
+
 // Tagged with `status` so the router's catch-all can tell "wrong name/PIN"
 // (401) and "valid player, not authorized for this league" (403) apart from
 // a genuine server error (500) — previously all three collapsed into the
@@ -390,6 +411,7 @@ async function announcements() {
         : `⏰ **1 hour to lock** — ${label}. Everyone's in \u{1F95A}`);
       await supa.from("league_shows").update({ remind_sent: nowIso })
         .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
+      await pingRealtime(ls.league_id, ls.show_id);
     }
   }
   // (b) lock announcement
@@ -409,6 +431,7 @@ async function announcements() {
         `\u{1F512} **Picks are locked** for ${label} — ${n} sheets in. Boards are live in the app.`);
       await supa.from("league_shows").update({ lock_sent: nowIso })
         .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
+      await pingRealtime(ls.league_id, ls.show_id);
     }
   }
   // (c) show winner (fires within a minute of finalize, manual or auto) —
@@ -423,6 +446,7 @@ async function announcements() {
         // still flag it so this loop doesn't keep revisiting it forever.
         await supa.from("league_shows").update({ winner_sent: nowIso })
           .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
+        await pingRealtime(ls.league_id, ls.show_id);
         continue;
       }
       const { data: brackets } = await supa.from("brackets").select("id,name").eq("league_id", ls.league_id);
@@ -443,6 +467,7 @@ async function announcements() {
       }
       await supa.from("league_shows").update({ winner_sent: nowIso })
         .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
+      await pingRealtime(ls.league_id, ls.show_id);
     }
   }
   // (d) season champion, once every show in range is final for that bracket's league
@@ -591,15 +616,27 @@ async function scoreShow(show: any, leagueShowRows: any[], isFinal = false) {
   const seenBrackets = new Set<number>();
   for (const lsRow of leagueShowRows) {
     const { data: brackets } = await supa.from("brackets").select("*").eq("league_id", lsRow.league_id);
+    // Pings only when something in THIS league+show actually changed this
+    // pass — a real score write (scoreBracket already diffs against the
+    // previous row and skips an unchanged one) or a status flip — not on
+    // every poll regardless. Same diff-before-notify discipline this file
+    // already applies to setlist_songs/scores writes, just extended to the
+    // ping too, so a quiet cron tick during a live show doesn't spam
+    // refetches on every client watching this bracket.
+    let changed = false;
     for (const bracket of brackets ?? []) {
       if (seenBrackets.has(bracket.id)) continue;
       seenBrackets.add(bracket.id);
-      perBracket.push(await scoreBracket({ show, lsRow, bracket, songs, slotFacts }));
+      const res = await scoreBracket({ show, lsRow, bracket, songs, slotFacts });
+      perBracket.push(res);
+      if (res.score_writes) changed = true;
     }
     if (lsRow.status === "upcoming") {
       await supa.from("league_shows").update({ status: "live" })
         .eq("league_id", lsRow.league_id).eq("show_id", lsRow.show_id);
+      changed = true;
     }
+    if (changed) await pingRealtime(lsRow.league_id, lsRow.show_id);
   }
 
   return { show: show.id, songs: songs.length, new: newSongs.length, brackets: perBracket };
@@ -671,6 +708,7 @@ async function reopenShow(name: string, pin: string, leagueId: number, showId: n
   }
   await supa.from("league_shows").update({ status: "live", winner_sent: null })
     .eq("league_id", leagueId).eq("show_id", showId);
+  await pingRealtime(leagueId, showId);
   const { data: lg } = await supa.from("leagues").select("name").eq("id", leagueId).single();
   const { data: show } = await supa.from("shows").select("venue,showdate").eq("id", showId).single();
   if (lg) {

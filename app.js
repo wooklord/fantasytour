@@ -1683,50 +1683,61 @@ OK = remove + ban \xB7 Cancel = remove only`);
   // src/core/realtime.js
   var myLastPts = {};
   var channel = null;
+  var pingChannel = null;
   var visListenerAttached = false;
+  async function handlePing(showId) {
+    const [lsRows, shRes, sc] = await Promise.all([
+      rpc("get_league_shows", { p_league_id: state.currentLeagueId }).catch(() => []),
+      db.from("shows").select("*").eq("id", showId).single(),
+      rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: showId }).catch(() => null)
+    ]);
+    const ls = (lsRows || []).find((r) => r.show_id === showId);
+    const sh = shRes.data;
+    const fresh = (ts) => ts && Date.now() - new Date(ts).getTime() < 3 * 6e4;
+    if (sh && ls && fresh(ls.remind_sent)) {
+      let mine = [];
+      try {
+        mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id });
+      } catch (e) {
+      }
+      toast(mine.length ? `\u23F0 1 hour to cutoff \u2014 ${esc(sh.venue || sh.showdate)}. Your picks are in \u2714` : `\u23F0 1 hour to cutoff \u2014 ${esc(sh.venue || sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
+    }
+    if (sh && ls && fresh(ls.lock_sent))
+      toast(`\u{1F512} All picks locked \u2014 ${esc(sh.venue || sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);
+    if (sh && ls && fresh(ls.winner_sent) && (sc == null ? void 0 : sc.length)) {
+      const top = sc.slice().sort((a, b) => b.points - a.points)[0];
+      if (top) toast(`\u{1F3C6} ${esc(top.player_name || "?")} takes ${esc(sh.venue || sh.showdate)} with ${top.points} pts`, "score", `win:${sh.id}`);
+    }
+    const mineRow = (sc || []).find((r) => {
+      var _a;
+      return r.player_id === ((_a = state.session) == null ? void 0 : _a.id);
+    });
+    if (mineRow && myLastPts[showId] !== mineRow.points) {
+      myLastPts[showId] = mineRow.points;
+      toast(`You're at ${mineRow.points} pts for this show`, "score");
+    }
+    if (state.tab === "board") renderBoard();
+  }
   function subscribeRealtime() {
     if (channel) db.removeChannel(channel);
     channel = db.channel(`live-${state.currentBracketId}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "setlist_songs" }, (p) => {
       const s = p.new;
       toast(`\u{1F3B5} ${esc(s.songname)}${s.is_encore ? " (encore)" : ""}${/debut/i.test(s.footnote || "") ? " \u2014 DEBUT \u{1F95A}" : ""}`, "", `song:${s.show_id}:${(s.songname || "").toLowerCase()}`);
       if (state.currentShow && state.tab !== "admin" && s.show_id === state.currentShow.id) openShow(state.currentShow.id);
-    }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "league_shows", filter: `league_id=eq.${state.currentLeagueId}` }, async (p) => {
-      const ls = p.new;
-      const fresh = (ts) => ts && Date.now() - new Date(ts).getTime() < 3 * 6e4;
-      if (!fresh(ls.remind_sent) && !fresh(ls.lock_sent) && !fresh(ls.winner_sent)) return;
-      const { data: sh } = await db.from("shows").select("*").eq("id", ls.show_id).single();
-      if (!sh) return;
-      if (fresh(ls.remind_sent)) {
-        let mine = [];
-        try {
-          mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id });
-        } catch (e) {
-        }
-        toast(mine.length ? `\u23F0 1 hour to cutoff \u2014 ${esc(sh.venue || sh.showdate)}. Your picks are in \u2714` : `\u23F0 1 hour to cutoff \u2014 ${esc(sh.venue || sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
-      }
-      if (fresh(ls.lock_sent))
-        toast(`\u{1F512} All picks locked \u2014 ${esc(sh.venue || sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);
-      if (fresh(ls.winner_sent)) {
-        try {
-          const sc = await rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id });
-          const top = (sc || []).slice().sort((a, b) => b.points - a.points)[0];
-          if (top) toast(`\u{1F3C6} ${esc(top.player_name || "?")} takes ${esc(sh.venue || sh.showdate)} with ${top.points} pts`, "score", `win:${sh.id}`);
-        } catch (e) {
-        }
-      }
     }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "seasons", filter: `bracket_id=eq.${state.currentBracketId}` }, (p) => {
       const se = p.new;
       if (se.winner_sent && Date.now() - new Date(se.winner_sent).getTime() < 3 * 6e4)
         toast(`\u{1F451} ${esc(se.name)} is in the books \u2014 check Standings for the podium`, "score", `season:${se.id}`);
-    }).on("postgres_changes", { event: "*", schema: "public", table: "scores", filter: `bracket_id=eq.${state.currentBracketId}` }, (p) => {
-      var _a, _b;
-      if (((_a = p.new) == null ? void 0 : _a.player_id) === ((_b = state.session) == null ? void 0 : _b.id) && myLastPts[p.new.show_id] !== p.new.points) {
-        myLastPts[p.new.show_id] = p.new.points;
-        toast(`You're at ${p.new.points} pts for this show`, "score");
-      }
-      if (state.tab === "board") renderBoard();
     }).subscribe((status, err) => {
       if (status !== "SUBSCRIBED") console.warn("[realtime] channel status:", status, err || "");
+    });
+    if (pingChannel) db.removeChannel(pingChannel);
+    pingChannel = db.channel(`ping-${state.currentLeagueId}`).on("postgres_changes", { event: "*", schema: "public", table: "realtime_pings", filter: `league_id=eq.${state.currentLeagueId}` }, (p) => {
+      var _a;
+      const showId = (_a = p.new) == null ? void 0 : _a.show_id;
+      if (showId != null) handlePing(showId);
+    }).subscribe((status, err) => {
+      if (status !== "SUBSCRIBED") console.warn("[realtime] ping channel status:", status, err || "");
     });
     if (!visListenerAttached) {
       visListenerAttached = true;

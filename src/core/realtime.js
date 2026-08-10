@@ -10,12 +10,59 @@ import { renderBoard } from "../features/standings.js";
 
 const myLastPts = {};
 let channel = null;
+let pingChannel = null;
 let visListenerAttached = false;
+
+// scores/league_shows have zero public RLS SELECT policies by design
+// (scoped reads go through RPCs — see sql/stage_j_realtime_ping.sql) so
+// their own postgres_changes events never deliver anything, silently. This
+// is what actually reacts to a change in either table: the edge function
+// upserts a `realtime_pings` row (nothing but {league_id, show_id,
+// updated_at}) once per real change, the ping channel below delivers that,
+// and this refetches through the same authenticated RPCs the rest of the
+// app already uses — real data never has to cross the public ping
+// channel. One get_bracket_scores call covers both the winner toast and
+// the "my points" toast, rather than the two separate fetches the old
+// (dead) per-table bindings used.
+async function handlePing(showId){
+  const [lsRows, shRes, sc] = await Promise.all([
+    rpc("get_league_shows", { p_league_id: state.currentLeagueId }).catch(() => []),
+    db.from("shows").select("*").eq("id", showId).single(),
+    rpc("get_bracket_scores", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id: showId }).catch(() => null),
+  ]);
+  const ls = (lsRows||[]).find(r => r.show_id === showId);
+  const sh = shRes.data;
+  const fresh = ts => ts && (Date.now() - new Date(ts).getTime()) < 3*60e3;
+
+  if (sh && ls && fresh(ls.remind_sent)){
+    let mine = [];
+    try{ mine = await rpc("get_my_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:sh.id }); }catch(e){}
+    toast(mine.length
+      ? `⏰ 1 hour to cutoff — ${esc(sh.venue||sh.showdate)}. Your picks are in ✔`
+      : `⏰ 1 hour to cutoff — ${esc(sh.venue||sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
+  }
+  if (sh && ls && fresh(ls.lock_sent))
+    toast(`\u{1F512} All picks locked — ${esc(sh.venue||sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);
+  if (sh && ls && fresh(ls.winner_sent) && sc?.length){
+    const top = sc.slice().sort((a,b) => b.points - a.points)[0];
+    if (top) toast(`\u{1F3C6} ${esc(top.player_name||"?")} takes ${esc(sh.venue||sh.showdate)} with ${top.points} pts`, "score", `win:${sh.id}`);
+  }
+  const mineRow = (sc||[]).find(r => r.player_id === state.session?.id);
+  if (mineRow && myLastPts[showId] !== mineRow.points){
+    myLastPts[showId] = mineRow.points;
+    toast(`You're at ${mineRow.points} pts for this show`, "score");
+  }
+  if (state.tab === "board") renderBoard();
+}
 
 // Teardown-and-rebuildable: called once at boot and again on every bracket
 // switch, so it always tears down the previous subscription first — no
 // stacking of stale channels for a bracket the player isn't looking at
-// anymore.
+// anymore. Two channels, deliberately kept separate — the ping table gets
+// its own so a future misconfiguration there (added to the wrong
+// publication, missing its policy, etc.) can't repeat the confirmed bug
+// where one bad binding poisoned postgres_changes delivery for every OTHER
+// binding sharing its channel (see the CLAUDE.md realtime gotcha).
 export function subscribeRealtime(){
   if (channel) db.removeChannel(channel);
   channel = db.channel(`live-${state.currentBracketId}`)
@@ -27,47 +74,15 @@ export function subscribeRealtime(){
       toast(`🎵 ${esc(s.songname)}${s.is_encore ? " (encore)" : ""}${/debut/i.test(s.footnote||"") ? " — DEBUT 🥚" : ""}`, "", `song:${s.show_id}:${(s.songname||"").toLowerCase()}`);
       if (state.currentShow && state.tab !== "admin" && s.show_id === state.currentShow.id) openShow(state.currentShow.id);
     })
-    // remind_sent/lock_sent/winner_sent live on league_shows now (Stage A
-    // moved them off `shows`), and that table has a real league_id column,
-    // so the filter applies server-side. The payload no longer carries
-    // venue/showdate, so a shows lookup fills in the toast text.
-    .on("postgres_changes", { event:"UPDATE", schema:"public", table:"league_shows", filter:`league_id=eq.${state.currentLeagueId}` }, async p => {
-      const ls = p.new;
-      const fresh = ts => ts && (Date.now() - new Date(ts).getTime()) < 3*60e3;
-      if (!fresh(ls.remind_sent) && !fresh(ls.lock_sent) && !fresh(ls.winner_sent)) return;
-      const { data: sh } = await db.from("shows").select("*").eq("id", ls.show_id).single();
-      if (!sh) return;
-      if (fresh(ls.remind_sent)){
-        let mine = [];
-        try{ mine = await rpc("get_my_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:sh.id }); }catch(e){}
-        toast(mine.length
-          ? `⏰ 1 hour to cutoff — ${esc(sh.venue||sh.showdate)}. Your picks are in ✔`
-          : `⏰ 1 hour to cutoff — ${esc(sh.venue||sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
-      }
-      if (fresh(ls.lock_sent))
-        toast(`\u{1F512} All picks locked — ${esc(sh.venue||sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);
-      if (fresh(ls.winner_sent)){
-        try{
-          const sc = await rpc("get_bracket_scores", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id: sh.id });
-          const top = (sc||[]).slice().sort((a,b) => b.points - a.points)[0];
-          if (top) toast(`\u{1F3C6} ${esc(top.player_name||"?")} takes ${esc(sh.venue||sh.showdate)} with ${top.points} pts`, "score", `win:${sh.id}`);
-        }catch(e){}
-      }
-    })
-    // seasons/scores only have bracket_id, not league_id — still a real
-    // column on both, so this filters server-side rather than subscribing
-    // unfiltered and checking client-side.
+    // bracket_id is a real column on seasons — filters server-side rather
+    // than subscribing unfiltered and checking client-side. league_shows
+    // and scores used to have bindings here too, but neither ever
+    // delivered anything (no public RLS policy — see handlePing above),
+    // so they're gone from this channel, not just dead weight kept around.
     .on("postgres_changes", { event:"UPDATE", schema:"public", table:"seasons", filter:`bracket_id=eq.${state.currentBracketId}` }, p => {
       const se = p.new;
       if (se.winner_sent && (Date.now() - new Date(se.winner_sent).getTime()) < 3*60e3)
         toast(`\u{1F451} ${esc(se.name)} is in the books — check Standings for the podium`, "score", `season:${se.id}`);
-    })
-    .on("postgres_changes", { event:"*", schema:"public", table:"scores", filter:`bracket_id=eq.${state.currentBracketId}` }, p => {
-      if (p.new?.player_id === state.session?.id && myLastPts[p.new.show_id] !== p.new.points){
-        myLastPts[p.new.show_id] = p.new.points;
-        toast(`You're at ${p.new.points} pts for this show`, "score");
-      }
-      if (state.tab === "board") renderBoard();
     })
     // This class of failure is invisible by design otherwise: a channel
     // whose postgres_changes registration silently fails (e.g. subscribing
@@ -77,6 +92,15 @@ export function subscribeRealtime(){
     // delivered. A warning on any OTHER status is the only client-visible
     // signal something's wrong.
     .subscribe((status, err) => { if (status !== "SUBSCRIBED") console.warn("[realtime] channel status:", status, err || ""); });
+
+  if (pingChannel) db.removeChannel(pingChannel);
+  pingChannel = db.channel(`ping-${state.currentLeagueId}`)
+    .on("postgres_changes", { event:"*", schema:"public", table:"realtime_pings", filter:`league_id=eq.${state.currentLeagueId}` }, p => {
+      const showId = p.new?.show_id;
+      if (showId != null) handlePing(showId);
+    })
+    .subscribe((status, err) => { if (status !== "SUBSCRIBED") console.warn("[realtime] ping channel status:", status, err || ""); });
+
   // Only ever attached once — subscribeRealtime() itself runs again on every
   // bracket switch, and a second document listener would fire refreshCurrent()
   // multiple times per visibility change.

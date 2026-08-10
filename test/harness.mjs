@@ -374,21 +374,52 @@ export async function runScenario({ html, scripts, mode, presetSession }){
   const supaCall = calls.find(c => c.type === "createClient");
   log.push({ label: "supabase-created", url: supaCall?.url, key: supaCall?.key });
 
-  // realtime, current league: expect a toast
-  dbHolder.db?._emit("league_shows", "UPDATE",
-    { league_id: ids.LEAGUE_ID, show_id: 1, cutoff_at: tables.league_shows[0].cutoff_at, format: "standard", status: "upcoming",
-      remind_sent: new Date().toISOString(), lock_sent: null, winner_sent: null });
+  // realtime, current league: expect a toast — driven by a realtime_pings
+  // event now, not a direct league_shows one (that table has no public RLS
+  // policy; see sql/stage_j_realtime_ping.sql). The ping payload only ever
+  // carries {league_id, show_id} — handlePing() refetches league_shows
+  // itself via get_league_shows, so the fixture row needs a fresh
+  // remind_sent set BEFORE the ping fires, not embedded in the emit.
+  tables.league_shows[0].remind_sent = new Date().toISOString();
+  dbHolder.db?._emit("realtime_pings", "INSERT", { league_id: ids.LEAGUE_ID, show_id: 1 });
   await tick();
   log.push({ label: "realtime-toast-current-league", toasts: window.document.getElementById("toasts")?.innerHTML || "" });
 
   // realtime, a DIFFERENT league: expect no toast — locks down league-scoped
   // filtering rather than trusting the filter string compiles
   window.document.getElementById("toasts").innerHTML = "";
-  dbHolder.db?._emit("league_shows", "UPDATE",
-    { league_id: ids.LEAGUE_ID + 999, show_id: 1, cutoff_at: null, format: "standard", status: "upcoming",
-      remind_sent: new Date().toISOString(), lock_sent: null, winner_sent: null });
+  dbHolder.db?._emit("realtime_pings", "INSERT", { league_id: ids.LEAGUE_ID + 999, show_id: 1 });
   await tick();
   log.push({ label: "realtime-toast-other-league", toasts: window.document.getElementById("toasts")?.innerHTML || "" });
+
+  // realtime, setlist_songs INSERT (unfiltered — fires regardless of
+  // league/bracket): confirm this binding still delivers after adding a
+  // FIFTH thing to subscribe to (the ping channel above). Adding a new
+  // binding without checking the old ones is exactly how this app's
+  // channel-poisoning bug went unnoticed the first time (see CLAUDE.md's
+  // realtime gotcha) — testing the new one in isolation and assuming the
+  // rest are fine would repeat that mistake in the test suite itself.
+  window.document.getElementById("toasts").innerHTML = "";
+  dbHolder.db?._emit("setlist_songs", "INSERT",
+    { show_id: 1, songname: "Test Song", is_encore: false, footnote: null, position: 1 });
+  await tick();
+  log.push({ label: "realtime-toast-setlist-song", toasts: window.document.getElementById("toasts")?.innerHTML || "" });
+
+  // realtime, seasons UPDATE for the CURRENT bracket (Casual, per the
+  // switchToBracket above) — same "still delivers" check as setlist_songs.
+  window.document.getElementById("toasts").innerHTML = "";
+  dbHolder.db?._emit("seasons", "UPDATE",
+    { bracket_id: ids.CASUAL_ID, name: "Test Season", winner_sent: new Date().toISOString() });
+  await tick();
+  log.push({ label: "realtime-toast-season-current-bracket", toasts: window.document.getElementById("toasts")?.innerHTML || "" });
+
+  // realtime, seasons UPDATE for a DIFFERENT bracket: expect no toast — same
+  // bracket-scoped filter check as the league-scoped one above.
+  window.document.getElementById("toasts").innerHTML = "";
+  dbHolder.db?._emit("seasons", "UPDATE",
+    { bracket_id: ids.OFFICIAL_ID, name: "Test Season", winner_sent: new Date().toISOString() });
+  await tick();
+  log.push({ label: "realtime-toast-season-other-bracket", toasts: window.document.getElementById("toasts")?.innerHTML || "" });
 
   return { log, calls, draftKeyVal, officialHasInputs, localStorage: dumpLocalStorage(window) };
 }

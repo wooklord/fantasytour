@@ -950,21 +950,60 @@ this is the condensed, durable record so the roadmap survives a context boundary
    the existing `is_league_admin(league) OR is_global_admin` pattern, no new
    authorization architecture.
 4. **scores/league_shows realtime toasts: build a ping table (not a public RLS
-   policy, not polling).** This app has no per-request identity — players
-   authenticate via a name+PIN RPC, not Supabase Auth, so every request shares one
-   anon key regardless of which player is "logged in" client-side. A public RLS
-   policy on `scores`/`league_shows` would expose every score in every league to
-   anyone holding that key, undoing `get_bracket_scores`'s membership gate — ruled
-   out on that evidence, not preference. Instead: a new table carrying only
-   `{league_id, show_id, updated_at}` — no `bracket_id`, no counts, no deltas,
-   nothing inferable — written by the edge function once per scoring/notify pass
-   (not a trigger, which would fire per-row on every identical-value re-upsert
-   during a live show), added to the `supabase_realtime` publication with a public
-   SELECT policy (both required — see the publication/RLS gotcha above), ideally
-   on its own dedicated channel so a future misconfiguration here can't repeat the
-   channel-poisoning bug. Clients subscribe to the ping, then refetch the real data
-   through the existing authenticated RPC before toasting — privacy boundary
-   never crosses the public channel.
+   policy, not polling) — built (Session 3).** This app has no per-request
+   identity — players authenticate via a name+PIN RPC, not Supabase Auth, so
+   every request shares one anon key regardless of which player is "logged in"
+   client-side. A public RLS policy on `scores`/`league_shows` would expose
+   every score in every league to anyone holding that key, undoing
+   `get_bracket_scores`'s membership gate — ruled out on that evidence, not
+   preference.
+
+   **What shipped**, matching the design above exactly: a `realtime_pings`
+   table (`sql/stage_j_realtime_ping.sql`) carrying only `{league_id, show_id,
+   updated_at}` — no `bracket_id`, no counts, no deltas, nothing inferable.
+   Written by the edge function's new `pingRealtime()` helper
+   (`supabase/functions/carton-sync/index.ts`), called once per real change —
+   inside `announcements()` right after each `remind_sent`/`lock_sent`/
+   `winner_sent` stamp, inside `scoreShow()`'s per-league-show loop only when
+   a bracket actually had a score write (`scoreBracket`'s existing
+   `score_writes` diff count) or a status flip to `live`, and inside
+   `reopenShow()`. Not a trigger — deliberately called from application code
+   at each of those points, so a quiet cron tick with nothing new doesn't
+   write (and doesn't fire a client refetch) at all. Both gates are on: added
+   to the `supabase_realtime` publication AND given a public SELECT policy
+   (`create policy "pub realtime_pings" ... for select using (true)`) — the
+   SQL file's own verification section checks each independently, since they
+   fail differently and silently (see the publication/RLS gotcha above).
+
+   On its own dedicated channel (`ping-${leagueId}` in `realtime.js`),
+   separate from the existing `live-${bracketId}` channel — so a future
+   misconfiguration on this table can't repeat the channel-poisoning bug.
+   `handlePing()` is the client-side consumer: on any ping, it refetches
+   `get_league_shows` (for the remind/lock/winner freshness check) and
+   `get_bracket_scores` (for the winner toast and the player's own "you're at
+   N pts" toast) — one `get_bracket_scores` call covers both toasts, where the
+   two dead bindings it replaced used to fetch separately. Real score/show
+   data never crosses the public ping channel; the ping only ever says
+   "something changed here, go refetch."
+
+   **The two now-dead bindings this replaces (`league_shows` UPDATE and
+   `scores` `*` on the shared channel) are gone, not just superseded** —
+   they never delivered anything (no public RLS policy on either table, by
+   design) and would have been confusing dead weight sitting next to the
+   working ping-driven logic. The shared channel now carries only the two
+   bindings that were ever real: `setlist_songs` INSERT and `seasons`
+   UPDATE.
+
+   **Verified two ways**, per the exact failure mode that already cost a
+   debugging session once (the original channel-poisoning bug): (1) the SQL
+   file's publication-membership check and RLS-policy check are two separate
+   queries, not one "looks subscribed" check — each gate fails differently
+   and silently, so only checking one proves nothing about the other. (2)
+   `test/harness.mjs`'s realtime block now emits `setlist_songs` and
+   `seasons` events (previously never exercised by anything in this harness
+   at all — a gap, not a regression) alongside the new `realtime_pings`
+   emits, so adding a fifth thing to subscribe to is checked against ALL
+   five bindings together, not the new one in isolation.
 5. **Notification-preference toggle: deferred, confirmed separate work** from the
    toast fix above — the toast fix is a Supabase publication/config change with no
    `realtime.js` diff; a mute toggle needs new schema, a new RPC, and new
@@ -987,8 +1026,10 @@ this is the condensed, durable record so the roadmap survives a context boundary
   session. Its admin-authored custom-rules half followed as separate, unnumbered
   follow-up work (not part of the Session 1–5 batches below) — also now built, see
   the same bullet for the soft-cap numbers.
-- **Session 3 — the ping table (decision 4):** sequenced right after Session 2
-  since both touch `realtime.js`.
+- **Session 3 — the ping table (decision 4): done.** See decision 4 above for
+  what actually shipped — `realtime_pings`, `pingRealtime()` in the edge
+  function, its own dedicated channel and `handlePing()` in `realtime.js`,
+  and the two now-dead direct bindings removed rather than left in place.
 - **Session 4 — auth + Global console, manual-approval execution mode** (touches
   the login flow and adds the most dangerous new control in the app — a PIN
   reset — so edits get reviewed individually, not batched). Strict internal
