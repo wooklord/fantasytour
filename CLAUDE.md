@@ -417,7 +417,7 @@ before assuming a change is covered just because the suite is green:
 behavior.** It's a frozen snapshot of the pre-2.0 feature set, written once
 before the rebuild began, and every rebuild stage since has moved the actual
 UI further away from it without this section being updated to match. It has
-already sent work down the wrong path three times now: it described a
+already sent work down the wrong path four times now: it described a
 collapsible sidebar that was never built; an admin show-row layout that (in
 an earlier draft) only ever existed in a chat message, never in the repo;
 and, separately from this section's own text, a personal task list compiled
@@ -428,15 +428,22 @@ layout" implied to be a mistake still shipping. Re-verified directly
 commit's diffs): zero matches, ever — `-S"mock2"` in particular matches
 nothing at all. The 3-column grid (`e7fa3ef`, still live in
 `src/core/layout.js`) is the only desktop layout that was ever built; it
-isn't a rejected fallback, it's the only thing that exists. Same root cause
-each time — a claim about UI that was discussed or imagined but never
-actually committed, surviving as a memory once the discussion itself is
-gone. Treat any specific claim below — exact wording, layout details, which
-widget does what — as unverified until you've actually read the relevant
-source (`src/features/*.js`, `src/core/*.js`) or checked `git log`/`git
-blame` on it. For what's actually shipped in 2.0, the "THE 2.0 REBUILD"
-section below tracks each stage explicitly as done or not-started — that's
-the current source of truth, this isn't.
+isn't a rejected fallback, it's the only thing that exists. A fourth instance
+turned up in the "Known pending work" section, not here — the slot-labels
+bullet describing per-song setlist labels and opener/set2_opener live-toast
+tags that were never actually built, only ever planned (see that bullet,
+corrected). **The mechanism is the same whether the false claim is about a
+past decision or a feature's current status**: a plan or possibility gets
+written down — in a chat message, a personal task list, a "known pending
+work" bullet — and later gets read back as if it already existed, because
+nothing forced a check against the actual repo in between. Treat any
+specific claim below — exact wording, layout details, which widget does
+what, or whether a described feature is actually live — as unverified until
+you've actually read the relevant source (`src/features/*.js`,
+`src/core/*.js`) or checked `git log`/`git blame` on it. For what's actually
+shipped in 2.0, the "THE 2.0 REBUILD" section below tracks each stage
+explicitly as done or not-started — that's the current source of truth,
+this isn't.
 
 Slot types (opener, set1_closer, set2_opener, closer, encore, show_closer,
 second_song, **cover_pick** [repeatable, catalog-restricted to covers]) + an
@@ -478,13 +485,25 @@ pile; podium version has the medal egg inside.
   notice can't read as a failed cutoff save) right after `admin_set_cutoff`
   succeeds. All three authenticated edge actions (`reopen`/`cutoff_changed`/
   `finalize`) now have a real frontend caller — none is orphaned anymore.
-- **Slot labels in setlists & notifications**: setlist view shows all slot labels
-  ("Laurel — Opener"); live toasts tag ONLY unambiguous-when-they-happen slots
-  (opener, set2_opener, encore) + debut. Closer/show_closer are positional so only
-  appear in the after-the-fact setlist view. **Plain footnote trivia is no longer
-  planned** — descoped in favor of a targeted debut flag instead (see the "2.0
-  REBUILD roadmap" section below), mirroring the existing `is_encore` pattern at
-  the same two spots this bullet already describes.
+- **Slot labels in setlists & notifications — a fourth false-memory instance (see
+  the note at the top of this section), corrected against the source.** This
+  bullet used to describe two things as current behavior that were never actually
+  built:
+  1. "Setlist view shows all slot labels ('Laurel — Opener')" — not true.
+     `picks.js`'s `renderShowDetail` renders position, song name, a segue arrow,
+     and (since Session 2) a debut tag per song. There is no per-song slot label
+     anywhere in that view, and no trace in git history that there ever was.
+  2. "Live toasts tag opener, set2_opener, encore + debut" — only half true.
+     `realtime.js`'s live song toast tags `(encore)` and `— DEBUT 🥚` (the debut
+     half shipped Session 2, exactly as planned). There is no opener or
+     set2_opener tag anywhere in that toast string, confirmed directly against
+     the current code.
+  **What's actually true**: debut tagging is real, in both spots this bullet
+  always described, mirroring the existing `is_encore` pattern. Plain footnote
+  trivia is descoped, not planned, and stays that way.
+  **Not started, if still wanted**: per-song slot labels in the setlist view;
+  opener/set2_opener tags in the live toast. Neither exists today — don't assume
+  either from an older reading of this bullet.
 - **Discord notification logic rework**: broadcast (not personal) + per-league in
   2.0. Still needs a design pass for the bigger pieces (public non-voter shaming
   vs. neutral counts; dedupe with in-app toasts; Discord roles) — but **per-league
@@ -848,7 +867,7 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   same cream-stock/tape/shadow treatment, but with its own fixed tape
   rotation/offset and card tilt (`.rules-sheet` overrides in `styles.css`) so it
   reads as a second sheet taped up separately by the same hand, not the pick
-  sheet's own tape rendered twice. Two parts, built to different degrees:
+  sheet's own tape rendered twice. Two parts, both now built:
   1. **Auto-generated slot definitions — built.** One row per distinct label, read
      straight from `SLOT_TOOLTIPS` via the same `slotDefs()` the pick sheet itself
      renders from, so the card can't drift out of sync with whatever slots this
@@ -856,12 +875,20 @@ run (drop-and-recreate `seasons`, matching picks/scores).
      slots, say) or several flat picks collapse into a single row rather than
      repeating identical tooltip text. The points-per-slot note that used to sit
      under the pick-sheet inputs moved here too.
-  2. **Admin-authored custom rules — NOT built, despite how this might read
-     elsewhere.** The plan discussed (bracket-wide `custom_rules: string[]` in
-     `brackets.config`, discrete admin-editable lines rather than freeform text) was
-     never implemented — confirmed directly, zero matches for `custom_rules`
-     anywhere in the repo. No config key, no admin UI, no soft cap was ever decided
-     (that question was never reached). Still fully open work.
+  2. **Admin-authored custom rules — built.** `custom_rules: string[]` on
+     `brackets.config` (bracket-wide, same object `admin_update_config` already
+     writes for `slots`/`bonuses`/etc. — not per-format the way `slots`/`oneset`
+     are). Editable as repeatable rows in `admin.js`'s new "Custom rules"
+     collapsible (`customRuleRow()`/`addCustomRule()`/`readCustomRules()`),
+     positioned ahead of the two format-specific Game rules sections since this
+     list applies to both. Soft cap: **10 rules, 140 characters each** — the
+     `+ add rule` button disables itself at 10 rows (`checkRuleCap()`) rather than
+     letting a save fail past the limit; `readCustomRules()` still re-slices
+     defensively on read in case a value ever gets in past the input's own
+     `maxlength`. Renders on the player-facing card as a "House rules" divider
+     (reusing the same `.divider` style as the pick sheet's "Anywhere in the
+     show" section) followed by a plain bullet list — omitted entirely, divider
+     included, when the admin hasn't written any.
 
   Admin-side tooltips needed no equivalent fix and never did: `admin.js`'s
   `adminSlotRow()` already bakes `SLOT_TOOLTIPS` text directly into each
@@ -956,8 +983,10 @@ this is the condensed, durable record so the roadmap survives a context boundary
   `picks.js`'s setlist view. The C2c tap-affordance tooltips did NOT ship as
   planned: the "ⓘ" was built, then removed one commit later for looking visually
   cluttered, and replaced with a different mechanism — "The Rules" card (see the
-  rewritten tooltip bullet above). Its auto-generated half is done; its
-  admin-authored custom-rules half is not built.
+  rewritten tooltip bullet above), whose auto-generated half shipped in the same
+  session. Its admin-authored custom-rules half followed as separate, unnumbered
+  follow-up work (not part of the Session 1–5 batches below) — also now built, see
+  the same bullet for the soft-cap numbers.
 - **Session 3 — the ping table (decision 4):** sequenced right after Session 2
   since both touch `realtime.js`.
 - **Session 4 — auth + Global console, manual-approval execution mode** (touches
