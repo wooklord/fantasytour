@@ -1547,6 +1547,8 @@ OK = remove + ban \xB7 Cancel = remove only`);
       await rpc("admin_set_cutoff", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_show_id: showId, p_cutoff: cutoffISO });
       btn.textContent = "\u2714";
       setTimeout(() => btn.textContent = "Change cutoff", 1500);
+      edgeFn("cutoff_changed", { p_name: state.session.name, p_pin: state.session.pin, league_id: state.currentLeagueId, show_id: showId }).catch(() => {
+      });
     } catch (e) {
       toast(esc(e.message));
     }

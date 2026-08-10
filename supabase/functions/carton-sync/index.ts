@@ -107,6 +107,14 @@ async function notifyLeague(leagueName: string, msg: string) {
   }).catch(() => {});
 }
 
+// Tagged with `status` so the router's catch-all can tell "wrong name/PIN"
+// (401) and "valid player, not authorized for this league" (403) apart from
+// a genuine server error (500) — previously all three collapsed into the
+// same generic 500, which is fine functionally but makes it impossible to
+// tell an auth failure from a real bug from the response alone.
+class AuthError extends Error { status = 401; }
+class ForbiddenError extends Error { status = 403; }
+
 // Admin-triggered actions (reopen, cutoff_changed, finalize) must not be
 // callable by anyone holding just the public anon key. This calls the same
 // two SQL helpers the RPC layer uses — `_auth_player` (PIN check) and
@@ -116,11 +124,11 @@ async function notifyLeague(leagueName: string, msg: string) {
 // propagate to the router's catch-all error response.
 async function requireLeagueAdmin(name: string, pin: string, leagueId: number) {
   const { data: player, error: authErr } = await supa.rpc("_auth_player", { p_name: name, p_pin: pin });
-  if (authErr || !player?.id) throw new Error("Wrong name or PIN");
+  if (authErr || !player?.id) throw new AuthError("Wrong name or PIN");
   const { data: ok, error: scopeErr } = await supa.rpc("_is_league_admin_or_global", {
     p_player_id: player.id, p_league_id: leagueId,
   });
-  if (scopeErr || !ok) throw new Error("Not authorized for this league");
+  if (scopeErr || !ok) throw new ForbiddenError("Not authorized for this league");
   return player;
 }
 
@@ -725,6 +733,7 @@ Deno.serve(async (req) => {
     else out = await scoreShows();
     return Response.json({ ok: true, ...out }, { headers: cors });
   } catch (e) {
-    return Response.json({ ok: false, error: String(e) }, { status: 500, headers: cors });
+    const status = (e instanceof AuthError || e instanceof ForbiddenError) ? e.status : 500;
+    return Response.json({ ok: false, error: String(e) }, { status, headers: cors });
   }
 });

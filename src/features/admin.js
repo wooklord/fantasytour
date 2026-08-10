@@ -456,6 +456,10 @@ export async function saveCutoff(showId, btn){
   try{
     await rpc("admin_set_cutoff", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_show_id:showId, p_cutoff:cutoffISO });
     btn.textContent = "✔"; setTimeout(() => btn.textContent = "Change cutoff", 1500);
+    // Best effort — the cutoff itself already saved above; a failed Discord
+    // notice shouldn't read to the admin as a failed save, so this is
+    // fire-and-forget rather than awaited inside the try/catch above it.
+    edgeFn("cutoff_changed", { p_name:state.session.name, p_pin:state.session.pin, league_id:state.currentLeagueId, show_id:showId }).catch(() => {});
   }catch(e){ toast(esc(e.message)); }
 }
 export async function finalizeShow(showId, btn){
