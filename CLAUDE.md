@@ -396,15 +396,26 @@ before assuming a change is covered just because the suite is green:
 behavior.** It's a frozen snapshot of the pre-2.0 feature set, written once
 before the rebuild began, and every rebuild stage since has moved the actual
 UI further away from it without this section being updated to match. It has
-already sent work down the wrong path twice: it described a collapsible
-sidebar that was never built, and (in an earlier draft) an admin show-row
-layout that only ever existed in a chat message, never in the repo. Treat
-any specific claim below — exact wording, layout details, which widget does
-what — as unverified until you've actually read the relevant source
-(`src/features/*.js`, `src/core/*.js`) or checked `git log`/`git blame` on
-it. For what's actually shipped in 2.0, the "THE 2.0 REBUILD" section below
-tracks each stage explicitly as done or not-started — that's the current
-source of truth, this isn't.
+already sent work down the wrong path three times now: it described a
+collapsible sidebar that was never built; an admin show-row layout that (in
+an earlier draft) only ever existed in a chat message, never in the repo;
+and, separately from this section's own text, a personal task list compiled
+from conversation memory once again claimed a desktop sidebar mockup
+("mock2") had been chosen but never committed, with "the rejected 3-column
+layout" implied to be a mistake still shipping. Re-verified directly
+(`git log --all -S"sidebar"`, `-S"mock2"`, `-S"collapse"` across every
+commit's diffs): zero matches, ever — `-S"mock2"` in particular matches
+nothing at all. The 3-column grid (`e7fa3ef`, still live in
+`src/core/layout.js`) is the only desktop layout that was ever built; it
+isn't a rejected fallback, it's the only thing that exists. Same root cause
+each time — a claim about UI that was discussed or imagined but never
+actually committed, surviving as a memory once the discussion itself is
+gone. Treat any specific claim below — exact wording, layout details, which
+widget does what — as unverified until you've actually read the relevant
+source (`src/features/*.js`, `src/core/*.js`) or checked `git log`/`git
+blame` on it. For what's actually shipped in 2.0, the "THE 2.0 REBUILD"
+section below tracks each stage explicitly as done or not-started — that's
+the current source of truth, this isn't.
 
 Slot types (opener, set1_closer, set2_opener, closer, encore, show_closer,
 second_song, **cover_pick** [repeatable, catalog-restricted to covers]) + an
@@ -440,14 +451,30 @@ pile; podium version has the medal egg inside.
   workflow (a friend of the dev can edit setlists on The Carton). Frontend wiring is
   **also done** — a "Reopen" button in admin.js's Shows & cutoffs panel, next to
   Finalize on any show with `status === 'final'`; smoke-tested against the real
-  Boston 7/31 show (see the closer-family scoring fix note above).
+  Boston 7/31 show (see the closer-family scoring fix note above). **`cutoff_changed`
+  did NOT get the same treatment** — the edge action itself is fully built
+  (`index.ts`'s `cutoffChanged()`, auth-gated, posts a Discord notice) and routed,
+  but `admin.js`'s `saveCutoff()` only calls the plain `admin_set_cutoff` RPC and
+  never touches the edge action. No Discord notice fires today when a cutoff
+  changes — of the three authenticated edge actions (`reopen`/`cutoff_changed`/
+  `finalize`), this is the one that's genuinely orphaned on the frontend side,
+  confirmed by direct re-check, not assumed from the other two being done.
 - **Slot labels in setlists & notifications**: setlist view shows all slot labels
   ("Laurel — Opener"); live toasts tag ONLY unambiguous-when-they-happen slots
   (opener, set2_opener, encore) + debut. Closer/show_closer are positional so only
-  appear in the after-the-fact setlist view. Other footnotes = setlist trivia only.
-- **Discord notification logic rework**: broadcast (not personal) + per-league in 2.0.
-  Needs a design pass (public non-voter shaming vs. neutral counts; dedupe with
-  in-app toasts; per-league channels + per-league webhooks + Discord roles).
+  appear in the after-the-fact setlist view. **Plain footnote trivia is no longer
+  planned** — descoped in favor of a targeted debut flag instead (see the "2.0
+  REBUILD roadmap" section below), mirroring the existing `is_encore` pattern at
+  the same two spots this bullet already describes.
+- **Discord notification logic rework**: broadcast (not personal) + per-league in
+  2.0. Still needs a design pass for the bigger pieces (public non-voter shaming
+  vs. neutral counts; dedupe with in-app toasts; Discord roles) — but **per-league
+  webhooks are further along than this bullet used to imply**: `notifyLeague()`
+  (`index.ts`) already resolves a `DISCORD_WEBHOOK_<LEAGUENAME>` env var per
+  league, falling back to the single global `DISCORD_WEBHOOK` only if that named
+  one isn't set. No DB column, no admin UI — but the routing mechanism already
+  exists. A second league's notifications landing in the first league's channel
+  is a missing *secret*, not missing code.
 - **Season game-numbering cap, deliberately deferred**: `shows.js`'s per-show "Game
   N" circle (chronological position within the season) is computed only from what
   `renderShows()` already fetches for display — unbounded future + last 2 days,
@@ -736,6 +763,19 @@ run (drop-and-recreate `seasons`, matching picks/scores).
     by design (FB league admins manually verify signups via Facebook
     comments), so a parallel request-queue would duplicate
     `admin_add_league_member` for no real gain at this scale.
+- **The Global console never got a stage number, unlike C2a/C2b/C2c, and is
+  genuinely not started.** Easy to misfile as part of C2b (member management)
+  since both are "admin surfaces," but they're different scopes — C2b is
+  entirely league-scoped. The screen described in the original build sequence
+  ("Global-admin screen: create leagues, appoint admins, cross-league stats,
+  nuclear boot") has no frontend counterpart anywhere in `src/`:
+  `global_create_league`, `global_appoint_league_admin`, and
+  `global_boot_player` exist only as SQL functions in `sql/stage_c1_rpcs.sql`,
+  with zero callers. Today, creating a league or appointing its admin means
+  invoking these directly in the Supabase SQL editor. See the "2.0 REBUILD
+  roadmap" section below for the minimal-build decision (create league,
+  appoint admin, Global-scoped PIN reset — deliberately not cross-league
+  stats).
 - **Official gating must BLOCK pick submission, not silently skip scoring —
   built.** `sql/stage_c2a_rpcs.sql`'s `_official_gate` (called by both
   `can_submit_picks` and `submit_picks`, one implementation) does both cases
@@ -819,6 +859,93 @@ run (drop-and-recreate `seasons`, matching picks/scores).
   by Stage C2b's `admin_list_members`/`loadMembers()` (see that bullet above),
   which gets `is_league_admin` from `league_members` directly, exactly the
   source this note called for. Nothing left to do here.
+
+### 2.0 REBUILD roadmap (verified against the repo, sessions ordered)
+
+A personal task list compiled from conversation memory across sessions was checked
+directly against the repo before any ordering happened — this project has already
+hit the pattern of discussed-but-uncommitted work surviving as false memory, and
+finished work surviving as "pending," twice (see the false-memory note earlier in
+this file). Full verification detail lives in the plan file this was written from;
+this is the condensed, durable record so the roadmap survives a context boundary.
+
+**Resolved decisions:**
+1. **Global console: minimal build only** — create league, appoint league admin,
+   Global-scoped PIN reset. Deliberately no cross-league stats (nobody's asked for
+   it, and it's a direct query away at two leagues).
+2. **Per-league Discord webhooks: keep the env-var stopgap.** Not a blocker for a
+   second league — see the corrected note above. A DB-column + admin-UI version
+   stays deferred, folded conceptually into the Global console if that ever
+   expands.
+3. **Forgot-PIN: self-service change + an admin reset button**, with two hard
+   requirements — the admin never sees/chooses the new PIN (server-generated,
+   returned once for relay, never stored/logged in plaintext), and the relayed PIN
+   forces a change on next login (new schema flag + a forced login interstitial —
+   no precedent for this exists in the app today, size it generously). Guard:
+   league admins reset only within their own league; Global resets anyone — reuses
+   the existing `is_league_admin(league) OR is_global_admin` pattern, no new
+   authorization architecture.
+4. **scores/league_shows realtime toasts: build a ping table (not a public RLS
+   policy, not polling).** This app has no per-request identity — players
+   authenticate via a name+PIN RPC, not Supabase Auth, so every request shares one
+   anon key regardless of which player is "logged in" client-side. A public RLS
+   policy on `scores`/`league_shows` would expose every score in every league to
+   anyone holding that key, undoing `get_bracket_scores`'s membership gate — ruled
+   out on that evidence, not preference. Instead: a new table carrying only
+   `{league_id, show_id, updated_at}` — no `bracket_id`, no counts, no deltas,
+   nothing inferable — written by the edge function once per scoring/notify pass
+   (not a trigger, which would fire per-row on every identical-value re-upsert
+   during a live show), added to the `supabase_realtime` publication with a public
+   SELECT policy (both required — see the publication/RLS gotcha above), ideally
+   on its own dedicated channel so a future misconfiguration here can't repeat the
+   channel-poisoning bug. Clients subscribe to the ping, then refetch the real data
+   through the existing authenticated RPC before toasting — privacy boundary
+   never crosses the public channel.
+5. **Notification-preference toggle: deferred, confirmed separate work** from the
+   toast fix above — the toast fix is a Supabase publication/config change with no
+   `realtime.js` diff; a mute toggle needs new schema, a new RPC, and new
+   `settings.js` UI that doesn't exist today. No shared surface worth bundling on.
+
+**Session order** (dependency- and shared-surface-driven, not priority-driven):
+- **Step 0, before Session 1:** this section itself, committed first, specifically
+  so the roadmap can't be lost across a context boundary the way the work it
+  describes already was once.
+- **Session 1 — admin edge-action wiring:** wire `cutoff_changed` into
+  `saveCutoff()`; fix the 500-vs-401/403 auth status codes (`reopen`/
+  `cutoff_changed`/`finalize` share one `catch` today).
+- **Session 2 — pick-sheet & setlist surface:** C2c tap-affordance tooltips
+  (player + admin, reading from `slotTypes.js`'s already-written
+  `SLOT_TOOLTIPS`); a debut GUI flag mirroring the existing `is_encore` pattern in
+  `realtime.js`'s live song toast and `picks.js`'s setlist view (footnote trivia
+  was descoped in favor of this — see the note above).
+- **Session 3 — the ping table (decision 4):** sequenced right after Session 2
+  since both touch `realtime.js`.
+- **Session 4 — auth + Global console, manual-approval execution mode** (touches
+  the login flow and adds the most dangerous new control in the app — a PIN
+  reset — so edits get reviewed individually, not batched). Strict internal
+  order: (1) add a global-admin fixture to `test/harness.mjs` *first* — every
+  scenario today presets a league admin, `p1`, and this project has already
+  shipped one real bug from that exact non-admin blind spot; testing the console
+  by hand instead of against the harness would repeat it. (2) `must_change_pin`
+  flag + the forced login interstitial. (3) the shared PIN-reset RPC. (4) the
+  reset buttons themselves (league-scoped in `admin.js`, Global-scoped in the new
+  console) — only after 2 and 3 are verified working; a reachable reset button
+  with no forced-change behind it is a worse security posture than the raw SQL
+  it replaces. (5) the Global console shell. (6) self-service PIN change, login
+  rate-limiting, and the Official opt-in default revisit — no dependency on the
+  above, interleave anywhere.
+- **Session 5 — Facebook League launch:** create the league + appoint its two
+  admins through the real console this time, provision one Discord webhook
+  secret, smoke-test. Blocked on the two admins being named and confirmed.
+
+**Dropped entirely:** the desktop sidebar/"mock2" claim — never existed, see the
+false-memory note above.
+
+**Deferred with an explicit revisit trigger, not dropped:** cross-league global
+stats (revisit past 2-3 leagues); the per-league webhook DB+UI (revisit if
+env-var management gets painful, or the Global console expands); the
+notification-preference toggle (no strong trigger, pick up whenever wanted);
+game numbering past 12 shows (revisit only if a season actually gets there).
 
 ---
 
