@@ -1,0 +1,3843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Test 2 Standings — Four Scoring Systems Compared</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="What Test 2's Official standings would look like under four different point-value systems.">
+<style>
+:root{
+  color-scheme: light;
+  --surface:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10); --card:#ffffff;
+  --blue:#2a78d6; --blue-fill:#cde2fb; --orange:#eb6834; --orange-fill:#f8d9c8;
+  --aqua:#1baf7a; --aqua-fill:#c8ede0;
+  --good:#0ca30c; --good-fill:#e3f7e3; --warn:#c98500; --warn-bg:#fdeecb; --gold:#eda100; --gold-bg:#fdf0d3;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --surface:#1a1a19; --page:#0d0d0d; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10); --card:#161615;
+    --blue:#3987e5; --blue-fill:#184f95; --orange:#d95926; --orange-fill:#5a2c15;
+    --aqua:#199e70; --aqua-fill:#0e3d2c;
+    --good:#0ca30c; --good-fill:#0e3a12; --warn:#fab219; --warn-bg:#3a2c05; --gold:#c98500; --gold-bg:#3a2c05;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface:#1a1a19; --page:#0d0d0d; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10); --card:#161615;
+  --blue:#3987e5; --blue-fill:#184f95; --orange:#d95926; --orange-fill:#5a2c15;
+  --good:#0ca30c; --warn:#fab219; --warn-bg:#3a2c05; --gold:#c98500; --gold-bg:#3a2c05;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.55;font-size:15px}
+.tabular{font-variant-numeric:tabular-nums}
+.wrap{max-width:980px;margin:0 auto;padding:32px 22px 100px}
+h1{font-size:1.6rem;font-weight:800;margin:0 0 6px;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:1.15rem;font-weight:800;margin:36px 0 8px;letter-spacing:-.005em}
+h3{font-size:.95rem;font-weight:700;margin:0 0 6px}
+.lede{color:var(--ink2);max-width:72ch;margin:0 0 4px}
+p.small{font-size:.87rem;color:var(--ink2)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:12px 0}
+.flag{border-left:3px solid var(--warn);background:var(--warn-bg);color:var(--ink)}
+.flag b.tag{display:inline-block;background:var(--warn);color:#1a1200;font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;margin-bottom:6px}
+:root:not([data-theme="light"]) .flag b.tag{color:#1a1200}
+table{width:100%;border-collapse:collapse;font-size:.87rem}
+th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;padding:0 10px 8px 0;border-bottom:1px solid var(--baseline)}
+td{padding:7px 10px 7px 0;border-bottom:1px solid var(--grid);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.wrap-table{overflow-x:auto}
+.mapping-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}
+.chip{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:6px 14px 6px 10px}
+.chip .n{width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.8rem}
+.chip .label{font-weight:700}
+.chip .why{font-size:.72rem;color:var(--muted)}
+.arrow{color:var(--muted);font-size:1.1rem}
+.badge{display:inline-block;font-size:.66rem;font-weight:700;padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
+.badge.tied{background:var(--gold-bg);color:var(--gold)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.tabs button{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:.85rem;font-weight:600;color:var(--ink2);cursor:pointer}
+.tabs button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.tabs button:disabled{opacity:.35;cursor:not-allowed}
+.tabgroup{margin:14px 0 4px}
+.tabgroup .tgl{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:4px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:inline-block;margin:4px 6px 4px 0}
+.stat .v{font-size:1.3rem;font-weight:800;font-variant-numeric:tabular-nums}
+.stat .l{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.statrow{display:flex;flex-wrap:wrap;gap:0;margin:12px 0}
+.name-me{font-weight:700}
+.sep-note{font-size:.76rem;color:var(--muted)}
+footer{margin-top:56px;padding:20px 0;border-top:1px solid var(--grid);color:var(--muted);font-size:.78rem}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.85em;background:var(--grid);padding:1px 5px;border-radius:4px}
+.legend-note{font-size:.78rem;color:var(--muted);margin-top:6px}
+
+/* ---------- tiebreak tree cards ---------- */
+.legend-row{display:flex;gap:16px;flex-wrap:wrap;font-size:.78rem;color:var(--ink2);margin:10px 0}
+.legend-row .sw{width:12px;height:12px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:-1px}
+.tb-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px 20px;margin:14px 0;overflow-x:auto}
+.tb-card .hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.tb-card .hd .rank{font-weight:800;font-size:1.05rem}
+.tb-card .hd .meta{font-size:.8rem;color:var(--muted)}
+.tb-tree{position:relative;margin-top:8px}
+.tb-node{position:absolute;transform:translate(-50%,0);text-align:center}
+.tb-node .box{display:inline-block;border-radius:10px;padding:6px 10px;font-size:.78rem;font-weight:700;border:1.5px solid var(--border);white-space:nowrap}
+.tb-node.leaf .box{white-space:normal;max-width:150px}
+.tb-node .box.resolved{background:var(--good-fill);border-color:var(--good);color:var(--good)}
+.tb-node .box.exhausted{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
+.tb-node .box.split-1{border-color:var(--blue);color:var(--blue);background:var(--blue-fill)}
+.tb-node .box.split-2{border-color:var(--orange);color:var(--orange);background:var(--orange-fill)}
+.tb-node .box.split-3{border-color:var(--aqua);color:var(--aqua);background:var(--aqua-fill)}
+.tb-node .box.wash{border-style:dashed;border-color:var(--muted);color:var(--muted);background:transparent;font-weight:600;font-style:italic}
+.tb-node .box.wash .names{font-style:normal}
+.tb-node .names{font-size:.72rem;font-weight:400;margin-top:2px;color:inherit;opacity:.9}
+.tb-edge-label{position:absolute;font-size:.68rem;font-weight:700;color:var(--ink2);background:var(--card);padding:0 4px;transform:translate(-50%,-50%)}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <h1>Test 2 standings, four ways</h1>
+  <p class="lede">Same four shows, same picks, same misses — recomputed from the actual stored per-pick results under four different point-value systems, so we can argue about the right numbers with real numbers instead of vibes.</p>
+  <p class="small" id="introNote"></p>
+
+  <h2>System D's mapping — decide before you look at the results</h2>
+  <p class="small">"Every slot a distinct value, increasing" needs a starting point and an ordering. Here's what was chosen, and why, before any standings below:</p>
+  <div class="mapping-row" id="mappingRow"></div>
+  <p class="small">Ordering comes from a separate analysis of The Carton's real setlist history (Shannon entropy per slot — how concentrated the historical answer actually is). Cover Pick is the clearest case: lowest entropy of the four, no tie-break needed. Opener and Closer came out statistically tied in that analysis (0.899 vs. 0.899); Closer was ranked slightly easier because its single most-common answer repeats more often historically (7.4% of shows) than Opener's (6.4%) — a judgment call on a genuine near-tie, not a clean data split. Starting point is 2 (today's flat value) for the easiest slot, +1 per step up.</p>
+
+  <h2>Three things flagged, not decided silently</h2>
+  <div id="flagBoxes"></div>
+
+  <h2>Headline comparison — all systems, both snapshots</h2>
+  <p class="small">"Tied positions" counts rank <i>slots</i> shared by more than one player <b>after</b> the real tiebreaker stack (fewest zero-point nights → most show wins → best single-show score) has already done its work — not raw point ties.</p>
+  <div class="wrap-table"><table id="headlineTable"></table></div>
+
+  <h2>Drill into any system</h2>
+  <div class="tabgroup"><div class="tgl">Scoring system</div><div class="tabs" id="sysTabs"></div></div>
+  <div class="tabgroup"><div class="tgl">Snapshot</div><div class="tabs" id="snapTabs"></div></div>
+  <div class="tabgroup"><div class="tgl">Partial credit (right song, wrong slot)</div><div class="tabs" id="partialTabs"></div></div>
+
+  <div class="statrow" id="statCards"></div>
+  <div class="wrap-table"><table id="standingsTable"></table></div>
+  <p class="legend-note">Zeros = shows scored 0 (including shows with no pick submitted at all) since joining the roster. Wins = shows where this player had the outright top score. High = best single-show score.</p>
+
+  <h2>Every tiebreak, in detail — current scoring</h2>
+  <p class="lede">Every tier the stack actually runs, for every tied group — including a tier that checks and separates nobody (a dashed, grayed-out box: the machinery ran, the tie survived it unchanged). The real ranking code silently skips straight past those; this view keeps them visible on purpose.</p>
+  <div class="tabgroup"><div class="tgl">Snapshot</div><div class="tabs" id="tbSnapTabs"></div></div>
+  <div class="legend-row" id="tbLegend"></div>
+  <div id="clearRanks" class="small" style="margin:10px 0"></div>
+  <div id="tbCards"></div>
+
+  <footer id="footerNote"></footer>
+</div>
+
+<script>
+const DATA = {
+  "SYSTEMS": {
+    "A": {
+      "label": "A — Actual",
+      "slotValues": {
+        "opener": 2,
+        "closer": 2,
+        "encore": 2,
+        "cover_pick": 2
+      },
+      "flatValue": 1,
+      "partialFlat": 1
+    },
+    "B": {
+      "label": "B — Slots 3, flat 2",
+      "slotValues": {
+        "opener": 3,
+        "closer": 3,
+        "encore": 3,
+        "cover_pick": 3
+      },
+      "flatValue": 2,
+      "partialFlat": 1
+    },
+    "C": {
+      "label": "C — Slots 5, flat unchanged (1)",
+      "slotValues": {
+        "opener": 5,
+        "closer": 5,
+        "encore": 5,
+        "cover_pick": 5
+      },
+      "flatValue": 1,
+      "partialFlat": 1
+    },
+    "D": {
+      "label": "D — Differentiated",
+      "slotValues": {
+        "cover_pick": 2,
+        "closer": 3,
+        "opener": 4,
+        "encore": 5
+      },
+      "flatValue": 1,
+      "partialFlat": 1
+    }
+  },
+  "SNAPSHOTS": {
+    "mid": {
+      "label": "Mid-season (after Aug 7 — Westcott Theater, 2 of 4 shows)",
+      "start_date": "2026-08-06",
+      "end_date": "2026-08-07"
+    },
+    "end": {
+      "label": "End of Test 2 (all 4 shows)",
+      "start_date": "2026-08-06",
+      "end_date": "2026-08-09"
+    }
+  },
+  "results": {
+    "A": {
+      "flat": {
+        "mid": {
+          "rows": [
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 1,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 2,
+              "high": 4
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 2,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "highest_single_show",
+              "layers": [
+                {
+                  "layer": "highest_single_show",
+                  "value": 3
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 3,
+              "points": 4,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "highest_single_show",
+                  "value": 2
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 3,
+              "points": 4,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "highest_single_show",
+                  "value": 2
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 5,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 6,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 7,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 8,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 8,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 8,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 11,
+              "points": 1,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 11,
+              "points": 1,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 3,
+          "tiedPlayerCount": 7,
+          "tieGroups": {
+            "3": [
+              "Kovajam",
+              "S42004"
+            ],
+            "8": [
+              "alhooks13",
+              "Budman",
+              "WookLord"
+            ],
+            "11": [
+              "Fluff",
+              "MrsFluff"
+            ]
+          },
+          "scoreRange": [
+            0,
+            7
+          ],
+          "distinctScores": 6,
+          "ranksResolvedByTiebreak": 4
+        },
+        "end": {
+          "rows": [
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 1,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 1,
+              "high": 3
+            },
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 2,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 2,
+              "high": 4
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 3,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 4,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 5,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 1,
+              "high": 3
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 6,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 7,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 8,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 9,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 10,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 11,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 3
+                }
+              ],
+              "zeros": 3,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 12,
+              "points": 1,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 3,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 4,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 0,
+          "tiedPlayerCount": 0,
+          "tieGroups": {},
+          "scoreRange": [
+            0,
+            7
+          ],
+          "distinctScores": 8,
+          "ranksResolvedByTiebreak": 9
+        }
+      }
+    },
+    "B": {
+      "flat": {
+        "mid": {
+          "rows": [
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 1,
+              "points": 11,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 2,
+              "high": 6
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 2,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 3,
+              "points": 6,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 3,
+              "points": 6,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 5,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 6,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 7,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 8,
+              "points": 3,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 8,
+              "points": 3,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 10,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 10,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 12,
+              "points": 1,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 3,
+          "tiedPlayerCount": 6,
+          "tieGroups": {
+            "3": [
+              "Kovajam",
+              "S42004"
+            ],
+            "8": [
+              "Budman",
+              "WookLord"
+            ],
+            "10": [
+              "alhooks13",
+              "Fluff"
+            ]
+          },
+          "scoreRange": [
+            0,
+            11
+          ],
+          "distinctScores": 9,
+          "ranksResolvedByTiebreak": 2
+        },
+        "end": {
+          "rows": [
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 1,
+              "points": 11,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 2,
+              "high": 6
+            },
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 2,
+              "points": 10,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 1,
+              "high": 4
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 3,
+              "points": 9,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 4,
+              "points": 9,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 5,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 6,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 7,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 8,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 1,
+              "high": 4
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 9,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 10,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 11,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 3
+                }
+              ],
+              "zeros": 3,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 12,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 3,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 4,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 0,
+          "tiedPlayerCount": 0,
+          "tieGroups": {},
+          "scoreRange": [
+            0,
+            11
+          ],
+          "distinctScores": 9,
+          "ranksResolvedByTiebreak": 8
+        }
+      },
+      "scaled": {
+        "mid": {
+          "rows": [
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 1,
+              "points": 11,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 2,
+              "high": 6
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 2,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": "highest_single_show",
+              "layers": [
+                {
+                  "layer": "highest_single_show",
+                  "value": 5
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 3,
+              "points": 7,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "highest_single_show",
+                  "value": 4
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 3,
+              "points": 7,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "highest_single_show",
+                  "value": 4
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 5,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 6,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 7,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 8,
+              "points": 4,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 8,
+              "points": 4,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 10,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 11,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 11,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 3,
+          "tiedPlayerCount": 6,
+          "tieGroups": {
+            "3": [
+              "Kovajam",
+              "S42004"
+            ],
+            "8": [
+              "alhooks13",
+              "WookLord"
+            ],
+            "11": [
+              "Fluff",
+              "MrsFluff"
+            ]
+          },
+          "scoreRange": [
+            0,
+            11
+          ],
+          "distinctScores": 8,
+          "ranksResolvedByTiebreak": 2
+        },
+        "end": {
+          "rows": [
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 1,
+              "points": 12,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 1,
+              "high": 5
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 2,
+              "points": 11,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 3,
+              "points": 11,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 2,
+              "high": 6
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 4,
+              "points": 10,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 5,
+              "points": 9,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 1,
+              "high": 5
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 6,
+              "points": 8,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 7,
+              "points": 8,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 8,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 9,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 10,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 11,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 3,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 12,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 3,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 4,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 0,
+          "tiedPlayerCount": 0,
+          "tieGroups": {},
+          "scoreRange": [
+            0,
+            12
+          ],
+          "distinctScores": 11,
+          "ranksResolvedByTiebreak": 4
+        }
+      }
+    },
+    "C": {
+      "flat": {
+        "mid": {
+          "rows": [
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 1,
+              "points": 16,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 2,
+              "high": 10
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 2,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": "highest_single_show",
+              "layers": [
+                {
+                  "layer": "highest_single_show",
+                  "value": 6
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 6
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 3,
+              "points": 7,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "highest_single_show",
+                  "value": 5
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 3,
+              "points": 7,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "highest_single_show",
+                  "value": 5
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 5,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 6
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 6,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 7,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 8,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 9,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 9,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 11,
+              "points": 1,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 11,
+              "points": 1,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 3,
+          "tiedPlayerCount": 6,
+          "tieGroups": {
+            "3": [
+              "Kovajam",
+              "S42004"
+            ],
+            "9": [
+              "alhooks13",
+              "WookLord"
+            ],
+            "11": [
+              "Fluff",
+              "MrsFluff"
+            ]
+          },
+          "scoreRange": [
+            0,
+            16
+          ],
+          "distinctScores": 8,
+          "ranksResolvedByTiebreak": 2
+        },
+        "end": {
+          "rows": [
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 1,
+              "points": 16,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 2,
+              "high": 10
+            },
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 2,
+              "points": 13,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 1,
+              "high": 6
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 3,
+              "points": 12,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 4,
+              "points": 9,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 5,
+              "points": 8,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 1,
+              "high": 6
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 6,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 6
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 7,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 3,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 8,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 9,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 10,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 11,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 12,
+              "points": 1,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 3,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 4,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 0,
+          "tiedPlayerCount": 0,
+          "tieGroups": {},
+          "scoreRange": [
+            0,
+            16
+          ],
+          "distinctScores": 12,
+          "ranksResolvedByTiebreak": 2
+        }
+      },
+      "scaled": {
+        "mid": {
+          "rows": [
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 1,
+              "points": 16,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 2,
+              "high": 10
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 2,
+              "points": 9,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 2,
+              "points": 9,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 4,
+              "points": 8,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 8
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 5,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 6
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 6,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 6
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 7,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 8,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 9,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 10,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 11,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 12,
+              "points": 1,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 1,
+          "tiedPlayerCount": 2,
+          "tieGroups": {
+            "2": [
+              "Kovajam",
+              "S42004"
+            ]
+          },
+          "scoreRange": [
+            0,
+            16
+          ],
+          "distinctScores": 11,
+          "ranksResolvedByTiebreak": 2
+        },
+        "end": {
+          "rows": [
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 1,
+              "points": 17,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 1,
+              "high": 8
+            },
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 2,
+              "points": 16,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 2,
+              "high": 10
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 3,
+              "points": 14,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 4,
+              "points": 14,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 1,
+              "high": 8
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 5,
+              "points": 13,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 6,
+              "points": 8,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 7,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 6
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 8,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 9,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 0,
+              "high": 4
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 10,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 3
+                }
+              ],
+              "zeros": 3,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 11,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 12,
+              "points": 1,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 3,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 4,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 0,
+          "tiedPlayerCount": 0,
+          "tieGroups": {},
+          "scoreRange": [
+            0,
+            17
+          ],
+          "distinctScores": 11,
+          "ranksResolvedByTiebreak": 4
+        }
+      }
+    },
+    "D": {
+      "flat": {
+        "mid": {
+          "rows": [
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 1,
+              "points": 10,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 2,
+              "high": 7
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 2,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 6
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 3,
+              "points": 4,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 3,
+              "points": 4,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 5,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 6,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 7,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 8,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 8,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 8,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 11,
+              "points": 1,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 11,
+              "points": 1,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 3,
+          "tiedPlayerCount": 7,
+          "tieGroups": {
+            "3": [
+              "Kovajam",
+              "S42004"
+            ],
+            "8": [
+              "alhooks13",
+              "Budman",
+              "WookLord"
+            ],
+            "11": [
+              "Fluff",
+              "MrsFluff"
+            ]
+          },
+          "scoreRange": [
+            0,
+            10
+          ],
+          "distinctScores": 7,
+          "ranksResolvedByTiebreak": 3
+        },
+        "end": {
+          "rows": [
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 1,
+              "points": 10,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 2,
+              "high": 7
+            },
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 2,
+              "points": 8,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 1,
+              "high": 4
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 3,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 6
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 4,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 5,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 6,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 1,
+              "high": 3
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 7,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 8,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 9,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 10,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 11,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 3
+                }
+              ],
+              "zeros": 3,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 12,
+              "points": 1,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 3,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 4,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 0,
+          "tiedPlayerCount": 0,
+          "tieGroups": {},
+          "scoreRange": [
+            0,
+            10
+          ],
+          "distinctScores": 10,
+          "ranksResolvedByTiebreak": 6
+        }
+      },
+      "scaled": {
+        "mid": {
+          "rows": [
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 1,
+              "points": 10,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 2,
+              "high": 7
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 2,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 6
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 3,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": "most_wins",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                },
+                {
+                  "layer": "most_wins",
+                  "value": 1
+                }
+              ],
+              "zeros": 0,
+              "wins": 1,
+              "high": 3
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 4,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": "most_wins",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                },
+                {
+                  "layer": "most_wins",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 5,
+              "points": 5,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 5,
+              "points": 5,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 5
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 7,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 8,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 9,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 0
+                }
+              ],
+              "zeros": 0,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 10,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 10,
+              "points": 2,
+              "tied": true,
+              "resolvedBy": null,
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 12,
+              "points": 1,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 2,
+          "tiedPlayerCount": 4,
+          "tieGroups": {
+            "5": [
+              "alhooks13",
+              "Sissy"
+            ],
+            "10": [
+              "Budman",
+              "MrsFluff"
+            ]
+          },
+          "scoreRange": [
+            0,
+            10
+          ],
+          "distinctScores": 8,
+          "ranksResolvedByTiebreak": 3
+        },
+        "end": {
+          "rows": [
+            {
+              "id": "c7fbf592-8f96-4b34-aa1c-2c1c6e414206",
+              "name": "Sissy",
+              "rank": 1,
+              "points": 11,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 1,
+              "high": 5
+            },
+            {
+              "id": "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+              "name": "Justin",
+              "rank": 2,
+              "points": 10,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 2,
+              "high": 7
+            },
+            {
+              "id": "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+              "name": "alhooks13",
+              "rank": 3,
+              "points": 9,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 1,
+              "high": 5
+            },
+            {
+              "id": "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "name": "Kovajam",
+              "rank": 4,
+              "points": 8,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "name": "S42004",
+              "rank": 5,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 1
+                }
+              ],
+              "zeros": 1,
+              "wins": 1,
+              "high": 3
+            },
+            {
+              "id": "69de4877-0a5a-4dae-918d-dc3105345cb7",
+              "name": "Trevino",
+              "rank": 6,
+              "points": 7,
+              "tied": false,
+              "resolvedBy": "fewest_zeros",
+              "layers": [
+                {
+                  "layer": "fewest_zeros",
+                  "value": 2
+                }
+              ],
+              "zeros": 2,
+              "wins": 0,
+              "high": 6
+            },
+            {
+              "id": "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+              "name": "pooka",
+              "rank": 7,
+              "points": 6,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 1,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+              "name": "The Judge",
+              "rank": 8,
+              "points": 5,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 0,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "c01c2eac-17cb-4a53-8c37-88e16b79f0ed",
+              "name": "WookLord",
+              "rank": 9,
+              "points": 4,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 3
+            },
+            {
+              "id": "b22ed8ba-6aae-4a26-bde0-528683411a52",
+              "name": "MrsFluff",
+              "rank": 10,
+              "points": 3,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 2,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+              "name": "Budman",
+              "rank": 11,
+              "points": 2,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 3,
+              "wins": 0,
+              "high": 2
+            },
+            {
+              "id": "4e444b53-5df9-441b-9393-d129774cddfa",
+              "name": "Fluff",
+              "rank": 12,
+              "points": 1,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 3,
+              "wins": 0,
+              "high": 1
+            },
+            {
+              "id": "e0e1189b-99db-426c-87a9-97ee05b7166c",
+              "name": "Kobeybeef",
+              "rank": 13,
+              "points": 0,
+              "tied": false,
+              "resolvedBy": null,
+              "layers": [],
+              "zeros": 4,
+              "wins": 0,
+              "high": 0
+            }
+          ],
+          "tiedPositionCount": 0,
+          "tiedPlayerCount": 0,
+          "tieGroups": {},
+          "scoreRange": [
+            0,
+            11
+          ],
+          "distinctScores": 12,
+          "ranksResolvedByTiebreak": 2
+        }
+      }
+    }
+  }
+};
+const TIEBREAK_TREES = {
+  "mid": [
+    {
+      "points": 7,
+      "size": 1,
+      "rankStart": 1,
+      "rankEnd": 1,
+      "tree": {
+        "type": "resolved",
+        "ids": [
+          "d3c1e50f-8243-4613-a203-2d6d0fbadb7a"
+        ],
+        "names": [
+          "Justin"
+        ]
+      }
+    },
+    {
+      "points": 4,
+      "size": 3,
+      "rankStart": 2,
+      "rankEnd": 4,
+      "tree": {
+        "type": "wash",
+        "layer": "fewest_zeros",
+        "ids": [
+          "6cc47b67-a502-4223-be16-7d68ecc90a06",
+          "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+          "69de4877-0a5a-4dae-918d-dc3105345cb7"
+        ],
+        "value": 0,
+        "child": {
+          "type": "wash",
+          "layer": "most_wins",
+          "ids": [
+            "6cc47b67-a502-4223-be16-7d68ecc90a06",
+            "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+            "69de4877-0a5a-4dae-918d-dc3105345cb7"
+          ],
+          "value": 0,
+          "child": {
+            "type": "split",
+            "layer": "highest_single_show",
+            "ids": [
+              "6cc47b67-a502-4223-be16-7d68ecc90a06",
+              "85dda4d9-99b5-4391-9f05-81c1a9664b61",
+              "69de4877-0a5a-4dae-918d-dc3105345cb7"
+            ],
+            "children": [
+              {
+                "value": 3,
+                "node": {
+                  "type": "resolved",
+                  "ids": [
+                    "69de4877-0a5a-4dae-918d-dc3105345cb7"
+                  ],
+                  "names": [
+                    "Trevino"
+                  ]
+                }
+              },
+              {
+                "value": 2,
+                "node": {
+                  "type": "exhausted",
+                  "ids": [
+                    "6cc47b67-a502-4223-be16-7d68ecc90a06",
+                    "85dda4d9-99b5-4391-9f05-81c1a9664b61"
+                  ],
+                  "names": [
+                    "Kovajam",
+                    "S42004"
+                  ]
+                }
+              }
+            ],
+            "names": [
+              "Kovajam",
+              "S42004",
+              "Trevino"
+            ]
+          },
+          "names": [
+            "Kovajam",
+            "S42004",
+            "Trevino"
+          ]
+        },
+        "names": [
+          "Kovajam",
+          "S42004",
+          "Trevino"
+        ]
+      }
+    },
+    {
+      "points": 3,
+      "size": 2,
+      "rankStart": 5,
+      "rankEnd": 6,
+      "tree": {
+        "type": "split",
+        "layer": "fewest_zeros",
+        "ids": [
+          "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+          "c7fbf592-8f96-4b34-aa1c-2c1c6e414206"
+        ],
+        "children": [
+          {
+            "value": 0,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "b95eb36d-4371-47f7-8d56-fd379d7c2d7f"
+              ],
+              "names": [
+                "pooka"
+              ]
+            }
+          },
+          {
+            "value": 1,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "c7fbf592-8f96-4b34-aa1c-2c1c6e414206"
+              ],
+              "names": [
+                "Sissy"
+              ]
+            }
+          }
+        ],
+        "names": [
+          "pooka",
+          "Sissy"
+        ]
+      }
+    },
+    {
+      "points": 2,
+      "size": 4,
+      "rankStart": 7,
+      "rankEnd": 10,
+      "tree": {
+        "type": "split",
+        "layer": "fewest_zeros",
+        "ids": [
+          "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+          "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+          "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+          "c01c2eac-17cb-4a53-8c37-88e16b79f0ed"
+        ],
+        "children": [
+          {
+            "value": 0,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2"
+              ],
+              "names": [
+                "The Judge"
+              ]
+            }
+          },
+          {
+            "value": 1,
+            "node": {
+              "type": "wash",
+              "layer": "most_wins",
+              "ids": [
+                "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+                "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+                "c01c2eac-17cb-4a53-8c37-88e16b79f0ed"
+              ],
+              "value": 0,
+              "child": {
+                "type": "wash",
+                "layer": "highest_single_show",
+                "ids": [
+                  "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+                  "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+                  "c01c2eac-17cb-4a53-8c37-88e16b79f0ed"
+                ],
+                "value": 2,
+                "child": {
+                  "type": "exhausted",
+                  "ids": [
+                    "3f00f32a-cd4d-4f27-82da-b8fa735b3b62",
+                    "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+                    "c01c2eac-17cb-4a53-8c37-88e16b79f0ed"
+                  ],
+                  "names": [
+                    "alhooks13",
+                    "Budman",
+                    "WookLord"
+                  ]
+                },
+                "names": [
+                  "alhooks13",
+                  "Budman",
+                  "WookLord"
+                ]
+              },
+              "names": [
+                "alhooks13",
+                "Budman",
+                "WookLord"
+              ]
+            }
+          }
+        ],
+        "names": [
+          "alhooks13",
+          "Budman",
+          "The Judge",
+          "WookLord"
+        ]
+      }
+    },
+    {
+      "points": 1,
+      "size": 2,
+      "rankStart": 11,
+      "rankEnd": 12,
+      "tree": {
+        "type": "wash",
+        "layer": "fewest_zeros",
+        "ids": [
+          "4e444b53-5df9-441b-9393-d129774cddfa",
+          "b22ed8ba-6aae-4a26-bde0-528683411a52"
+        ],
+        "value": 1,
+        "child": {
+          "type": "wash",
+          "layer": "most_wins",
+          "ids": [
+            "4e444b53-5df9-441b-9393-d129774cddfa",
+            "b22ed8ba-6aae-4a26-bde0-528683411a52"
+          ],
+          "value": 0,
+          "child": {
+            "type": "wash",
+            "layer": "highest_single_show",
+            "ids": [
+              "4e444b53-5df9-441b-9393-d129774cddfa",
+              "b22ed8ba-6aae-4a26-bde0-528683411a52"
+            ],
+            "value": 1,
+            "child": {
+              "type": "exhausted",
+              "ids": [
+                "4e444b53-5df9-441b-9393-d129774cddfa",
+                "b22ed8ba-6aae-4a26-bde0-528683411a52"
+              ],
+              "names": [
+                "Fluff",
+                "MrsFluff"
+              ]
+            },
+            "names": [
+              "Fluff",
+              "MrsFluff"
+            ]
+          },
+          "names": [
+            "Fluff",
+            "MrsFluff"
+          ]
+        },
+        "names": [
+          "Fluff",
+          "MrsFluff"
+        ]
+      }
+    },
+    {
+      "points": 0,
+      "size": 1,
+      "rankStart": 13,
+      "rankEnd": 13,
+      "tree": {
+        "type": "resolved",
+        "ids": [
+          "e0e1189b-99db-426c-87a9-97ee05b7166c"
+        ],
+        "names": [
+          "Kobeybeef"
+        ]
+      }
+    }
+  ],
+  "end": [
+    {
+      "points": 7,
+      "size": 2,
+      "rankStart": 1,
+      "rankEnd": 2,
+      "tree": {
+        "type": "split",
+        "layer": "fewest_zeros",
+        "ids": [
+          "d3c1e50f-8243-4613-a203-2d6d0fbadb7a",
+          "c7fbf592-8f96-4b34-aa1c-2c1c6e414206"
+        ],
+        "children": [
+          {
+            "value": 1,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "c7fbf592-8f96-4b34-aa1c-2c1c6e414206"
+              ],
+              "names": [
+                "Sissy"
+              ]
+            }
+          },
+          {
+            "value": 2,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "d3c1e50f-8243-4613-a203-2d6d0fbadb7a"
+              ],
+              "names": [
+                "Justin"
+              ]
+            }
+          }
+        ],
+        "names": [
+          "Justin",
+          "Sissy"
+        ]
+      }
+    },
+    {
+      "points": 6,
+      "size": 2,
+      "rankStart": 3,
+      "rankEnd": 4,
+      "tree": {
+        "type": "split",
+        "layer": "fewest_zeros",
+        "ids": [
+          "6cc47b67-a502-4223-be16-7d68ecc90a06",
+          "85dda4d9-99b5-4391-9f05-81c1a9664b61"
+        ],
+        "children": [
+          {
+            "value": 0,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "6cc47b67-a502-4223-be16-7d68ecc90a06"
+              ],
+              "names": [
+                "Kovajam"
+              ]
+            }
+          },
+          {
+            "value": 1,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "85dda4d9-99b5-4391-9f05-81c1a9664b61"
+              ],
+              "names": [
+                "S42004"
+              ]
+            }
+          }
+        ],
+        "names": [
+          "Kovajam",
+          "S42004"
+        ]
+      }
+    },
+    {
+      "points": 5,
+      "size": 1,
+      "rankStart": 5,
+      "rankEnd": 5,
+      "tree": {
+        "type": "resolved",
+        "ids": [
+          "3f00f32a-cd4d-4f27-82da-b8fa735b3b62"
+        ],
+        "names": [
+          "alhooks13"
+        ]
+      }
+    },
+    {
+      "points": 4,
+      "size": 3,
+      "rankStart": 6,
+      "rankEnd": 8,
+      "tree": {
+        "type": "split",
+        "layer": "fewest_zeros",
+        "ids": [
+          "b95eb36d-4371-47f7-8d56-fd379d7c2d7f",
+          "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2",
+          "69de4877-0a5a-4dae-918d-dc3105345cb7"
+        ],
+        "children": [
+          {
+            "value": 0,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "a3fb193f-92f8-4a77-ada9-6b38aa2a08a2"
+              ],
+              "names": [
+                "The Judge"
+              ]
+            }
+          },
+          {
+            "value": 1,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "b95eb36d-4371-47f7-8d56-fd379d7c2d7f"
+              ],
+              "names": [
+                "pooka"
+              ]
+            }
+          },
+          {
+            "value": 2,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "69de4877-0a5a-4dae-918d-dc3105345cb7"
+              ],
+              "names": [
+                "Trevino"
+              ]
+            }
+          }
+        ],
+        "names": [
+          "pooka",
+          "The Judge",
+          "Trevino"
+        ]
+      }
+    },
+    {
+      "points": 3,
+      "size": 1,
+      "rankStart": 9,
+      "rankEnd": 9,
+      "tree": {
+        "type": "resolved",
+        "ids": [
+          "c01c2eac-17cb-4a53-8c37-88e16b79f0ed"
+        ],
+        "names": [
+          "WookLord"
+        ]
+      }
+    },
+    {
+      "points": 2,
+      "size": 2,
+      "rankStart": 10,
+      "rankEnd": 11,
+      "tree": {
+        "type": "split",
+        "layer": "fewest_zeros",
+        "ids": [
+          "5e9415ad-eef6-4f05-880b-1db8f8933c56",
+          "b22ed8ba-6aae-4a26-bde0-528683411a52"
+        ],
+        "children": [
+          {
+            "value": 2,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "b22ed8ba-6aae-4a26-bde0-528683411a52"
+              ],
+              "names": [
+                "MrsFluff"
+              ]
+            }
+          },
+          {
+            "value": 3,
+            "node": {
+              "type": "resolved",
+              "ids": [
+                "5e9415ad-eef6-4f05-880b-1db8f8933c56"
+              ],
+              "names": [
+                "Budman"
+              ]
+            }
+          }
+        ],
+        "names": [
+          "Budman",
+          "MrsFluff"
+        ]
+      }
+    },
+    {
+      "points": 1,
+      "size": 1,
+      "rankStart": 12,
+      "rankEnd": 12,
+      "tree": {
+        "type": "resolved",
+        "ids": [
+          "4e444b53-5df9-441b-9393-d129774cddfa"
+        ],
+        "names": [
+          "Fluff"
+        ]
+      }
+    },
+    {
+      "points": 0,
+      "size": 1,
+      "rankStart": 13,
+      "rankEnd": 13,
+      "tree": {
+        "type": "resolved",
+        "ids": [
+          "e0e1189b-99db-426c-87a9-97ee05b7166c"
+        ],
+        "names": [
+          "Kobeybeef"
+        ]
+      }
+    }
+  ]
+};
+const { SYSTEMS, SNAPSHOTS, results } = DATA;
+const esc = (s) => (s ?? "").toString().replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const SEP_LABEL = { fewest_zeros: "fewest zero-point nights", most_wins: "most show wins", highest_single_show: "best single-show score" };
+const SLOT_LABEL = { opener: "Opener", closer: "Closer", encore: "Encore", cover_pick: "Cover Pick" };
+const SYS_ORDER = ["A", "B", "C", "D"];
+const SNAP_ORDER = ["mid", "end"];
+
+document.getElementById("introNote").innerHTML =
+  `Source: the real <code>scores.breakdown</code> rows for all 4 Test 2 shows (Aug 6–9), reclassified pick-by-pick (exact hit / partial credit / flat-pick hit / miss) and re-priced under each system — not scaled from final totals. Checked against the app's live totals: the recomputed System A numbers match the stored scores exactly, row for row.`;
+
+// ---- System D mapping chips ----
+{
+  const order = Object.entries(SYSTEMS.D.slotValues).sort((a,b) => a[1]-b[1]);
+  document.getElementById("mappingRow").innerHTML = order.map(([type,val], i) => `
+    ${i>0 ? '<span class="arrow">&rarr;</span>' : ''}
+    <div class="chip"><div class="n">${val}</div><div><div class="label">${SLOT_LABEL[type]}</div></div></div>
+  `).join("");
+}
+
+// ---- Flag boxes ----
+document.getElementById("flagBoxes").innerHTML = `
+  <div class="card flag">
+    <b class="tag">Flag 1 — Partial credit</b>
+    <h3>Stays flat (+1) by default; a scaled variant is shown too</h3>
+    <p class="small">Today, a right-song-wrong-slot pick pays a flat 1 point no matter which slot it was aimed at. In Test 2's 4 shows, that happened 13 times across 48 pick-sheets, and one player (alhooks13, Aug 7) landed it twice in the same night. Left as a flat +1 across every system below by default — but every system B/C/D view has a <b>"scaled" toggle</b> where partial credit becomes half the slot's exact-hit value, rounded (so under Differentiated, a near-miss on Encore pays more than a near-miss on Cover Pick). Flip it — it visibly changes who's tied at the mid-season snapshot in at least one system.</p>
+  </div>
+  <div class="card flag">
+    <b class="tag">Flag 2 — Flat picks under System C</b>
+    <h3>Left at today's value (1 point), by choice</h3>
+    <p class="small">System C only specified "slots worth 5" — flat picks (any song, any position) weren't mentioned. Read that literally: only what was explicitly changed, changed. Flat picks stay at 1 point under System C (and under System D, which also didn't specify them) rather than guessing a scaled-up number. If the intent was actually "flat picks should track the slot inflation too," that's a real alternative worth asking about — this just isn't it by default.</p>
+  </div>
+  <div class="card flag">
+    <b class="tag">Flag 3 — Bonuses and the Any Debut wildcard</b>
+    <h3>Left alone, and confirmed inert for these specific results</h3>
+    <p class="small">Cover bonus and debut bonus are 0 in every system below (unchanged) — not touched, since none of this was in scope. The perfect-sheet bonus (2 points, never adjusted here either) never fired in any of the 4 shows — confirmed directly from the data, not just from the fact that it's rare. The Any Debut wildcard was picked twice (both by WookLord), and no debut happened either night, so it scored 0 both times regardless of which system is applied. None of the three change anything about these particular results, under any system — worth knowing that up front rather than wondering if they're secretly doing something.</p>
+  </div>
+`;
+
+// ---- Headline comparison table ----
+{
+  const rowsHtml = [];
+  for (const sysKey of SYS_ORDER) {
+    const modes = Object.keys(results[sysKey]);
+    for (const mode of modes) {
+      const label = SYSTEMS[sysKey].label + (modes.length > 1 ? ` (partial: ${mode})` : "");
+      const cells = SNAP_ORDER.map(snapKey => {
+        const r = results[sysKey][mode][snapKey];
+        return `<td class="num tabular">${r.tiedPositionCount}</td><td class="num tabular">${r.tiedPlayerCount}</td><td class="num tabular">${r.scoreRange[0]}&ndash;${r.scoreRange[1]}</td><td class="num tabular">${r.distinctScores}</td><td class="num tabular">${r.ranksResolvedByTiebreak}</td>`;
+      }).join(`<td style="border-right:1px solid var(--baseline)"></td>`);
+      rowsHtml.push(`<tr><td>${esc(label)}</td>${cells}</tr>`);
+    }
+  }
+  document.getElementById("headlineTable").innerHTML = `
+    <tr>
+      <th rowspan="2" style="vertical-align:bottom">System</th>
+      <th colspan="5" style="text-align:center;border-bottom:1px solid var(--baseline)">${SNAPSHOTS.mid.label}</th>
+      <th></th>
+      <th colspan="5" style="text-align:center;border-bottom:1px solid var(--baseline)">${SNAPSHOTS.end.label}</th>
+    </tr>
+    <tr>
+      <th class="num">Tied positions</th><th class="num">Tied players</th><th class="num">Score range</th><th class="num">Distinct scores</th><th class="num">Ranks tiebreak resolved</th>
+      <th></th>
+      <th class="num">Tied positions</th><th class="num">Tied players</th><th class="num">Score range</th><th class="num">Distinct scores</th><th class="num">Ranks tiebreak resolved</th>
+    </tr>
+    ${rowsHtml.join("")}
+  `;
+}
+
+// ---- Interactive drill-down ----
+let state = { sys: "A", snap: "end", partial: "flat" };
+
+function render() {
+  const modes = Object.keys(results[state.sys]);
+  if (!modes.includes(state.partial)) state.partial = modes[0];
+
+  document.getElementById("sysTabs").innerHTML = SYS_ORDER.map(k =>
+    `<button data-sys="${k}" class="${state.sys===k?'on':''}">${SYSTEMS[k].label}</button>`).join("");
+  document.getElementById("snapTabs").innerHTML = SNAP_ORDER.map(k =>
+    `<button data-snap="${k}" class="${state.snap===k?'on':''}">${SNAPSHOTS[k].label}</button>`).join("");
+  document.getElementById("partialTabs").innerHTML = ["flat","scaled"].map(k =>
+    `<button data-partial="${k}" class="${state.partial===k?'on':''}" ${!modes.includes(k)?'disabled':''}>${k==="flat"?"Flat (+1, today's rule)":"Scaled (half the slot's value)"}</button>`).join("");
+
+  const r = results[state.sys][state.partial][state.snap];
+
+  document.getElementById("statCards").innerHTML = [
+    { v: r.tiedPositionCount, l: "Tied positions" },
+    { v: r.tiedPlayerCount, l: "Players in a tie" },
+    { v: `${r.scoreRange[0]}&ndash;${r.scoreRange[1]}`, l: "Score range" },
+    { v: r.distinctScores, l: "Distinct scores" },
+    { v: r.ranksResolvedByTiebreak, l: "Ranks tiebreak resolved" },
+  ].map(s => `<div class="stat"><div class="v tabular">${s.v}</div><div class="l">${s.l}</div></div>`).join("");
+
+  document.getElementById("standingsTable").innerHTML = `
+    <tr><th>Rank</th><th>Player</th><th class="num">Points</th><th>Separated by</th><th class="num">Zeros</th><th class="num">Wins</th><th class="num">High</th></tr>
+    ${r.rows.map(row => `<tr>
+      <td class="tabular">${row.rank}</td>
+      <td>${esc(row.name)} ${row.tied ? '<span class="badge tied">tied</span>' : ""}</td>
+      <td class="num tabular" style="font-weight:800">${row.points}</td>
+      <td class="sep-note">${row.resolvedBy ? SEP_LABEL[row.resolvedBy] : (row.tied ? "not separated — genuine tie" : "&mdash;")}</td>
+      <td class="num tabular">${row.zeros}</td>
+      <td class="num tabular">${row.wins}</td>
+      <td class="num tabular">${row.high}</td>
+    </tr>`).join("")}
+  `;
+}
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.sys) state.sys = b.dataset.sys;
+  else if (b.dataset.snap) state.snap = b.dataset.snap;
+  else if (b.dataset.partial && !b.disabled) state.partial = b.dataset.partial;
+  else return;
+  render();
+});
+render();
+
+// ==================== Tiebreak tree section ====================
+const LAYER_CLASS = { fewest_zeros: "split-1", most_wins: "split-2", highest_single_show: "split-3" };
+const LAYER_SHORT = { fewest_zeros: "Fewest zeros", most_wins: "Most wins", highest_single_show: "High score" };
+const LAYER_UNIT = { fewest_zeros: n => n + (n===1?" zero":" zeros"), most_wins: n => n + (n===1?" win":" wins"), highest_single_show: n => n + " pt high" };
+
+document.getElementById("tbLegend").innerHTML = `
+  <span><span class="sw" style="background:var(--blue)"></span>Tier 1 — Fewest zeros</span>
+  <span><span class="sw" style="background:var(--orange)"></span>Tier 2 — Most wins</span>
+  <span><span class="sw" style="background:var(--aqua)"></span>Tier 3 — Highest single-show score</span>
+  <span><span class="sw" style="background:var(--good)"></span>Resolved (clear rank)</span>
+  <span><span class="sw" style="background:var(--warn)"></span>Still tied — stack exhausted</span>
+  <span><span class="sw" style="background:transparent;border:1.5px dashed var(--muted)"></span>Tier ran, split nobody (washed)</span>
+`;
+
+// Assigns every node an x (leaf-unit position, via post-order average-of-children)
+// and depth (tier index, 0 = the point-tied group itself). Returns a flat list
+// of {node-ish, x, depth, parentX, parentDepth, edgeValue, edgeLayer} entries
+// plus the max depth/leaf-count, for pixel-position conversion at render time.
+function layoutTree(root) {
+  let nextLeafX = 0;
+  const flat = [];
+  // Each child is visited with its own `link` object (capturing the edge's
+  // layer/value up front); the split's x — only known once every child has
+  // been laid out — is written into each child's link afterward. Every flat
+  // entry holds a reference to that same link object, so this mutation is
+  // exactly what render() reads back as "where does this edge start."
+  function visit(node, depth, link) {
+    if (node.type === "resolved" || node.type === "exhausted") {
+      const x = nextLeafX++;
+      flat.push({ node, x, depth, parent: link });
+      return x;
+    }
+    if (node.type === "wash") {
+      // A tier that ran and separated nobody — one child, straight down, no
+      // branch-value label on that edge (the wash box itself states the
+      // shared value, so a second label saying the same thing would be
+      // redundant clutter right under it).
+      const childLink = { x: null, depth, layer: node.layer, value: node.value, isWash: true };
+      const cx = visit(node.child, depth + 1, childLink);
+      childLink.x = cx;
+      flat.push({ node, x: cx, depth, parent: link, isInternal: true, isWash: true });
+      return cx;
+    }
+    const kids = node.children.map(c => {
+      const childLink = { x: null, depth, layer: node.layer, value: c.value };
+      const cx = visit(c.node, depth + 1, childLink);
+      return { cx, childLink };
+    });
+    const x = kids.reduce((a, k) => a + k.cx, 0) / kids.length;
+    for (const k of kids) k.childLink.x = x;
+    flat.push({ node, x, depth, parent: link, isInternal: true });
+    return x;
+  }
+  visit(root, 0, null);
+  const maxDepth = Math.max(...flat.map(f => f.depth));
+  const leafCount = nextLeafX;
+  return { flat, maxDepth, leafCount };
+}
+
+const COL_W = 130, ROW_H = 74, PAD = 10;
+
+function renderTreeCard(group) {
+  const { flat, maxDepth, leafCount } = layoutTree(group.tree);
+  const width = leafCount * COL_W;
+  const height = (maxDepth + 1) * ROW_H + 30;
+  const px = x => PAD + x * COL_W + COL_W / 2;
+  const py = depth => PAD + depth * ROW_H + 22;
+
+  let svgLines = "";
+  let nodesHtml = "";
+  let edgeLabelsHtml = "";
+  for (const f of flat) {
+    const cx = px(f.x), cy = py(f.depth);
+    if (f.parent) {
+      const pcx = px(f.parent.x), pcy = py(f.parent.depth);
+      const midY = (pcy + cy) / 2;
+      const dashed = f.parent.isWash ? ` stroke-dasharray="3,3"` : "";
+      svgLines += `<path d="M${pcx},${pcy+16} C${pcx},${midY} ${cx},${midY} ${cx},${cy-16}" fill="none" stroke="var(--baseline)" stroke-width="1.5"${dashed}/>`;
+      if (!f.parent.isWash) {
+        const unitFn = LAYER_UNIT[f.parent.layer];
+        // Plain positioned HTML, not <foreignObject> — an HTML label embedded
+        // inside inline SVG is fragile to render/rasterize reliably (hung a
+        // screenshot tool outright while building this); a sibling div in the
+        // same coordinate space draws identically without that risk.
+        edgeLabelsHtml += `<div class="tb-edge-label" style="left:${(pcx+cx)/2}px;top:${midY}px">${unitFn(f.parent.value)}</div>`;
+      }
+    }
+    if (f.isWash) {
+      const unitFn = LAYER_UNIT[f.node.layer];
+      nodesHtml += `<div class="tb-node" style="left:${cx}px;top:${cy-16}px"><div class="box wash">${LAYER_SHORT[f.node.layer]} &mdash; no split<div class="names">everyone: ${unitFn(f.node.value)}</div></div></div>`;
+    } else if (f.isInternal) {
+      const cls = LAYER_CLASS[f.node.layer];
+      nodesHtml += `<div class="tb-node" style="left:${cx}px;top:${cy-16}px"><div class="box ${cls}">${LAYER_SHORT[f.node.layer]}</div></div>`;
+    } else {
+      const cls = f.node.type === "resolved" ? "resolved" : "exhausted";
+      nodesHtml += `<div class="tb-node leaf" style="left:${cx}px;top:${cy-16}px"><div class="box ${cls}">${esc(f.node.names.join(", "))}</div></div>`;
+    }
+  }
+  return `
+    <div class="tb-card">
+      <div class="hd">
+        <span class="rank">${group.rankStart === group.rankEnd ? "Rank " + group.rankStart : "Ranks " + group.rankStart + "&ndash;" + group.rankEnd}</span>
+        <span class="meta">${group.points} points &middot; ${group.size} players tied</span>
+      </div>
+      <div class="tb-tree" style="width:${width}px;height:${height}px">
+        <svg width="${width}" height="${height}" style="position:absolute;top:0;left:0;overflow:visible">${svgLines}</svg>
+        ${edgeLabelsHtml}
+        ${nodesHtml}
+      </div>
+    </div>
+  `;
+}
+
+let tbSnap = "end";
+function renderTiebreakSection() {
+  document.getElementById("tbSnapTabs").innerHTML = SNAP_ORDER.map(k =>
+    `<button data-tbsnap="${k}" class="${tbSnap===k?'on':''}">${SNAPSHOTS[k].label}</button>`).join("");
+  const groups = TIEBREAK_TREES[tbSnap];
+  const clear = groups.filter(g => g.size === 1);
+  const tied = groups.filter(g => g.size > 1);
+  document.getElementById("clearRanks").innerHTML = clear.length
+    ? `<b>No tie at all:</b> ${clear.map(g => `${esc(g.tree.names[0])} (rank ${g.rankStart}, ${g.points}pt${g.points===1?'':'s'})`).join(" &middot; ")}`
+    : "";
+  document.getElementById("tbCards").innerHTML = tied.map(renderTreeCard).join("") || `<p class="small">No ties at all at this snapshot — every player finished on a distinct point total.</p>`;
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-tbsnap]");
+  if (!b) return;
+  tbSnap = b.dataset.tbsnap;
+  renderTiebreakSection();
+});
+renderTiebreakSection();
+
+document.getElementById("footerNote").textContent =
+  `Test 2 — Official bracket, Ambassadors league. Shows: Aug 6 (Stowe Cider), Aug 7 (Westcott Theater), Aug 8 (Stowe Cider), Aug 9 (On the Ocean Festival, one-set format — no Encore slot that night). 13 players on the season roster. This is a standalone comparison document — nothing about the live app or its data was changed to produce it.`;
+</script>
+
+</body>
+</html>

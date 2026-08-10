@@ -1,0 +1,1898 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slot Predictability & Point-Value Proposal</title>
+<meta name="description" content="Carton setlist history analyzed per vote slot — entropy, concentration, and a proposed point-value spread.">
+<style>
+:root{
+  color-scheme: light;
+  --surface-1:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+  --series-1:#2a78d6; --series-1-fill:#cde2fb; --series-2:#eb6834; --series-2-fill:#f8d9c8;
+  --good:#0ca30c; --warn:#fab219; --card:#ffffff;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --surface-1:#1a1a19; --page:#0d0d0d; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+    --series-1:#3987e5; --series-1-fill:#184f95; --series-2:#d95926; --series-2-fill:#5a2c15;
+    --good:#0ca30c; --warn:#fab219; --card:#161615;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface-1:#1a1a19; --page:#0d0d0d; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+  --series-1:#3987e5; --series-1-fill:#184f95; --series-2:#d95926; --series-2-fill:#5a2c15;
+  --good:#0ca30c; --warn:#fab219; --card:#161615;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.55;font-size:15px}
+.tabular{font-variant-numeric:tabular-nums}
+.layout{display:grid;grid-template-columns:220px 1fr;gap:0;max-width:1180px;margin:0 auto}
+@media (max-width:860px){ .layout{grid-template-columns:1fr} }
+nav.toc{position:sticky;top:0;align-self:start;padding:28px 16px 28px 20px;font-size:.82rem;max-height:100vh;overflow-y:auto}
+@media (max-width:860px){ nav.toc{position:static;max-height:none;padding:16px 20px 0} }
+nav.toc a{display:block;color:var(--ink2);text-decoration:none;padding:5px 0;border-left:2px solid transparent}
+nav.toc a:hover{color:var(--ink)}
+nav.toc .toc-title{font-weight:700;color:var(--muted);text-transform:uppercase;font-size:.7rem;letter-spacing:.06em;margin:16px 0 4px}
+main{padding:28px 28px 100px;min-width:0}
+h1{font-size:1.55rem;font-weight:800;margin:0 0 6px;text-wrap:balance;letter-spacing:-.01em}
+h2{font-size:1.2rem;font-weight:800;margin:0 0 4px;letter-spacing:-.005em;scroll-margin-top:12px}
+h3{font-size:.98rem;font-weight:700;margin:0 0 2px}
+.lede{color:var(--ink2);max-width:70ch;margin:0 0 4px}
+.section{margin-top:52px;padding-top:8px;border-top:1px solid var(--grid)}
+.section:first-of-type{border-top:none}
+.eyebrow{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;margin:0 0 6px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+.grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.stat .v{font-size:1.5rem;font-weight:800;font-variant-numeric:tabular-nums}
+.stat .l{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th{text-align:left;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;padding:0 10px 8px 0;border-bottom:1px solid var(--baseline)}
+td{padding:8px 10px 8px 0;border-bottom:1px solid var(--grid);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.wrap-table{overflow-x:auto}
+.badge{display:inline-block;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em}
+.badge.good{background:color-mix(in srgb, var(--good) 16%, transparent);color:var(--good)}
+.badge.warn{background:color-mix(in srgb, var(--warn) 22%, transparent);color:#8a5c00}
+:root:not([data-theme="light"]) .badge.warn{color:var(--warn)}
+:root[data-theme="dark"] .badge.warn{color:var(--warn)}
+.badge.thin{background:color-mix(in srgb, var(--muted) 20%, transparent);color:var(--ink2)}
+.chart{margin:14px 0}
+.chart .row{display:flex;align-items:center;gap:8px;margin:3px 0}
+.chart .name{width:170px;flex:none;font-size:.78rem;color:var(--ink2);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chart .track{flex:1;height:16px;background:var(--grid);border-radius:3px;position:relative;overflow:hidden}
+.chart .fill{position:absolute;left:0;top:0;height:100%;border-radius:3px;background:var(--series-1)}
+.chart .fill.accent{background:var(--series-2)}
+.chart .pct{width:44px;flex:none;font-size:.76rem;color:var(--ink2);font-variant-numeric:tabular-nums}
+.legend{display:flex;gap:16px;font-size:.78rem;color:var(--ink2);margin:8px 0 4px}
+.legend .dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px}
+.notebox{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--series-1);border-radius:8px;padding:10px 14px;font-size:.85rem;color:var(--ink2);margin:12px 0}
+.notebox.caution{border-left-color:var(--warn)}
+.slot-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.slot-head .pts{font-size:.85rem;color:var(--ink2)}
+.slot-head .pts b{color:var(--ink);font-size:1.1rem}
+.muted{color:var(--muted)}
+.small{font-size:.8rem}
+footer{margin-top:60px;padding:20px 0;border-top:1px solid var(--grid);color:var(--muted);font-size:.78rem}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.85em;background:var(--grid);padding:1px 5px;border-radius:4px}
+</style>
+
+</head>
+<body>
+<div class="layout">
+  <nav class="toc">
+    <div class="toc-title">Contents</div>
+    <a href="#summary">Summary & proposal</a>
+    <a href="#method">How this was measured</a>
+    <div class="toc-title">Per-slot detail</div>
+    <a href="#slot-opener">Opener</a>
+    <a href="#slot-set1_closer">Set 1 Closer</a>
+    <a href="#slot-set2_opener">Set 2 Opener</a>
+    <a href="#slot-closer">Set 2 Closer</a>
+    <a href="#slot-show_closer">Show Closer</a>
+    <a href="#slot-second_song">2nd Song</a>
+    <a href="#slot-encore">Encore</a>
+    <a href="#slot-cover_pick">Cover Pick</a>
+    <div class="toc-title">Discussion</div>
+    <a href="#recency">Recency: has it drifted?</a>
+    <a href="#flat">Flat picks & Any Debut</a>
+    <a href="#caveats">Caveats & data notes</a>
+  </nav>
+  <main>
+    <h1>How predictable is each vote slot, actually?</h1>
+    <p class="lede" id="introLede">Loading…</p>
+
+    <section class="section" id="summary">
+      <p class="eyebrow">The headline</p>
+      <h2>Proposed point values</h2>
+      <p class="lede">Scaled to how concentrated each slot's history actually is — not guessed. Lower points where one song (or a small handful) dominates; higher points where the field is wide open. Current flat value is 2 across every slot.</p>
+      <div class="wrap-table"><table id="proposalTable"></table></div>
+      <div class="notebox">
+        <b>Method for the numbers above:</b> point value = 1 + 5 × (this slot's normalized entropy − the lowest of the 8 slots) / (the highest − the lowest), rounded to the nearest integer. That min–max rescale is a deliberate choice, not a measured fact — see below for why, and for the raw entropy numbers behind it.
+      </div>
+    </section>
+
+    <section class="section" id="method">
+      <p class="eyebrow">Methodology</p>
+      <h2>How this was measured</h2>
+      <div class="grid-cards" id="contextStats"></div>
+      <h3 style="margin-top:20px">Why normalized entropy, and why min–max rescale it</h3>
+      <p class="small">Shannon entropy answers "if I had to describe which song fills this slot, how many bits of surprise does the answer carry, on average, across history." A slot where one song wins 60% of the time has low entropy (very predictable); a slot where 80 different songs each show up once has high entropy. Raw entropy in bits isn't comparable across slots that don't have the same number of possible answers, though — a slot with 230 possible covers and one with 72 possible set-2-openers can't be judged on the same bit scale. Dividing by log₂(distinct songs) rescales entropy to 0–1 (<b>normalized entropy</b>, "how close to uniformly random is this slot, given how many answers it could have"), which <i>is</i> comparable across slots, and is what's used everywhere below.</p>
+      <p class="small">Normalized entropy across these 8 slots turned out to sit in a fairly narrow band (roughly 0.88–0.99) — jam-band setlists are just genuinely varied everywhere, there's no slot that's a near-lock. Mapping that narrow band directly onto a point range would barely differentiate anything after rounding to whole points. So the proposal instead rescales <i>relative to the other slots being priced</i> — the least predictable of these 8 slots gets the top of the range, the most predictable gets the bottom, and the rest interpolate. That's a real methodology choice (and the 1–6 range is a judgment call, easy to change) laid over data-driven <i>ordering and spacing</i> between slots — both parts are shown separately throughout so you can tell which is which.</p>
+      <p class="small">One correction applied throughout: the plain "count and divide" (plug-in) entropy estimator is a known-biased estimator — it <i>understates</i> true entropy for a finite sample, and the understatement gets worse exactly where a slot has lots of distinct songs relative to how many shows were observed. Every entropy number below is Miller–Madow corrected (a standard, simple correction: + (distinct songs − 1) / (2 × sample size × ln 2) bits) — and the size of that correction is shown per slot, so a big correction reads as a sample-size warning rather than a hidden adjustment.</p>
+    </section>
+
+    <div id="slotSections"></div>
+
+    <section class="section" id="recency">
+      <p class="eyebrow">Discussion</p>
+      <h2>Has the band's behavior actually drifted?</h2>
+      <p class="lede">Short answer: the data can't really tell you that at the slot level, and here's why — but a couple of things are worth a gut-check anyway.</p>
+      <div class="wrap-table"><table id="recencyTable"></table></div>
+      <div class="notebox caution">
+        <b>Why the "recent" entropy numbers are not a second opinion worth trusting on their own:</b> a year of touring gives each slot roughly 33–97 observations, spread across 20–70+ distinct songs. When most of those songs only show up once or twice in that short a window, normalized entropy mechanically climbs toward its 1.0 ceiling — not because the band got less predictable, but because there simply hasn't been enough time for repeats to show up yet. Several slots hit exactly 1.000 in the recent window; that's the ceiling talking, not a real finding. <b>The point-value proposal above is deliberately based on all-time data</b> for this reason — it's the only window with enough repeats per slot to say something real about concentration.
+      </div>
+      <p class="small">What <i>is</i> worth a gut-check, because it doesn't depend on trusting a small-sample entropy number: which song is currently the single most-repeated answer in the last year, and whether that matches what your crew would've guessed. Also worth a look — <b>debuts have gotten rarer</b>: <span id="debutTrendNote"></span> That's a real behavioral signal (it's a plain rate, not an entropy estimate), and it's directly relevant to whether the Any Debut wildcard should be repriced (see below).</p>
+    </section>
+
+    <section class="section" id="flat">
+      <p class="eyebrow">Discussion</p>
+      <h2>Flat picks and the Any Debut wildcard</h2>
+      <p class="lede">Neither is positional, so the slot-by-slot entropy analysis above doesn't directly apply to either — but the same dataset still has something to say about both.</p>
+      <h3>Flat picks</h3>
+      <p class="small" id="flatDiscussion"></p>
+      <h3 style="margin-top:16px">Any Debut wildcard</h3>
+      <p class="small" id="debutDiscussion"></p>
+    </section>
+
+    <section class="section" id="caveats">
+      <p class="eyebrow">Fine print</p>
+      <h2>Caveats & data notes</h2>
+      <ul class="small" style="padding-left:20px">
+        <li><b>Source & window:</b> The Carton's public API (<code>thecarton.net/api/v2</code>), every show from 2010-01-01 through today at fetch time, pulled fresh for this analysis — not the app's live database. <span id="sourceWindowNote"></span></li>
+        <li><b>Doubleheaders:</b> 28 dates in the dataset carry two distinct <code>show_id</code>s (a matinee/evening pair, most often). The Carton's setlist endpoint is keyed by date, so both shows arrive in one response — split back into two shows by <code>show_id</code> before anything else runs, or those would've been merged into one artificially-long setlist.</li>
+        <li><b>Slot definitions reused verbatim from the app:</b> this analysis imports <code>deriveSlotFacts</code>/<code>norm</code> directly from <code>supabase/functions/carton-sync/scoring.js</code> — the actual production scoring code — rather than re-deriving "opener"/"closer"/etc from scratch, so a slot means exactly what it means when a real pick gets scored. One fix on top of that import: scoring.js's own <code>slotImpossible.set1_closer</code> only fires when a show has literally no first set (never, in practice) — it doesn't know about one-set shows, because that exclusion normally happens one layer up, in the admin config, which never offers a Set 1 Closer slot on a one-set show. Without adding that exclusion here too, Set 1 Closer's sample would have silently included two-thirds of the dataset's one-set shows, double-counting the same song under both "Set 1 Closer" and "Set 2 Closer."</li>
+        <li><b>Encore and Cover Pick are multi-answer slots:</b> a pick hits if it matches <i>any</i> qualifying song, and most shows have more than one (encore: ~1.5 songs/show on average when there is one; cover pick: ~2.3 covers/show on average when there is one). Their concentration numbers count every qualifying song per show as one occurrence, which is the most defensible reading but means their "sample size" and "total occurrences" aren't quite the same number the way they are for the single-song slots — both are reported separately per slot.</li>
+        <li><b>Song naming</b> is matched case/diacritic/punctuation-insensitively (the same <code>norm()</code> the app's own scoring uses), so "Golden Gate Dancer" and a stray "golden gate dancer" typo in one setlist entry count as the same song. Display names use whichever casing appeared first.</li>
+      </ul>
+    </section>
+
+    <footer>Generated <span id="genDate"></span> from live Carton API data. This is an analysis document — nothing in the app changed as a result of producing it.</footer>
+  </main>
+</div>
+
+<script>
+const RESULTS = {
+  "generatedAt": "2026-08-10",
+  "totalShowsAllTime": 609,
+  "totalShowsRecent": 97,
+  "totalPastShowsOnBooks": 755,
+  "showsWithNoFiledSetlist": 146,
+  "recentFloor": "2025-08-10",
+  "slots": {
+    "opener": {
+      "allTime": {
+        "sampleSize": 609,
+        "totalOccurrences": 609,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 98,
+        "singletonRate": 0.30612244897959184,
+        "top1": {
+          "name": "One Stop Shop",
+          "share": 0.06403940886699508,
+          "count": 39
+        },
+        "top3Share": 0.16584564860426929,
+        "top5Share": 0.2413793103448276,
+        "entropyBits": 5.830128468716417,
+        "entropyBitsCorrected": 5.94502290136521,
+        "mmCorrectionBits": 0.11489443264879265,
+        "entropyNorm": 0.8987579261173809,
+        "consecutiveRepeatRate": 0.027960526315789474,
+        "consecutivePairs": 608,
+        "fullDistribution": [
+          {
+            "name": "One Stop Shop",
+            "count": 39,
+            "share": 0.06403940886699508
+          },
+          {
+            "name": "Shadow",
+            "count": 33,
+            "share": 0.054187192118226604
+          },
+          {
+            "name": "Here and Now",
+            "count": 29,
+            "share": 0.047619047619047616
+          },
+          {
+            "name": "Between You and Me",
+            "count": 25,
+            "share": 0.041050903119868636
+          },
+          {
+            "name": "Bobcat Flow",
+            "count": 21,
+            "share": 0.034482758620689655
+          },
+          {
+            "name": "Sweaters for Strawmen",
+            "count": 19,
+            "share": 0.031198686371100164
+          },
+          {
+            "name": "Laurel",
+            "count": 19,
+            "share": 0.031198686371100164
+          },
+          {
+            "name": "Upside Down",
+            "count": 18,
+            "share": 0.029556650246305417
+          },
+          {
+            "name": "Backyard Bear",
+            "count": 18,
+            "share": 0.029556650246305417
+          },
+          {
+            "name": "12 Pounds of Pain",
+            "count": 17,
+            "share": 0.027914614121510674
+          },
+          {
+            "name": "Boom or Bust",
+            "count": 17,
+            "share": 0.027914614121510674
+          },
+          {
+            "name": "Woah There",
+            "count": 16,
+            "share": 0.026272577996715927
+          },
+          {
+            "name": "In It For The Ride",
+            "count": 15,
+            "share": 0.024630541871921183
+          },
+          {
+            "name": "Wayless",
+            "count": 15,
+            "share": 0.024630541871921183
+          },
+          {
+            "name": "Atomic Age",
+            "count": 14,
+            "share": 0.022988505747126436
+          }
+        ]
+      },
+      "recent": {
+        "sampleSize": 97,
+        "totalOccurrences": 97,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 35,
+        "singletonRate": 0.42857142857142855,
+        "top1": {
+          "name": "Woah There",
+          "share": 0.12371134020618557,
+          "count": 12
+        },
+        "top3Share": 0.24742268041237114,
+        "top5Share": 0.35051546391752575,
+        "entropyBits": 4.732565585000444,
+        "entropyBitsCorrected": 4.985409045774798,
+        "mmCorrectionBits": 0.25284346077435443,
+        "entropyNorm": 0.9719504713046891,
+        "consecutiveRepeatRate": 0,
+        "consecutivePairs": 96,
+        "fullDistribution": [
+          {
+            "name": "Woah There",
+            "count": 12,
+            "share": 0.12371134020618557
+          },
+          {
+            "name": "Sweaters for Strawmen",
+            "count": 6,
+            "share": 0.061855670103092786
+          },
+          {
+            "name": "Peace Upon Us",
+            "count": 6,
+            "share": 0.061855670103092786
+          },
+          {
+            "name": "Atomic Age",
+            "count": 5,
+            "share": 0.05154639175257732
+          },
+          {
+            "name": "Laurel",
+            "count": 5,
+            "share": 0.05154639175257732
+          },
+          {
+            "name": "Breaking the Horse",
+            "count": 5,
+            "share": 0.05154639175257732
+          },
+          {
+            "name": "Trixieville",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Shadow",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Beaming",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Smile",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Here and Now",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Silver Steed (My Blue)",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "A Moment’s Notice",
+            "count": 3,
+            "share": 0.030927835051546393
+          },
+          {
+            "name": "Between You and Me",
+            "count": 3,
+            "share": 0.030927835051546393
+          },
+          {
+            "name": "Reflections",
+            "count": 3,
+            "share": 0.030927835051546393
+          }
+        ]
+      }
+    },
+    "set1_closer": {
+      "allTime": {
+        "sampleSize": 197,
+        "totalOccurrences": 197,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 95,
+        "singletonRate": 0.5894736842105263,
+        "top1": {
+          "name": "12 Pounds of Pain",
+          "share": 0.04568527918781726,
+          "count": 9
+        },
+        "top3Share": 0.12690355329949238,
+        "top5Share": 0.20812182741116753,
+        "entropyBits": 6.139669682911431,
+        "entropyBitsCorrected": 6.4838659617021985,
+        "mmCorrectionBits": 0.3441962787907679,
+        "entropyNorm": 0.9869114860728888,
+        "consecutiveRepeatRate": 0.015306122448979591,
+        "consecutivePairs": 196,
+        "fullDistribution": [
+          {
+            "name": "12 Pounds of Pain",
+            "count": 9,
+            "share": 0.04568527918781726
+          },
+          {
+            "name": "Burritos El Chavo 2",
+            "count": 8,
+            "share": 0.04060913705583756
+          },
+          {
+            "name": "Shadow",
+            "count": 8,
+            "share": 0.04060913705583756
+          },
+          {
+            "name": "Smile",
+            "count": 8,
+            "share": 0.04060913705583756
+          },
+          {
+            "name": "Trixieville",
+            "count": 8,
+            "share": 0.04060913705583756
+          },
+          {
+            "name": "Tiny Miracles",
+            "count": 7,
+            "share": 0.03553299492385787
+          },
+          {
+            "name": "Cicada Sings",
+            "count": 5,
+            "share": 0.025380710659898477
+          },
+          {
+            "name": "Wayless",
+            "count": 5,
+            "share": 0.025380710659898477
+          },
+          {
+            "name": "Today and Tomorrow",
+            "count": 5,
+            "share": 0.025380710659898477
+          },
+          {
+            "name": "Zugzwang",
+            "count": 4,
+            "share": 0.02030456852791878
+          },
+          {
+            "name": "In It For The Ride",
+            "count": 4,
+            "share": 0.02030456852791878
+          },
+          {
+            "name": "Ricky Gervais",
+            "count": 4,
+            "share": 0.02030456852791878
+          },
+          {
+            "name": "One More Dance",
+            "count": 4,
+            "share": 0.02030456852791878
+          },
+          {
+            "name": "Farthest Step",
+            "count": 4,
+            "share": 0.02030456852791878
+          },
+          {
+            "name": "Portable Air Scrubber",
+            "count": 4,
+            "share": 0.02030456852791878
+          }
+        ]
+      },
+      "recent": {
+        "sampleSize": 39,
+        "totalOccurrences": 39,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 33,
+        "singletonRate": 0.8484848484848485,
+        "top1": {
+          "name": "Trixieville",
+          "share": 0.07692307692307693,
+          "count": 3
+        },
+        "top3Share": 0.1794871794871795,
+        "top5Share": 0.28205128205128205,
+        "entropyBits": 4.958353821370876,
+        "entropyBitsCorrected": 5.550228709940707,
+        "mmCorrectionBits": 0.5918748885698312,
+        "entropyNorm": 1,
+        "consecutiveRepeatRate": 0,
+        "consecutivePairs": 38,
+        "fullDistribution": [
+          {
+            "name": "Trixieville",
+            "count": 3,
+            "share": 0.07692307692307693
+          },
+          {
+            "name": "Wayless",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "Beaming",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "Hux (Wit' It)",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "One Stop Shop",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "Lay Down Sally",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "Laurel",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "12 Pounds of Pain",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "A Moment’s Notice",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "Southern Cross",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "Barracuda",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "Bad Side Of The Moon",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "All That You Dream",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "Breaking the Horse",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "Buying Time",
+            "count": 1,
+            "share": 0.02564102564102564
+          }
+        ]
+      }
+    },
+    "set2_opener": {
+      "allTime": {
+        "sampleSize": 197,
+        "totalOccurrences": 197,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 72,
+        "singletonRate": 0.4583333333333333,
+        "top1": {
+          "name": "Shadow",
+          "share": 0.07106598984771574,
+          "count": 14
+        },
+        "top3Share": 0.18781725888324874,
+        "top5Share": 0.26903553299492383,
+        "entropyBits": 5.65853798691177,
+        "entropyBitsCorrected": 5.918516027275009,
+        "mmCorrectionBits": 0.2599780403632396,
+        "entropyNorm": 0.9592525072657233,
+        "consecutiveRepeatRate": 0.025510204081632654,
+        "consecutivePairs": 196,
+        "fullDistribution": [
+          {
+            "name": "Shadow",
+            "count": 14,
+            "share": 0.07106598984771574
+          },
+          {
+            "name": "Wayless",
+            "count": 13,
+            "share": 0.06598984771573604
+          },
+          {
+            "name": "One Stop Shop",
+            "count": 10,
+            "share": 0.050761421319796954
+          },
+          {
+            "name": "Shatter",
+            "count": 9,
+            "share": 0.04568527918781726
+          },
+          {
+            "name": "Finding and Losing",
+            "count": 7,
+            "share": 0.03553299492385787
+          },
+          {
+            "name": "Woah There",
+            "count": 7,
+            "share": 0.03553299492385787
+          },
+          {
+            "name": "Time Escaping",
+            "count": 6,
+            "share": 0.030456852791878174
+          },
+          {
+            "name": "Trixieville",
+            "count": 6,
+            "share": 0.030456852791878174
+          },
+          {
+            "name": "All Wheels Turnin'",
+            "count": 5,
+            "share": 0.025380710659898477
+          },
+          {
+            "name": "Boom or Bust",
+            "count": 5,
+            "share": 0.025380710659898477
+          },
+          {
+            "name": "Onitsuka Tiger",
+            "count": 5,
+            "share": 0.025380710659898477
+          },
+          {
+            "name": "Sweat Equity",
+            "count": 5,
+            "share": 0.025380710659898477
+          },
+          {
+            "name": "Atomic Age",
+            "count": 5,
+            "share": 0.025380710659898477
+          },
+          {
+            "name": "12 Pounds of Pain",
+            "count": 4,
+            "share": 0.02030456852791878
+          },
+          {
+            "name": "Here and Now",
+            "count": 4,
+            "share": 0.02030456852791878
+          }
+        ]
+      },
+      "recent": {
+        "sampleSize": 39,
+        "totalOccurrences": 39,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 23,
+        "singletonRate": 0.5652173913043478,
+        "top1": {
+          "name": "Woah There",
+          "share": 0.1282051282051282,
+          "count": 5
+        },
+        "top3Share": 0.3076923076923077,
+        "top5Share": 0.41025641025641024,
+        "entropyBits": 4.301696373308395,
+        "entropyBitsCorrected": 4.708610359200153,
+        "mmCorrectionBits": 0.4069139858917589,
+        "entropyNorm": 1,
+        "consecutiveRepeatRate": 0.02631578947368421,
+        "consecutivePairs": 38,
+        "fullDistribution": [
+          {
+            "name": "Woah There",
+            "count": 5,
+            "share": 0.1282051282051282
+          },
+          {
+            "name": "Peace Upon Us",
+            "count": 4,
+            "share": 0.10256410256410256
+          },
+          {
+            "name": "Shatter",
+            "count": 3,
+            "share": 0.07692307692307693
+          },
+          {
+            "name": "Silver Steed (My Blue)",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "Atomic Age",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "Trixieville",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "Laurel",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "Falsities and Fire",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "Time Escaping",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "Shadow",
+            "count": 2,
+            "share": 0.05128205128205128
+          },
+          {
+            "name": "Farthest Step",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "Graceless",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "Boom or Bust",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "Sweaters for Strawmen",
+            "count": 1,
+            "share": 0.02564102564102564
+          },
+          {
+            "name": "Parceled Serotonin",
+            "count": 1,
+            "share": 0.02564102564102564
+          }
+        ]
+      }
+    },
+    "closer": {
+      "allTime": {
+        "sampleSize": 609,
+        "totalOccurrences": 609,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 134,
+        "singletonRate": 0.417910447761194,
+        "top1": {
+          "name": "Golden Gate Dancer",
+          "share": 0.07389162561576355,
+          "count": 45
+        },
+        "top3Share": 0.15763546798029557,
+        "top5Share": 0.22824302134646962,
+        "entropyBits": 6.193997618318561,
+        "entropyBitsCorrected": 6.351533283702988,
+        "mmCorrectionBits": 0.15753566538442704,
+        "entropyNorm": 0.898875334361794,
+        "consecutiveRepeatRate": 0.02631578947368421,
+        "consecutivePairs": 608,
+        "fullDistribution": [
+          {
+            "name": "Golden Gate Dancer",
+            "count": 45,
+            "share": 0.07389162561576355
+          },
+          {
+            "name": "Shatter",
+            "count": 28,
+            "share": 0.04597701149425287
+          },
+          {
+            "name": "12 Pounds of Pain",
+            "count": 23,
+            "share": 0.03776683087027915
+          },
+          {
+            "name": "Smile",
+            "count": 23,
+            "share": 0.03776683087027915
+          },
+          {
+            "name": "Wayless",
+            "count": 20,
+            "share": 0.03284072249589491
+          },
+          {
+            "name": "Shadow",
+            "count": 20,
+            "share": 0.03284072249589491
+          },
+          {
+            "name": "Onitsuka Tiger",
+            "count": 18,
+            "share": 0.029556650246305417
+          },
+          {
+            "name": "Burritos El Chavo 2",
+            "count": 16,
+            "share": 0.026272577996715927
+          },
+          {
+            "name": "Shells",
+            "count": 15,
+            "share": 0.024630541871921183
+          },
+          {
+            "name": "Ricky Gervais",
+            "count": 14,
+            "share": 0.022988505747126436
+          },
+          {
+            "name": "Graceless",
+            "count": 14,
+            "share": 0.022988505747126436
+          },
+          {
+            "name": "Watercolor Days",
+            "count": 14,
+            "share": 0.022988505747126436
+          },
+          {
+            "name": "Leatherback",
+            "count": 12,
+            "share": 0.019704433497536946
+          },
+          {
+            "name": "Portable Air Scrubber",
+            "count": 12,
+            "share": 0.019704433497536946
+          },
+          {
+            "name": "Beaming",
+            "count": 11,
+            "share": 0.0180623973727422
+          }
+        ]
+      },
+      "recent": {
+        "sampleSize": 97,
+        "totalOccurrences": 97,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 44,
+        "singletonRate": 0.6818181818181818,
+        "top1": {
+          "name": "Shatter",
+          "share": 0.15463917525773196,
+          "count": 15
+        },
+        "top3Share": 0.30927835051546393,
+        "top5Share": 0.41237113402061853,
+        "entropyBits": 4.837458535045189,
+        "entropyBitsCorrected": 5.15723114720099,
+        "mmCorrectionBits": 0.31977261215580116,
+        "entropyNorm": 0.9446461660212647,
+        "consecutiveRepeatRate": 0.010416666666666666,
+        "consecutivePairs": 96,
+        "fullDistribution": [
+          {
+            "name": "Shatter",
+            "count": 15,
+            "share": 0.15463917525773196
+          },
+          {
+            "name": "Smile",
+            "count": 8,
+            "share": 0.08247422680412371
+          },
+          {
+            "name": "Trixieville",
+            "count": 7,
+            "share": 0.07216494845360824
+          },
+          {
+            "name": "Beaming",
+            "count": 5,
+            "share": 0.05154639175257732
+          },
+          {
+            "name": "Voice of Them All",
+            "count": 5,
+            "share": 0.05154639175257732
+          },
+          {
+            "name": "Shadow",
+            "count": 5,
+            "share": 0.05154639175257732
+          },
+          {
+            "name": "Through the Mist",
+            "count": 5,
+            "share": 0.05154639175257732
+          },
+          {
+            "name": "Tom Corn Walker",
+            "count": 3,
+            "share": 0.030927835051546393
+          },
+          {
+            "name": "Leatherback",
+            "count": 3,
+            "share": 0.030927835051546393
+          },
+          {
+            "name": "Parceled Serotonin",
+            "count": 3,
+            "share": 0.030927835051546393
+          },
+          {
+            "name": "Woah There",
+            "count": 2,
+            "share": 0.020618556701030927
+          },
+          {
+            "name": "Razi",
+            "count": 2,
+            "share": 0.020618556701030927
+          },
+          {
+            "name": "Boom or Bust",
+            "count": 2,
+            "share": 0.020618556701030927
+          },
+          {
+            "name": "Finding and Losing",
+            "count": 2,
+            "share": 0.020618556701030927
+          },
+          {
+            "name": "Buying Time",
+            "count": 1,
+            "share": 0.010309278350515464
+          }
+        ]
+      }
+    },
+    "show_closer": {
+      "allTime": {
+        "sampleSize": 609,
+        "totalOccurrences": 609,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 133,
+        "singletonRate": 0.45112781954887216,
+        "top1": {
+          "name": "Golden Gate Dancer",
+          "share": 0.11986863711001643,
+          "count": 73
+        },
+        "top3Share": 0.20525451559934318,
+        "top5Share": 0.270935960591133,
+        "entropyBits": 6.076473035151495,
+        "entropyBitsCorrected": 6.232824221848821,
+        "mmCorrectionBits": 0.1563511866973261,
+        "entropyNorm": 0.8834266067770902,
+        "consecutiveRepeatRate": 0.027960526315789474,
+        "consecutivePairs": 608,
+        "fullDistribution": [
+          {
+            "name": "Golden Gate Dancer",
+            "count": 73,
+            "share": 0.11986863711001643
+          },
+          {
+            "name": "12 Pounds of Pain",
+            "count": 30,
+            "share": 0.04926108374384237
+          },
+          {
+            "name": "Zugzwang",
+            "count": 22,
+            "share": 0.0361247947454844
+          },
+          {
+            "name": "Smile",
+            "count": 22,
+            "share": 0.0361247947454844
+          },
+          {
+            "name": "Shadow",
+            "count": 18,
+            "share": 0.029556650246305417
+          },
+          {
+            "name": "Onitsuka Tiger",
+            "count": 16,
+            "share": 0.026272577996715927
+          },
+          {
+            "name": "Home Is Where The Dog Lives",
+            "count": 16,
+            "share": 0.026272577996715927
+          },
+          {
+            "name": "Shells",
+            "count": 15,
+            "share": 0.024630541871921183
+          },
+          {
+            "name": "Tom Corn Walker",
+            "count": 14,
+            "share": 0.022988505747126436
+          },
+          {
+            "name": "Burritos El Chavo 2",
+            "count": 14,
+            "share": 0.022988505747126436
+          },
+          {
+            "name": "Shatter",
+            "count": 14,
+            "share": 0.022988505747126436
+          },
+          {
+            "name": "Graceless",
+            "count": 13,
+            "share": 0.021346469622331693
+          },
+          {
+            "name": "Watercolor Days",
+            "count": 12,
+            "share": 0.019704433497536946
+          },
+          {
+            "name": "Wayless",
+            "count": 10,
+            "share": 0.016420361247947456
+          },
+          {
+            "name": "Ricky Gervais",
+            "count": 9,
+            "share": 0.014778325123152709
+          }
+        ]
+      },
+      "recent": {
+        "sampleSize": 97,
+        "totalOccurrences": 97,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 47,
+        "singletonRate": 0.6382978723404256,
+        "top1": {
+          "name": "Voice of Them All",
+          "share": 0.08247422680412371,
+          "count": 8
+        },
+        "top3Share": 0.2268041237113402,
+        "top5Share": 0.3402061855670103,
+        "entropyBits": 5.111022281490535,
+        "entropyBitsCorrected": 5.453104610773485,
+        "mmCorrectionBits": 0.3420823292829501,
+        "entropyNorm": 0.981729657475278,
+        "consecutiveRepeatRate": 0.020833333333333332,
+        "consecutivePairs": 96,
+        "fullDistribution": [
+          {
+            "name": "Voice of Them All",
+            "count": 8,
+            "share": 0.08247422680412371
+          },
+          {
+            "name": "Shatter",
+            "count": 7,
+            "share": 0.07216494845360824
+          },
+          {
+            "name": "Smile",
+            "count": 7,
+            "share": 0.07216494845360824
+          },
+          {
+            "name": "Shadow",
+            "count": 6,
+            "share": 0.061855670103092786
+          },
+          {
+            "name": "Trixieville",
+            "count": 5,
+            "share": 0.05154639175257732
+          },
+          {
+            "name": "Golden Gate Dancer",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Parceled Serotonin",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Razi",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "12 Pounds of Pain",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Through the Mist",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Thorns",
+            "count": 2,
+            "share": 0.020618556701030927
+          },
+          {
+            "name": "Zugzwang",
+            "count": 2,
+            "share": 0.020618556701030927
+          },
+          {
+            "name": "Leatherback",
+            "count": 2,
+            "share": 0.020618556701030927
+          },
+          {
+            "name": "Atomic Age",
+            "count": 2,
+            "share": 0.020618556701030927
+          },
+          {
+            "name": "Burritos El Chavo 2",
+            "count": 2,
+            "share": 0.020618556701030927
+          }
+        ]
+      }
+    },
+    "second_song": {
+      "allTime": {
+        "sampleSize": 608,
+        "totalOccurrences": 608,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 125,
+        "singletonRate": 0.336,
+        "top1": {
+          "name": "A Moment’s Notice",
+          "share": 0.06085526315789474,
+          "count": 37
+        },
+        "top3Share": 0.13815789473684212,
+        "top5Share": 0.20230263157894737,
+        "entropyBits": 6.233517605396989,
+        "entropyBitsCorrected": 6.380634533908693,
+        "mmCorrectionBits": 0.1471169285117035,
+        "entropyNorm": 0.9159965731293414,
+        "consecutiveRepeatRate": 0.02800658978583196,
+        "consecutivePairs": 607,
+        "fullDistribution": [
+          {
+            "name": "A Moment’s Notice",
+            "count": 37,
+            "share": 0.06085526315789474
+          },
+          {
+            "name": "Sweaters for Strawmen",
+            "count": 24,
+            "share": 0.039473684210526314
+          },
+          {
+            "name": "High Noon",
+            "count": 23,
+            "share": 0.03782894736842105
+          },
+          {
+            "name": "Burritos El Chavo 2",
+            "count": 21,
+            "share": 0.03453947368421053
+          },
+          {
+            "name": "Apology",
+            "count": 18,
+            "share": 0.029605263157894735
+          },
+          {
+            "name": "One Stop Shop",
+            "count": 18,
+            "share": 0.029605263157894735
+          },
+          {
+            "name": "BubaGum",
+            "count": 16,
+            "share": 0.02631578947368421
+          },
+          {
+            "name": "Finding and Losing",
+            "count": 16,
+            "share": 0.02631578947368421
+          },
+          {
+            "name": "Laurel",
+            "count": 15,
+            "share": 0.024671052631578948
+          },
+          {
+            "name": "Backyard Bear",
+            "count": 14,
+            "share": 0.023026315789473683
+          },
+          {
+            "name": "Come Up Slow",
+            "count": 13,
+            "share": 0.02138157894736842
+          },
+          {
+            "name": "Shadow",
+            "count": 12,
+            "share": 0.019736842105263157
+          },
+          {
+            "name": "Northern Lights",
+            "count": 12,
+            "share": 0.019736842105263157
+          },
+          {
+            "name": "Solid Ground",
+            "count": 12,
+            "share": 0.019736842105263157
+          },
+          {
+            "name": "Rosetta Stone",
+            "count": 12,
+            "share": 0.019736842105263157
+          }
+        ]
+      },
+      "recent": {
+        "sampleSize": 97,
+        "totalOccurrences": 97,
+        "avgQualifyingSongsPerShow": 1,
+        "distinctSongs": 43,
+        "singletonRate": 0.4186046511627907,
+        "top1": {
+          "name": "A Moment’s Notice",
+          "share": 0.09278350515463918,
+          "count": 9
+        },
+        "top3Share": 0.21649484536082475,
+        "top5Share": 0.30927835051546393,
+        "entropyBits": 5.105758687476938,
+        "entropyBitsCorrected": 5.4180947272570235,
+        "mmCorrectionBits": 0.3123360397800849,
+        "entropyNorm": 0.9984943551753543,
+        "consecutiveRepeatRate": 0.03125,
+        "consecutivePairs": 96,
+        "fullDistribution": [
+          {
+            "name": "A Moment’s Notice",
+            "count": 9,
+            "share": 0.09278350515463918
+          },
+          {
+            "name": "Laurel",
+            "count": 6,
+            "share": 0.061855670103092786
+          },
+          {
+            "name": "Burritos El Chavo 2",
+            "count": 6,
+            "share": 0.061855670103092786
+          },
+          {
+            "name": "Reflections",
+            "count": 5,
+            "share": 0.05154639175257732
+          },
+          {
+            "name": "Come Up Slow",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Trixieville",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Silver Steed (My Blue)",
+            "count": 4,
+            "share": 0.041237113402061855
+          },
+          {
+            "name": "Shadow",
+            "count": 3,
+            "share": 0.030927835051546393
+          },
+          {
+            "name": "Sweaters for Strawmen",
+            "count": 3,
+            "share": 0.030927835051546393
+          },
+          {
+            "name": "You",
+            "count": 3,
+            "share": 0.030927835051546393
+          },
+          {
+            "name": "Peace Upon Us",
+            "count": 3,
+            "share": 0.030927835051546393
+          },
+          {
+            "name": "Parceled Serotonin",
+            "count": 3,
+            "share": 0.030927835051546393
+          },
+          {
+            "name": "Oh, What A World",
+            "count": 2,
+            "share": 0.020618556701030927
+          },
+          {
+            "name": "Shatter",
+            "count": 2,
+            "share": 0.020618556701030927
+          },
+          {
+            "name": "Searchlight",
+            "count": 2,
+            "share": 0.020618556701030927
+          }
+        ]
+      }
+    },
+    "encore": {
+      "allTime": {
+        "sampleSize": 296,
+        "totalOccurrences": 454,
+        "avgQualifyingSongsPerShow": 1.5337837837837838,
+        "distinctSongs": 131,
+        "singletonRate": 0.4198473282442748,
+        "top1": {
+          "name": "Golden Gate Dancer",
+          "share": 0.09030837004405286,
+          "count": 41
+        },
+        "top3Share": 0.1828193832599119,
+        "top5Share": 0.2488986784140969,
+        "entropyBits": 6.224225052682973,
+        "entropyBitsCorrected": 6.430778307435799,
+        "mmCorrectionBits": 0.20655325475282516,
+        "entropyNorm": 0.9143170126452059,
+        "consecutiveRepeatRate": 0.05084745762711865,
+        "consecutivePairs": 295,
+        "fullDistribution": [
+          {
+            "name": "Golden Gate Dancer",
+            "count": 41,
+            "share": 0.09030837004405286
+          },
+          {
+            "name": "12 Pounds of Pain",
+            "count": 22,
+            "share": 0.048458149779735685
+          },
+          {
+            "name": "Zugzwang",
+            "count": 20,
+            "share": 0.04405286343612335
+          },
+          {
+            "name": "Tom Corn Walker",
+            "count": 16,
+            "share": 0.03524229074889868
+          },
+          {
+            "name": "Watercolor Days",
+            "count": 14,
+            "share": 0.030837004405286344
+          },
+          {
+            "name": "Smile",
+            "count": 14,
+            "share": 0.030837004405286344
+          },
+          {
+            "name": "Burritos El Chavo 2",
+            "count": 13,
+            "share": 0.028634361233480177
+          },
+          {
+            "name": "Home Is Where The Dog Lives",
+            "count": 12,
+            "share": 0.02643171806167401
+          },
+          {
+            "name": "One Stop Shop",
+            "count": 11,
+            "share": 0.024229074889867842
+          },
+          {
+            "name": "Shadow",
+            "count": 11,
+            "share": 0.024229074889867842
+          },
+          {
+            "name": "Mr. Domino Reprise",
+            "count": 9,
+            "share": 0.019823788546255508
+          },
+          {
+            "name": "Shells",
+            "count": 8,
+            "share": 0.01762114537444934
+          },
+          {
+            "name": "Eggy Birthday Song",
+            "count": 8,
+            "share": 0.01762114537444934
+          },
+          {
+            "name": "Onitsuka Tiger",
+            "count": 8,
+            "share": 0.01762114537444934
+          },
+          {
+            "name": "Ricky Gervais",
+            "count": 7,
+            "share": 0.015418502202643172
+          }
+        ]
+      },
+      "recent": {
+        "sampleSize": 64,
+        "totalOccurrences": 99,
+        "avgQualifyingSongsPerShow": 1.546875,
+        "distinctSongs": 56,
+        "singletonRate": 0.6428571428571429,
+        "top1": {
+          "name": "12 Pounds of Pain",
+          "share": 0.0707070707070707,
+          "count": 7
+        },
+        "top3Share": 0.18181818181818182,
+        "top5Share": 0.2828282828282828,
+        "entropyBits": 5.475267292922737,
+        "entropyBitsCorrected": 5.876015915391894,
+        "mmCorrectionBits": 0.4007486224691565,
+        "entropyNorm": 1,
+        "consecutiveRepeatRate": 0.031746031746031744,
+        "consecutivePairs": 63,
+        "fullDistribution": [
+          {
+            "name": "12 Pounds of Pain",
+            "count": 7,
+            "share": 0.0707070707070707
+          },
+          {
+            "name": "Voice of Them All",
+            "count": 6,
+            "share": 0.06060606060606061
+          },
+          {
+            "name": "Shadow",
+            "count": 5,
+            "share": 0.050505050505050504
+          },
+          {
+            "name": "Burritos El Chavo 2",
+            "count": 5,
+            "share": 0.050505050505050504
+          },
+          {
+            "name": "Smile",
+            "count": 5,
+            "share": 0.050505050505050504
+          },
+          {
+            "name": "Golden Gate Dancer",
+            "count": 4,
+            "share": 0.04040404040404041
+          },
+          {
+            "name": "Shatter",
+            "count": 3,
+            "share": 0.030303030303030304
+          },
+          {
+            "name": "Trixieville",
+            "count": 3,
+            "share": 0.030303030303030304
+          },
+          {
+            "name": "Eggy Birthday Song",
+            "count": 3,
+            "share": 0.030303030303030304
+          },
+          {
+            "name": "Spanish Moon",
+            "count": 2,
+            "share": 0.020202020202020204
+          },
+          {
+            "name": "One More Saturday Night",
+            "count": 2,
+            "share": 0.020202020202020204
+          },
+          {
+            "name": "Saturday Night's Alright (For Fighting)",
+            "count": 2,
+            "share": 0.020202020202020204
+          },
+          {
+            "name": "Zugzwang",
+            "count": 2,
+            "share": 0.020202020202020204
+          },
+          {
+            "name": "Razi",
+            "count": 2,
+            "share": 0.020202020202020204
+          },
+          {
+            "name": "Atomic Age",
+            "count": 2,
+            "share": 0.020202020202020204
+          }
+        ]
+      }
+    },
+    "cover_pick": {
+      "allTime": {
+        "sampleSize": 552,
+        "totalOccurrences": 1290,
+        "avgQualifyingSongsPerShow": 2.3369565217391304,
+        "distinctSongs": 230,
+        "singletonRate": 0.4391304347826087,
+        "top1": {
+          "name": "Time Escaping",
+          "share": 0.044186046511627906,
+          "count": 57
+        },
+        "top3Share": 0.10775193798449613,
+        "top5Share": 0.1558139534883721,
+        "entropyBits": 6.825612193380919,
+        "entropyBitsCorrected": 6.953665357862924,
+        "mmCorrectionBits": 0.12805316448200488,
+        "entropyNorm": 0.8863264515931544,
+        "consecutiveRepeatRate": 0.08348457350272233,
+        "consecutivePairs": 551,
+        "fullDistribution": [
+          {
+            "name": "Time Escaping",
+            "count": 57,
+            "share": 0.044186046511627906
+          },
+          {
+            "name": "Southern Cross",
+            "count": 46,
+            "share": 0.03565891472868217
+          },
+          {
+            "name": "Time Loves A Hero",
+            "count": 36,
+            "share": 0.027906976744186046
+          },
+          {
+            "name": "Suite: Judy Blue Eyes",
+            "count": 34,
+            "share": 0.02635658914728682
+          },
+          {
+            "name": "All That You Dream",
+            "count": 28,
+            "share": 0.021705426356589147
+          },
+          {
+            "name": "Interior People",
+            "count": 27,
+            "share": 0.020930232558139535
+          },
+          {
+            "name": "Bennie And The Jets",
+            "count": 27,
+            "share": 0.020930232558139535
+          },
+          {
+            "name": "Let It Rock",
+            "count": 25,
+            "share": 0.01937984496124031
+          },
+          {
+            "name": "Remind Me",
+            "count": 25,
+            "share": 0.01937984496124031
+          },
+          {
+            "name": "Bad Side Of The Moon",
+            "count": 24,
+            "share": 0.018604651162790697
+          },
+          {
+            "name": "Coming Up",
+            "count": 24,
+            "share": 0.018604651162790697
+          },
+          {
+            "name": "You Can Call Me Al",
+            "count": 23,
+            "share": 0.017829457364341085
+          },
+          {
+            "name": "Carry On",
+            "count": 22,
+            "share": 0.017054263565891473
+          },
+          {
+            "name": "Spanish Moon",
+            "count": 22,
+            "share": 0.017054263565891473
+          },
+          {
+            "name": "Sussudio",
+            "count": 22,
+            "share": 0.017054263565891473
+          }
+        ]
+      },
+      "recent": {
+        "sampleSize": 87,
+        "totalOccurrences": 203,
+        "avgQualifyingSongsPerShow": 2.3333333333333335,
+        "distinctSongs": 71,
+        "singletonRate": 0.4084507042253521,
+        "top1": {
+          "name": "Searchlight",
+          "share": 0.06403940886699508,
+          "count": 13
+        },
+        "top3Share": 0.15270935960591134,
+        "top5Share": 0.22167487684729065,
+        "entropyBits": 5.734211594565411,
+        "entropyBitsCorrected": 5.982952118856612,
+        "mmCorrectionBits": 0.24874052429120058,
+        "entropyNorm": 0.9728777464492712,
+        "consecutiveRepeatRate": 0.011627906976744186,
+        "consecutivePairs": 86,
+        "fullDistribution": [
+          {
+            "name": "Searchlight",
+            "count": 13,
+            "share": 0.06403940886699508
+          },
+          {
+            "name": "Oh, What A World",
+            "count": 10,
+            "share": 0.04926108374384237
+          },
+          {
+            "name": "Southern Cross",
+            "count": 8,
+            "share": 0.03940886699507389
+          },
+          {
+            "name": "Chest Fever",
+            "count": 7,
+            "share": 0.034482758620689655
+          },
+          {
+            "name": "Time Escaping",
+            "count": 7,
+            "share": 0.034482758620689655
+          },
+          {
+            "name": "Coming Up",
+            "count": 7,
+            "share": 0.034482758620689655
+          },
+          {
+            "name": "No Way Down",
+            "count": 7,
+            "share": 0.034482758620689655
+          },
+          {
+            "name": "Bad Side Of The Moon",
+            "count": 6,
+            "share": 0.029556650246305417
+          },
+          {
+            "name": "Helplessly Hoping",
+            "count": 5,
+            "share": 0.024630541871921183
+          },
+          {
+            "name": "Barracuda",
+            "count": 5,
+            "share": 0.024630541871921183
+          },
+          {
+            "name": "Remind Me",
+            "count": 5,
+            "share": 0.024630541871921183
+          },
+          {
+            "name": "Lay Down Sally",
+            "count": 5,
+            "share": 0.024630541871921183
+          },
+          {
+            "name": "Partido Alto",
+            "count": 5,
+            "share": 0.024630541871921183
+          },
+          {
+            "name": "Sister Golden Hair",
+            "count": 4,
+            "share": 0.019704433497536946
+          },
+          {
+            "name": "Time Loves A Hero",
+            "count": 4,
+            "share": 0.019704433497536946
+          }
+        ]
+      }
+    }
+  },
+  "context": {
+    "catalogSize": 368,
+    "oneSetShowRate": 0.6765188834154351,
+    "avgSongsPerShow": 10.420361247947454,
+    "debutRateAllTime": 0.10344827586206896,
+    "debutRateRecent": 0.05154639175257732,
+    "coverRateAllTime": 0.9064039408866995,
+    "coverRateRecent": 0.8969072164948454,
+    "unknownCoverDataShows": 0
+  }
+};
+const SLOT_META = {
+  opener: { label: "Opener", tooltip: "First song of the show" },
+  set1_closer: { label: "Set 1 Closer", tooltip: "Last song of set 1 (two-set shows only)" },
+  set2_opener: { label: "Set 2 Opener", tooltip: "First song of set 2 (two-set shows only)" },
+  closer: { label: "Set 2 Closer", tooltip: "Last song before the encore" },
+  show_closer: { label: "Show Closer", tooltip: "Last song of the show, encore included" },
+  second_song: { label: "2nd Song", tooltip: "Second song of the show" },
+  encore: { label: "Encore", tooltip: "Any encore song (usually 1-3 qualify per show)" },
+  cover_pick: { label: "Cover Pick", tooltip: "Any cover played (usually 2+ qualify per show)" },
+};
+const SLOT_ORDER = ["opener","set1_closer","set2_opener","closer","show_closer","second_song","encore","cover_pick"];
+const CURRENT_PTS = 2;
+const MIN_PTS = 1, MAX_PTS = 6;
+const pct = (x) => (x*100).toFixed(1) + "%";
+const pct0 = (x) => Math.round(x*100) + "%";
+const esc = (s) => (s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function confidenceBadge(n){
+  if (n >= 150) return '<span class="badge good">Solid sample</span>';
+  if (n >= 50) return '<span class="badge warn">Moderate sample</span>';
+  return '<span class="badge thin">Thin sample</span>';
+}
+
+function proposedPoints(hnorm, allHnorms){
+  const min = Math.min(...allHnorms), max = Math.max(...allHnorms);
+  const raw = MIN_PTS + (MAX_PTS-MIN_PTS)*(hnorm-min)/(max-min);
+  return Math.round(raw);
+}
+
+function barChart(rows, opts={}){
+  const max = Math.max(...rows.map(r=>r.value), 1e-9);
+  const accentFirst = opts.accentFirst;
+  return `<div class="chart">${rows.map((r,i)=>`
+    <div class="row">
+      <div class="name" title="${esc(r.name)}">${esc(r.name)}</div>
+      <div class="track"><div class="fill${accentFirst && i===0 ? ' accent':''}" style="width:${(r.value/max*100).toFixed(1)}%"></div></div>
+      <div class="pct tabular">${pct(r.value)}</div>
+    </div>`).join("")}</div>`;
+}
+
+document.getElementById("genDate").textContent = new Date(RESULTS.generatedAt + "T00:00:00").toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
+document.getElementById("introLede").innerHTML =
+  `Pulled every show The Carton has on file (${RESULTS.totalShowsAllTime} with an actual setlist, out of ${RESULTS.totalPastShowsOnBooks} on the books), then measured — not guessed — how concentrated each vote slot's history really is, using the app's own real scoring logic to define what "opener"/"closer"/etc mean.`;
+
+// ---- context stat tiles ----
+const ctx = RESULTS.context;
+document.getElementById("contextStats").innerHTML = [
+  { v: RESULTS.totalShowsAllTime, l: "shows with a filed setlist" },
+  { v: ctx.catalogSize, l: "distinct songs in the catalog" },
+  { v: ctx.avgSongsPerShow.toFixed(1), l: "avg songs per show" },
+  { v: pct0(ctx.oneSetShowRate), l: "one-set shows" },
+  { v: pct0(ctx.coverRateAllTime), l: "shows with any cover" },
+  { v: pct0(ctx.debutRateAllTime), l: "shows with any debut (all-time)" },
+].map(s => `<div class="stat"><div class="v tabular">${s.v}</div><div class="l">${s.l}</div></div>`).join("");
+
+// ---- proposal table ----
+const allHnorms = SLOT_ORDER.map(k => RESULTS.slots[k].allTime.entropyNorm);
+{
+  const rows = SLOT_ORDER.map(k => {
+    const a = RESULTS.slots[k].allTime;
+    const proposed = proposedPoints(a.entropyNorm, allHnorms);
+    return { k, a, proposed };
+  }).sort((x,y) => x.proposed - y.proposed);
+  document.getElementById("proposalTable").innerHTML = `
+    <tr><th>Slot</th><th class="num">Current</th><th class="num">Proposed</th><th class="num">Normalized entropy</th><th class="num">Sample (n)</th><th>Confidence</th></tr>
+    ${rows.map(r => `<tr>
+      <td><a href="#slot-${r.k}">${SLOT_META[r.k].label}</a></td>
+      <td class="num tabular">${CURRENT_PTS}</td>
+      <td class="num tabular" style="font-weight:800;font-size:1.05em">${r.proposed}</td>
+      <td class="num tabular">${r.a.entropyNorm.toFixed(3)}</td>
+      <td class="num tabular">${r.a.sampleSize}</td>
+      <td>${confidenceBadge(r.a.sampleSize)}</td>
+    </tr>`).join("")}
+  `;
+}
+
+// ---- per-slot detail sections ----
+document.getElementById("slotSections").innerHTML = SLOT_ORDER.map(k => {
+  const s = RESULTS.slots[k];
+  const a = s.allTime, r = s.recent;
+  const proposed = proposedPoints(a.entropyNorm, allHnorms);
+  const chartRows = a.fullDistribution.slice(0,12).map(d => ({ name: d.name, value: d.share }));
+  return `
+  <section class="section" id="slot-${k}">
+    <p class="eyebrow">Per-slot detail</p>
+    <div class="slot-head">
+      <h2>${SLOT_META[k].label}</h2>
+      <span class="pts">current <b>${CURRENT_PTS}</b> → proposed <b>${proposed}</b></span>
+      ${confidenceBadge(a.sampleSize)}
+    </div>
+    <p class="small muted">${SLOT_META[k].tooltip}</p>
+    <div class="grid-cards">
+      <div class="stat"><div class="v tabular">${a.sampleSize}</div><div class="l">shows observed</div></div>
+      <div class="stat"><div class="v tabular">${a.distinctSongs}</div><div class="l">distinct songs</div></div>
+      <div class="stat"><div class="v tabular">${pct(a.top1.share)}</div><div class="l">top song: ${esc(a.top1.name)}</div></div>
+      <div class="stat"><div class="v tabular">${pct(a.top3Share)}</div><div class="l">top 3 combined</div></div>
+      <div class="stat"><div class="v tabular">${pct(a.top5Share)}</div><div class="l">top 5 combined</div></div>
+      <div class="stat"><div class="v tabular">${a.entropyNorm.toFixed(3)}</div><div class="l">normalized entropy</div></div>
+    </div>
+    <p class="small">Raw entropy <b class="tabular">${a.entropyBits.toFixed(2)} bits</b>, Miller–Madow corrected to <b class="tabular">${a.entropyBitsCorrected.toFixed(2)} bits</b> (a <b class="tabular">+${a.mmCorrectionBits.toFixed(3)}</b>-bit correction — ${a.mmCorrectionBits > 0.25 ? "on the larger side; treat the exact number with some caution" : "a small adjustment"}). <b class="tabular">${pct0(a.singletonRate)}</b> of the ${a.distinctSongs} distinct songs here have only ever filled this slot once. Same song filled it two shows running <b class="tabular">${pct0(a.consecutiveRepeatRate)}</b> of the time (${a.consecutivePairs} consecutive-show pairs checked).</p>
+    <h3 style="margin-top:18px">Raw distribution — top ${Math.min(12, a.distinctSongs)} of ${a.distinctSongs}</h3>
+    ${barChart(chartRows, { accentFirst: true })}
+    <div class="notebox">
+      <b>Last 365 days</b> (${RESULTS.recentFloor} → ${RESULTS.generatedAt}): n=${r.sampleSize}, ${r.distinctSongs} distinct songs, top song <b>${r.top1 ? esc(r.top1.name) : "—"}</b>${r.top1 ? ` (${pct(r.top1.share)})` : ""}, normalized entropy ${r.entropyNorm.toFixed(3)}${r.entropyNorm >= 0.99 ? " (at/near the 1.0 ceiling — sample too thin to read as real drift, see Recency section)" : ""}.
+    </div>
+  </section>`;
+}).join("");
+
+// ---- recency table ----
+document.getElementById("recencyTable").innerHTML = `
+  <tr><th>Slot</th><th class="num">All-time n</th><th class="num">All-time Hnorm</th><th class="num">Recent n</th><th class="num">Recent Hnorm</th><th>Recent top song</th></tr>
+  ${SLOT_ORDER.map(k => {
+    const a = RESULTS.slots[k].allTime, r = RESULTS.slots[k].recent;
+    return `<tr>
+      <td><a href="#slot-${k}">${SLOT_META[k].label}</a></td>
+      <td class="num tabular">${a.sampleSize}</td>
+      <td class="num tabular">${a.entropyNorm.toFixed(3)}</td>
+      <td class="num tabular">${r.sampleSize}</td>
+      <td class="num tabular">${r.entropyNorm.toFixed(3)}</td>
+      <td>${r.top1 ? esc(r.top1.name) + " (" + pct(r.top1.share) + ")" : "—"}</td>
+    </tr>`;
+  }).join("")}
+`;
+
+document.getElementById("sourceWindowNote").textContent =
+  `${RESULTS.totalPastShowsOnBooks} shows exist in that window; ${RESULTS.totalShowsAllTime} had a setlist actually filed (the other ${RESULTS.showsWithNoFiledSetlist} are on the books with no songs entered — future/unplayed shows, or historical gaps — and are excluded entirely, not counted as zero).`;
+
+document.getElementById("debutTrendNote").textContent =
+  `${pct0(ctx.debutRateAllTime)} of shows all-time have featured a debut, versus ${pct0(ctx.debutRateRecent)} in the last year.`;
+
+document.getElementById("flatDiscussion").innerHTML =
+  `Flat picks aren't tied to a position, so "which specific song" isn't really the question — the question is closer to "out of a ${ctx.catalogSize}-song catalog and a ${ctx.avgSongsPerShow.toFixed(1)}-song average setlist, how good is a well-informed guess." That's a fundamentally different measurement than per-slot entropy (which asks "of the songs that COULD fill this exact position, how concentrated is the answer") and this dataset doesn't directly answer it — it would need actual pick history (what your crew guesses, not what gets played) to measure real flat-pick hit rates. What the data here does support: flat picks are already the lowest-value item in the current config (1 point vs. 2 for slots) and that ordering still looks directionally right — nothing in this analysis suggests flat picks are secretly as hard to hit as the hardest positional slot, since an unconstrained guess against a ~10-song setlist is mechanically easier than nailing one specific position. I'd leave flat-pick value where it is unless you have real pick-vs-outcome data to check it against.`;
+
+document.getElementById("debutDiscussion").innerHTML =
+  `Any Debut is a binary bet (did the show have one at all), not a "which song" bet, so entropy doesn't apply — the relevant number is just the debut rate itself. And that rate has genuinely dropped: ${pct0(ctx.debutRateAllTime)} all-time vs. ${pct0(ctx.debutRateRecent)} in the last year — a real, non-small-sample signal (it's a plain count over a full year, not an entropy estimate on a handful of songs). A rarer event that still pays the same fixed points is effectively a value cut for anyone taking that bet. Worth considering raising Any Debut's point value to track the falling rate — a natural version of the same "scale to how hard it is to hit" logic used for the positional slots, just with a rate instead of an entropy number behind it.`;
+</script>
+
+</body>
+</html>
