@@ -21,7 +21,10 @@ export function subscribeRealtime(){
   channel = db.channel(`live-${state.currentBracketId}`)
     .on("postgres_changes", { event:"INSERT", schema:"public", table:"setlist_songs" }, p => {
       const s = p.new;
-      toast(`🎵 ${esc(s.songname)}${s.is_encore ? " (encore)" : ""}`, "", `song:${s.show_id}:${(s.songname||"").toLowerCase()}`);
+      // Debut detection is a footnote regex match (scoring.js/index.ts both
+      // use the same /debut/i test), not a structured flag — matches the
+      // Discord announcement's own "DEBUT 🥚" wording for consistency.
+      toast(`🎵 ${esc(s.songname)}${s.is_encore ? " (encore)" : ""}${/debut/i.test(s.footnote||"") ? " — DEBUT 🥚" : ""}`, "", `song:${s.show_id}:${(s.songname||"").toLowerCase()}`);
       if (state.currentShow && state.tab !== "admin" && s.show_id === state.currentShow.id) openShow(state.currentShow.id);
     })
     // remind_sent/lock_sent/winner_sent live on league_shows now (Stage A

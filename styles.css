@@ -253,6 +253,11 @@ html[data-theme="light"] .panel.live-halo{
    wrapping onto its own second line; the input (flex:1, min-width:0)
    is what absorbs the space difference between rows, not the label. */
 .slotline label{font-family:'Fraunces',serif;font-weight:700;font-size:1rem;flex:none;white-space:nowrap}
+/* Tap affordance for the slot tooltip — replaces a title= attribute, which
+   doesn't work on a touch device. Paper tokens (not --cream*/--panel*),
+   same reason as everything else inside .sheet: this sits on the
+   theme-invariant paper card, not the app's own flipping theme. */
+.slotline label .tip{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:4px;border:1px solid var(--paper-ink-soft);border-radius:50%;background:transparent;color:var(--paper-ink-soft);font-size:.62rem;line-height:1;font-family:'Outfit';font-weight:600;padding:0;vertical-align:2px}
 .slotline .pts{font-family:var(--mono);font-size:.7rem;color:var(--paper-ink-soft);border:1px solid var(--paper-ink-soft);border-radius:999px;padding:1px 7px;white-space:nowrap}
 .slotline input{flex:1;min-width:0;background:transparent;border:none;border-bottom:2px dashed var(--paper-ink-soft);color:var(--paper-ink);padding:4px 2px;font-size:1rem;font-family:'Outfit'}
 .slotline input:focus{outline:none;border-bottom-color:var(--yolk-deep);border-bottom-style:solid}
@@ -348,6 +353,7 @@ html[data-theme="light"] .panel.live-halo{
 /* Segue marker from Carton's own transition text (">"/"->") — appended to
    the song's own line, not a separate row. */
 .songrow .segue{color:var(--yolk);opacity:.75;font-weight:700}
+.songrow .debut{font-family:var(--mono);font-size:.68rem;letter-spacing:1px;color:var(--mint);font-weight:700}
 .pickres{display:flex;gap:8px;align-items:baseline;padding:5px 0;font-size:.9rem}
 .pickres .sl{font-family:var(--mono);font-size:.7rem;color:var(--cream-dim);min-width:64px;text-transform:uppercase}
 .pickres .pt{margin-left:auto;font-family:var(--mono)}

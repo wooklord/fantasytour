@@ -9,6 +9,14 @@ import { toast } from "../core/toast.js";
 import { currentBracket } from "../core/switcher.js";
 import { SLOT_LABELS, SLOT_TOOLTIPS, FLAT_PICK_TOOLTIP, slotLabelFor } from "../core/slotTypes.js";
 
+// Tap affordance for a slot's tooltip (replaces a plain title= attribute,
+// which doesn't work on a touch device — no hover, and long-press doesn't
+// reliably surface it either). Reads the text back off the button's own
+// data-tip rather than embedding it in the onclick call, so tooltip text
+// with quotes/apostrophes ("A cover the band's played before") can't break
+// the inline handler.
+export function showTip(el){ toast(el.dataset.tip); }
+
 // Case/whitespace-insensitive song-name comparison — the catalog
 // (songs_cache, synced from The Carton) has real entries with stray
 // leading/trailing whitespace (confirmed: 7 of 363 rows as of this
@@ -133,7 +141,7 @@ export async function renderPickSheet(show){
   const slots = slotDefs(show.format);
   const slotHtml = s => `
     <div class="slotline autocomplete">
-      <label${s.tooltip ? ` title="${esc(s.tooltip)}"` : ""}>${esc(s.label)}</label>
+      <label>${esc(s.label)}${s.tooltip ? `<button type="button" class="tip" data-tip="${esc(s.tooltip)}" onclick="showTip(this)" aria-label="What is ${esc(s.label)}?">ⓘ</button>` : ""}</label>
       <input data-slot="${s.key}" data-type="${s.type||s.key}" value="${val(s.key)}" placeholder="${(s.type||s.key)==="cover_pick"?"a cover…":"song…"}" autocomplete="off" spellcheck="false">
       <span class="pts">${s.pts}</span>
       <span class="unsaved" title="Unsaved change — differs from your saved pick">${UNLOCKED_ICON}</span>
@@ -268,10 +276,15 @@ export async function renderShowDetail(show){
     const label = s.is_encore ? "Encore" : "Set " + (s.setnumber || "1");
     const brk = label !== lastSet ? `<div class="setbreak">${esc(label)}</div>` : "";
     lastSet = label;
+    // Debut detection is a footnote regex match (same /debut/i test scoring.js
+    // and index.ts both use), not a structured flag — it inherits whatever the
+    // tapers wrote, so a missed or misworded footnote means a missed debut
+    // here same as in the wildcard and the bonus.
+    const isDebut = /debut/i.test(s.footnote || "");
     return brk + `
     <div class="songrow ${mineHits.has(s.songname.toLowerCase()) ? "hitmine" : ""}">
       <span class="pos">${s.position}</span>
-      <span class="name">${esc(s.songname)}${s.segue ? ' <span class="segue">&gt;</span>' : ""}</span>
+      <span class="name">${esc(s.songname)}${s.segue ? ' <span class="segue">&gt;</span>' : ""}${isDebut ? ' <span class="debut">DEBUT 🥚</span>' : ""}</span>
     </div>`;
   }).join("");
   const attribution = (setlist||[]).length ? `<p class="muted" style="text-align:center">Setlist data from ${

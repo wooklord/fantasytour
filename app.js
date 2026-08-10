@@ -373,6 +373,9 @@
   }
 
   // src/features/picks.js
+  function showTip(el) {
+    toast(el.dataset.tip);
+  }
   var normSong = (v) => (v || "").trim().toLowerCase();
   var isWildcard = (v) => normSong(v) === "any debut";
   var UNLOCKED_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
@@ -462,7 +465,7 @@
     const slots = slotDefs(show.format);
     const slotHtml = (s) => `
     <div class="slotline autocomplete">
-      <label${s.tooltip ? ` title="${esc(s.tooltip)}"` : ""}>${esc(s.label)}</label>
+      <label>${esc(s.label)}${s.tooltip ? `<button type="button" class="tip" data-tip="${esc(s.tooltip)}" onclick="showTip(this)" aria-label="What is ${esc(s.label)}?">\u24D8</button>` : ""}</label>
       <input data-slot="${s.key}" data-type="${s.type || s.key}" value="${val(s.key)}" placeholder="${(s.type || s.key) === "cover_pick" ? "a cover\u2026" : "song\u2026"}" autocomplete="off" spellcheck="false">
       <span class="pts">${s.pts}</span>
       <span class="unsaved" title="Unsaved change \u2014 differs from your saved pick">${UNLOCKED_ICON}</span>
@@ -603,10 +606,11 @@ Save anyway?`)) return;
       const label = s.is_encore ? "Encore" : "Set " + (s.setnumber || "1");
       const brk = label !== lastSet ? `<div class="setbreak">${esc(label)}</div>` : "";
       lastSet = label;
+      const isDebut = /debut/i.test(s.footnote || "");
       return brk + `
     <div class="songrow ${mineHits.has(s.songname.toLowerCase()) ? "hitmine" : ""}">
       <span class="pos">${s.position}</span>
-      <span class="name">${esc(s.songname)}${s.segue ? ' <span class="segue">&gt;</span>' : ""}</span>
+      <span class="name">${esc(s.songname)}${s.segue ? ' <span class="segue">&gt;</span>' : ""}${isDebut ? ' <span class="debut">DEBUT \u{1F95A}</span>' : ""}</span>
     </div>`;
     }).join("");
     const attribution = (setlist || []).length ? `<p class="muted" style="text-align:center">Setlist data from ${show.permalink ? `<a href="${CARTON_SITE_BASE}/${esc(show.permalink)}" target="_blank" rel="noopener">The Carton</a>` : "The Carton"}.</p>` : "";
@@ -1643,7 +1647,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
     if (channel) db.removeChannel(channel);
     channel = db.channel(`live-${state.currentBracketId}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "setlist_songs" }, (p) => {
       const s = p.new;
-      toast(`\u{1F3B5} ${esc(s.songname)}${s.is_encore ? " (encore)" : ""}`, "", `song:${s.show_id}:${(s.songname || "").toLowerCase()}`);
+      toast(`\u{1F3B5} ${esc(s.songname)}${s.is_encore ? " (encore)" : ""}${/debut/i.test(s.footnote || "") ? " \u2014 DEBUT \u{1F95A}" : ""}`, "", `song:${s.show_id}:${(s.songname || "").toLowerCase()}`);
       if (state.currentShow && state.tab !== "admin" && s.show_id === state.currentShow.id) openShow(state.currentShow.id);
     }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "league_shows", filter: `league_id=eq.${state.currentLeagueId}` }, async (p) => {
       const ls = p.new;
@@ -1769,6 +1773,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
     doLogin,
     doRegister,
     openShow,
+    showTip,
     renderShows,
     setBoardSeason,
     loadRoster,
