@@ -1026,17 +1026,30 @@ this is the condensed, durable record so the roadmap survives a context boundary
   session. Its admin-authored custom-rules half followed as separate, unnumbered
   follow-up work (not part of the Session 1–5 batches below) — also now built, see
   the same bullet for the soft-cap numbers.
-- **Session 3 — the ping table (decision 4): done.** See decision 4 above for
-  what actually shipped — `realtime_pings`, `pingRealtime()` in the edge
-  function, its own dedicated channel and `handlePing()` in `realtime.js`,
-  and the two now-dead direct bindings removed rather than left in place.
+- **Session 3 — the ping table (decision 4): done** (commit `60f9372`; SQL
+  deployed, edge function deployed, frontend pushed and confirmed live —
+  all three legs of the deploy order actually completed, not just
+  committed). See decision 4 above for what actually shipped —
+  `realtime_pings`, `pingRealtime()` in the edge function, its own
+  dedicated channel and `handlePing()` in `realtime.js`, and the two
+  now-dead direct bindings removed rather than left in place.
 - **Session 4 — auth + Global console, manual-approval execution mode** (touches
   the login flow and adds the most dangerous new control in the app — a PIN
   reset — so edits get reviewed individually, not batched). Strict internal
   order: (1) add a global-admin fixture to `test/harness.mjs` *first* — every
   scenario today presets a league admin, `p1`, and this project has already
   shipped one real bug from that exact non-admin blind spot; testing the console
-  by hand instead of against the harness would repeat it. (2) `must_change_pin`
+  by hand instead of against the harness would repeat it. **Session 3 added a
+  realtime emit block (setlist_songs/seasons/realtime_pings) to the END of
+  `runScenario` specifically** — it depends on that scenario's own preceding
+  steps leaving `state.currentBracketId` at `ids.CASUAL_ID` (the last
+  `switchToBracket` call before it), so if step 1 here restructures
+  `runScenario` or changes which bracket is current at that point, re-check
+  those emits still assert against the right bracket id. A parallel
+  `runGlobalAdminScenario` (mirroring `runNonAdminScenario`'s existing shape)
+  won't automatically inherit that realtime coverage and doesn't need to —
+  ping delivery isn't role-gated, so it's already covered by the scenario
+  that has it. (2) `must_change_pin`
   flag + the forced login interstitial. (3) the shared PIN-reset RPC. (4) the
   reset buttons themselves (league-scoped in `admin.js`, Global-scoped in the new
   console) — only after 2 and 3 are verified working; a reachable reset button
