@@ -36,6 +36,14 @@ export function makeFixtures(){
     league_members: [
       { league_id: LEAGUE_ID, player_id: "p1", is_league_admin: true, official_opt_in: true },
       { league_id: LEAGUE_ID, player_id: "p2", is_league_admin: false, official_opt_in: false },
+      // p4 is a genuine global admin (is_global_admin lives on the session
+      // object, not here — see makeFixtures' session below and
+      // runGlobalAdminScenario in harness.mjs), NOT a league admin — this
+      // membership row exists only so resolveLeagues() doesn't render
+      // renderNoLeague() for them; is_league_admin:false here is deliberate,
+      // so the admin tab rendering for p4 proves isCurrentLeagueAdmin()'s
+      // is_global_admin OR-branch, not the league_members branch p1 already covers.
+      { league_id: LEAGUE_ID, player_id: "p4", is_league_admin: false, official_opt_in: true },
     ],
     songs_cache: [
       { songname: "Distraction", times_played: 40, is_original: true },
@@ -79,6 +87,7 @@ export function makeFixtures(){
       // admin_find_players should be able to surface for the "add a member"
       // search.
       { id: "p3", name: "Wanderer", created_at: "2026-01-03" },
+      { id: "p4", name: "GlobalAdmin", created_at: "2026-01-04" },
     ],
     scores: [
       { player_id: "p1", bracket_id: CASUAL_ID, show_id: 2, points: 5, breakdown: [{ slot:"opener", songname:"Distraction", points:2, hit:true, reason:"hit" }] },

@@ -12,7 +12,11 @@
     leagues: [],
     // raw my_leagues() rows for this session
     currentLeagueId: null,
-    currentBracketId: null
+    currentBracketId: null,
+    allLeagues: []
+    // Global console only — the flat app-wide league list
+    // (distinct from `leagues` above, which is scoped to
+    // this session's own memberships)
   };
 
   // src/core/dom.js
@@ -107,6 +111,37 @@
       location.reload();
     } catch (e) {
       $("#a-err").textContent = e.message;
+    }
+  }
+  function renderForceChangePin() {
+    $("#main").innerHTML = `
+    <div class="panel" style="margin-top:38px">
+      <h2 class="display">Set a new PIN</h2>
+      <p class="muted">Your PIN was reset by an admin. Choose a new one to continue \u2014 this replaces it for good.</p>
+      <div class="field"><label>New PIN (4\u20138 digits)</label><input id="fp-new" inputmode="numeric" autocomplete="new-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
+      <div class="field"><label>Confirm new PIN</label><input id="fp-confirm" inputmode="numeric" autocomplete="new-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
+      <div class="row">
+        <button class="btn" onclick="submitForcedPinChange()">Set PIN</button>
+        <button class="btn ghost" onclick="logout()">Log out</button>
+      </div>
+      <div class="err" id="fp-err"></div>
+    </div>
+    ${footerHtml()}`;
+  }
+  async function submitForcedPinChange() {
+    $("#fp-err").textContent = "";
+    const p_new_pin = $("#fp-new").value, confirm2 = $("#fp-confirm").value;
+    if (p_new_pin !== confirm2) {
+      $("#fp-err").textContent = "PINs don't match.";
+      return;
+    }
+    try {
+      await rpc("change_own_pin", { p_name: state.session.name, p_pin: state.session.pin, p_new_pin });
+      state.session = { ...state.session, pin: p_new_pin, must_change_pin: false };
+      localStorage.setItem("ft_session", JSON.stringify(state.session));
+      location.reload();
+    } catch (e) {
+      $("#fp-err").textContent = e.message;
     }
   }
 
@@ -1189,6 +1224,94 @@ Save anyway?`)) return;
     <div id="sec-${key}" class="${open ? "" : "hidden"}">${bodyHtml}</div>
   </div>`;
   }
+  function globalConsoleHtml() {
+    if (!state.session.is_global_admin) return "";
+    return collapsible("global", "Global console", `
+    <p class="muted">Global-only: create leagues, appoint league admins, and reset any player's PIN app-wide.</p>
+    <div class="field"><label>New league name</label>
+      <div class="row"><input id="gc-league-name" placeholder="e.g. Facebook League">
+      <button class="btn ghost small" onclick="globalCreateLeague()">Create</button></div></div>
+    <div class="err" id="gc-league-err"></div>
+    <div class="field" style="margin-top:14px"><label>Appoint a league admin</label>
+      <select id="gc-appoint-league">${(state.allLeagues || []).map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join("")}</select>
+      <input id="gc-appoint-search" placeholder="Search player name\u2026" oninput="globalSearchPlayers('appoint')" autocomplete="off"></div>
+    <div id="gc-appoint-results"></div>
+    <div class="field" style="margin-top:14px"><label>Reset a player's PIN (app-wide)</label>
+      <input id="gc-reset-search" placeholder="Search player name\u2026" oninput="globalSearchPlayers('reset')" autocomplete="off"></div>
+    <div id="gc-reset-results"></div>
+  `);
+  }
+  async function loadGlobalLeagues() {
+    const { data, error } = await db.from("leagues").select("id,name").order("name");
+    if (error) {
+      toast(esc(error.message));
+      return;
+    }
+    state.allLeagues = data || [];
+    const sel = $("#gc-appoint-league");
+    if (sel) sel.innerHTML = state.allLeagues.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join("");
+  }
+  async function globalCreateLeague() {
+    $("#gc-league-err").textContent = "";
+    const name = $("#gc-league-name").value.trim();
+    if (!name) {
+      $("#gc-league-err").textContent = "League needs a name";
+      return;
+    }
+    try {
+      await rpc("global_create_league", { p_name: state.session.name, p_pin: state.session.pin, p_league_name: name });
+      toast(`${name} created`, "score");
+      $("#gc-league-name").value = "";
+      loadGlobalLeagues();
+    } catch (e) {
+      $("#gc-league-err").textContent = e.message;
+    }
+  }
+  async function globalSearchPlayers(kind) {
+    const inputSel = kind === "appoint" ? "#gc-appoint-search" : "#gc-reset-search";
+    const resultsSel = kind === "appoint" ? "#gc-appoint-results" : "#gc-reset-results";
+    const q = $(inputSel).value.trim();
+    if (q.length < 2) {
+      $(resultsSel).innerHTML = "";
+      return;
+    }
+    try {
+      const rows = await rpc("global_find_players", { p_name: state.session.name, p_pin: state.session.pin, p_query: q });
+      $(resultsSel).innerHTML = (rows || []).map((p) => `
+      <div class="pickres">
+        <span>${esc(p.name)}</span>
+        <span class="pt">${kind === "appoint" ? `<button class="btn ghost small" onclick="globalAppointAdmin('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Appoint</button>` : `<button class="btn ghost small" onclick="globalResetPin('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Reset PIN</button>`}</span>
+      </div>`).join("") || '<p class="muted">No matches.</p>';
+    } catch (e) {
+      $(resultsSel).innerHTML = `<p class="err">${esc(e.message)}</p>`;
+    }
+  }
+  async function globalAppointAdmin(id, name) {
+    const leagueId = Number($("#gc-appoint-league").value);
+    if (!leagueId) {
+      toast("Pick a league first");
+      return;
+    }
+    try {
+      await rpc("global_appoint_league_admin", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: leagueId, p_player_id: id });
+      toast(`${name} appointed league admin`, "score");
+      $("#gc-appoint-search").value = "";
+      $("#gc-appoint-results").innerHTML = "";
+    } catch (e) {
+      toast(esc(e.message));
+    }
+  }
+  async function globalResetPin(id, name) {
+    if (!confirm(`Reset ${name}'s PIN app-wide? They'll be forced to set a new one on next login. Relay the new PIN to them directly \u2014 it can't be recovered after this.`)) return;
+    try {
+      const r = await rpc("admin_reset_player_pin", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: null, p_player_id: id });
+      alert(`New PIN for ${name}: ${r.new_pin}
+
+Relay this to them now \u2014 it will not be shown again.`);
+    } catch (e) {
+      toast(esc(e.message));
+    }
+  }
   async function renderAdmin() {
     var _a, _b, _c, _d, _e;
     clearTimersFor("admin");
@@ -1216,6 +1339,7 @@ Save anyway?`)) return;
       return `${Number(m)}/${Number(d)}`;
     }).join(", ")}</div>` : "";
     $("#main").innerHTML = `
+    ${globalConsoleHtml()}
     <div class="panel"><h2>Who's picked</h2>
       <div class="field"><label>Show</label>
         <select id="roster-show" onchange="loadRoster()">
@@ -1328,6 +1452,7 @@ Save anyway?`)) return;
     ${footerHtml()}`;
     if ((shows || []).length) loadRoster();
     loadMembers();
+    if (state.session.is_global_admin) loadGlobalLeagues();
     wireSettingsPanel();
   }
   async function loadMembers() {
@@ -1335,8 +1460,19 @@ Save anyway?`)) return;
     $("#playerlist").innerHTML = (rows || []).map((p) => `
     <div class="pickres hit"><span>${p.is_league_admin ? "\u2605" : "\xB7"}</span>
       <span>${esc(p.name)}${p.official_opt_in ? ' <small class="muted">Official</small>' : ""}</span>
-      <span class="pt">${p.player_id === state.session.id ? '<small class="muted">you</small>' : (p.is_league_admin ? '<small class="muted">admin</small> ' : "") + `<button class="btn ghost small" onclick="bootPlayer('` + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')" style="border-color:var(--coral);color:var(--coral)">Boot</button>`}</span>
+      <span class="pt">${p.player_id === state.session.id ? '<small class="muted">you</small>' : (p.is_league_admin ? '<small class="muted">admin</small> ' : "") + `<button class="btn ghost small" onclick="resetMemberPin('` + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')">Reset PIN</button> <button class="btn ghost small" onclick="bootPlayer('` + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')" style="border-color:var(--coral);color:var(--coral)">Boot</button>`}</span>
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
+  }
+  async function resetMemberPin(id, name) {
+    if (!confirm(`Reset ${name}'s PIN? They'll be forced to set a new one on next login. Relay the new PIN to them directly \u2014 it can't be recovered after this.`)) return;
+    try {
+      const r = await rpc("admin_reset_player_pin", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_player_id: id });
+      alert(`New PIN for ${name}: ${r.new_pin}
+
+Relay this to them now \u2014 it will not be shown again.`);
+    } catch (e) {
+      toast(esc(e.message));
+    }
   }
   async function searchMembers() {
     const q = $("#member-search").value.trim();
@@ -1795,6 +1931,10 @@ OK = remove + ban \xB7 Cancel = remove only`);
       renderAuth();
       return;
     }
+    if (state.session.must_change_pin) {
+      renderForceChangePin();
+      return;
+    }
     try {
       const hasLeague = await resolveLeagues();
       if (!hasLeague) {
@@ -1824,6 +1964,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
     logout,
     doLogin,
     doRegister,
+    submitForcedPinChange,
     openShow,
     renderShows,
     setBoardSeason,
@@ -1848,6 +1989,11 @@ OK = remove + ban \xB7 Cancel = remove only`);
     toggleSection,
     addCustomRule,
     checkRuleCap,
+    resetMemberPin,
+    globalCreateLeague,
+    globalSearchPlayers,
+    globalAppointAdmin,
+    globalResetPin,
     switchToBracket,
     switchToLeague
   });

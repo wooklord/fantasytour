@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runForcedPinChangeScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -133,6 +133,10 @@ async function runMode(mode){
     admin && /member-search/.test(admin.html),
     `admin html: ${admin?.html}`);
 
+  check("Members panel offers Reset PIN per member (Session 4 step 4)",
+    admin && /resetMemberPin/.test(admin.html),
+    `admin html: ${admin?.html}`);
+
   check("Seasons panel has a manage-roster control per saved season",
     admin && /manage roster/.test(admin.html),
     `admin html: ${admin?.html}`);
@@ -224,6 +228,44 @@ async function runMode(mode){
     /Bracket/.test(nonAdmin.afterForegroundHtml) && /Log out/.test(nonAdmin.afterForegroundHtml)
       && !/Master switch/.test(nonAdmin.afterForegroundHtml) && !/Who's picked/.test(nonAdmin.afterForegroundHtml),
     `afterForegroundHtml: ${nonAdmin.afterForegroundHtml}`);
+
+  // p4 is a genuine global admin (is_global_admin:true) with no
+  // league_members.is_league_admin flag at all — closes the blind spot
+  // CLAUDE.md flags: every other scenario's admin coverage runs through the
+  // league-admin branch, never the is_global_admin one.
+  const globalAdmin = await runGlobalAdminScenario({ html, scripts, mode });
+  // settingsPanelHtml() (with its own "Log out" button) is embedded inside
+  // renderAdmin() too (see admin.js), so "Log out" appears on both — the
+  // admin-only signal is Master switch/Who's picked, not the absence of Log out.
+  check("a genuine global admin (no league-admin flag) sees Admin content",
+    /Master switch/.test(globalAdmin.adminHtml) && /Who's picked/.test(globalAdmin.adminHtml),
+    `adminHtml present: ${!!globalAdmin.adminHtml}`);
+  check("a genuine global admin's shared tab is labeled Admin, not Settings",
+    globalAdmin.sharedTabLabel === "Admin",
+    `sharedTabLabel: "${globalAdmin.sharedTabLabel}"`);
+  check("the Global console section renders for a global admin",
+    /Global console/.test(globalAdmin.adminHtml),
+    `adminHtml: ${globalAdmin.adminHtml}`);
+  check("creating a league via the Global console adds a real row",
+    globalAdmin.leagueCountAfterCreate === 2,
+    `leagueCountAfterCreate: ${globalAdmin.leagueCountAfterCreate}`);
+  check("Global console player search surfaces the non-member fixture player (Wanderer)",
+    /Wanderer/.test(globalAdmin.appointResultsHtml),
+    `appointResultsHtml: ${globalAdmin.appointResultsHtml}`);
+  check("appointing via the Global console makes Wanderer an admin of the new league",
+    globalAdmin.wandererIsAdminOfNewLeague === true,
+    `wandererIsAdminOfNewLeague: ${globalAdmin.wandererIsAdminOfNewLeague}`);
+
+  // Session 4 step 2: must_change_pin:true must block the normal tabs
+  // behind a forced interstitial, and submitting a matching new PIN must
+  // clear the flag in the stored session.
+  const forcedPin = await runForcedPinChangeScenario({ html, scripts, mode });
+  check("must_change_pin:true renders the forced interstitial, not the normal tabs",
+    /Set a new PIN/.test(forcedPin.interstitialHtml) && forcedPin.tabsDisplay !== "flex",
+    `interstitialHtml present: ${/Set a new PIN/.test(forcedPin.interstitialHtml)} tabsDisplay: "${forcedPin.tabsDisplay}"`);
+  check("submitting a matching new PIN clears must_change_pin in the stored session",
+    forcedPin.storedSession && forcedPin.storedSession.must_change_pin === false && forcedPin.storedSession.pin === "4321",
+    `storedSession: ${JSON.stringify(forcedPin.storedSession)}`);
 
   return failures.length;
 }

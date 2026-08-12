@@ -14,4 +14,7 @@ export const state = {
   leagues: [],           // raw my_leagues() rows for this session
   currentLeagueId: null,
   currentBracketId: null,
+  allLeagues: [],        // Global console only — the flat app-wide league list
+                          // (distinct from `leagues` above, which is scoped to
+                          // this session's own memberships)
 };

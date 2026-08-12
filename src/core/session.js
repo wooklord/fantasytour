@@ -1,7 +1,7 @@
 import { $, esc } from "./dom.js";
 import { db } from "./supabaseClient.js";
 import { state } from "./state.js";
-import { renderAuth } from "../features/auth.js";
+import { renderAuth, renderForceChangePin } from "../features/auth.js";
 import { subscribeRealtime } from "./realtime.js";
 import { renderAll, applyLayout } from "./layout.js";
 import { APP_NAME } from "./config.js";
@@ -58,6 +58,10 @@ export async function boot(){
   // localStorage session, which skipped straight past the broken branch.
   applyLayout();
   if (!state.session){ renderAuth(); return; }
+  // A relayed reset PIN forces a real change before anything else renders —
+  // existing sessions from before this flag existed read must_change_pin as
+  // undefined (falsy), so nobody already logged in is affected.
+  if (state.session.must_change_pin){ renderForceChangePin(); return; }
   try{
     const hasLeague = await resolveLeagues();
     if (!hasLeague){ await renderNoLeague(); return; }

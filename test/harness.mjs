@@ -123,6 +123,50 @@ const RPC_HANDLERS = {
   admin_pick_status: async () => [{ player_name: "Wooklord", picks_count: 1, last_saved: "2026-07-26T00:00:00Z" }],
   admin_update_config: async () => ({ ok: true }),
   admin_set_cutoff: async () => ({ ok: true }),
+  // Session 4 step 2 — flips must_change_pin on the matching players_public
+  // row, mirroring the real RPC's effect (real join, not a fixed stub, same
+  // idiom as my_leagues/get_bracket_scores above).
+  change_own_pin: async ({ p_name }, tables) => {
+    const player = tables.players_public.find(p => p.name === p_name);
+    if (player) player.must_change_pin = false;
+    return { ok: true };
+  },
+  // Session 4 step 3 — real-join checked against league_members for the
+  // "target not in this league" rejection, the one real authorization
+  // boundary this RPC adds beyond the shared admin guard every other
+  // admin_* handler already models loosely (the fakes don't model auth
+  // failures generally, but this guard is new/specific enough to be worth
+  // actually exercising rather than assumed).
+  admin_reset_player_pin: async ({ p_league_id, p_player_id }, tables) => {
+    const target = tables.players_public.find(p => p.id === p_player_id);
+    if (!target) throw new Error("Player not found");
+    const inLeague = tables.league_members.some(lm => lm.league_id === p_league_id && lm.player_id === p_player_id);
+    if (p_league_id != null && !inLeague) throw new Error("That player is not in this league");
+    target.must_change_pin = true;
+    return { ok: true, name: target.name, new_pin: "135790" };
+  },
+  // Session 4 step 5 — Global console. Real prefix-match against the
+  // fixture's players_public, same idiom as admin_find_players — unscoped
+  // (no league exclusion) since global_find_players has no p_league_id.
+  global_find_players: async ({ p_query }, tables) => {
+    const q = (p_query || "").trim().toLowerCase();
+    if (q.length < 2) throw new Error("Enter at least 2 characters");
+    return tables.players_public.filter(p => p.name.toLowerCase().startsWith(q)).map(p => ({ player_id: p.id, name: p.name }));
+  },
+  // Mutates tables.leagues for real, so loadGlobalLeagues()'s refetch after
+  // create actually reflects the new league — same "real write, not a
+  // no-op stub" idiom as submit_picks above.
+  global_create_league: async ({ p_league_name }, tables) => {
+    const id = Math.max(0, ...tables.leagues.map(l => l.id)) + 1;
+    tables.leagues.push({ id, name: p_league_name });
+    return { ok: true, league_id: id };
+  },
+  global_appoint_league_admin: async ({ p_league_id, p_player_id }, tables) => {
+    const existing = tables.league_members.find(lm => lm.league_id === p_league_id && lm.player_id === p_player_id);
+    if (existing) existing.is_league_admin = true;
+    else tables.league_members.push({ league_id: p_league_id, player_id: p_player_id, is_league_admin: true, official_opt_in: true });
+    return { ok: true };
+  },
   // admin_boot_player / admin_set_show_status intentionally absent — both
   // were dropped in Stage C1. Any leftover call site targeting them should
   // fail loudly ("unhandled rpc"), not silently succeed against a stub.
@@ -210,6 +254,95 @@ export async function runNonAdminScenario({ html, scripts, mode }){
   const afterForegroundHtml = mainHTML(window, mode);
 
   return { settingsHtml, sharedTabLabel, afterForegroundHtml };
+}
+
+// Every other scenario presets either a league admin (p1) or a non-admin
+// (p2) — no scenario has ever exercised a GENUINE global admin
+// (is_global_admin:true), a structurally different code path from league
+// admin: isCurrentLeagueAdmin() (core/switcher.js) short-circuits true on
+// is_global_admin alone, independent of any league_members row. p4 still
+// needs a league_members row in the fixture (is_league_admin:false there,
+// deliberately, so this exercises the is_global_admin branch and not the
+// league-admin branch p1 already covers) — without one, resolveLeagues()
+// would render renderNoLeague() instead of the tabs at all, the same trap
+// a real from-scratch global admin with no league yet would hit.
+export async function runGlobalAdminScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const dbHolder = {};
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, dbHolder);
+  const session = { id: "p4", name: "GlobalAdmin", pin: "1234", is_global_admin: true };
+  window.localStorage.setItem("ft_session", JSON.stringify(session));
+
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+
+  clickTab(window, "admin");
+  await tick(); await tick();
+  const adminHtml = mainHTML(window, mode);
+  const sharedTabLabel = window.document.getElementById("admintab")?.textContent
+    || window.document.getElementById("col-admin-title")?.textContent || "";
+
+  // Session 4 step 5 — exercise the Global console end to end: create a
+  // league (real write to tables.leagues via the fake global_create_league
+  // handler), then search+appoint an existing player (p3, "Wanderer",
+  // registered but not in any league yet) as that new league's admin.
+  window.document.getElementById("gc-league-name").value = "Facebook League";
+  await window.globalCreateLeague();
+  await tick(); await tick();
+  const leagueCountAfterCreate = tables.leagues.length;
+
+  window.document.getElementById("gc-appoint-search").value = "wa";
+  await window.globalSearchPlayers("appoint");
+  await tick(); await tick();
+  const appointResultsHtml = window.document.getElementById("gc-appoint-results")?.innerHTML || "";
+  const newLeagueId = tables.leagues.find(l => l.name === "Facebook League")?.id;
+  const appointSelect = window.document.getElementById("gc-appoint-league");
+  if (appointSelect) appointSelect.value = String(newLeagueId);
+  await window.globalAppointAdmin("p3", "Wanderer");
+  await tick(); await tick();
+  const wandererIsAdminOfNewLeague = tables.league_members.some(
+    lm => lm.league_id === newLeagueId && lm.player_id === "p3" && lm.is_league_admin === true);
+
+  return { adminHtml, sharedTabLabel, leagueCountAfterCreate, appointResultsHtml, wandererIsAdminOfNewLeague };
+}
+
+// Session 4 step 2: a session with must_change_pin:true must land on the
+// forced interstitial instead of the normal tabs, and submitting a matching
+// new PIN must clear the flag and resume the normal app. Direct session
+// preset (like runNonAdminScenario/runGlobalAdminScenario above) is enough
+// here — this doesn't need the login RPC's own must_change_pin return value
+// to be realistic, since every scenario in this file already bypasses login()
+// entirely by presetting ft_session.
+export async function runForcedPinChangeScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const dbHolder = {};
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, dbHolder);
+  const session = { id: "p1", name: "Wooklord", pin: "9999", is_global_admin: false, must_change_pin: true };
+  window.localStorage.setItem("ft_session", JSON.stringify(session));
+
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+
+  const interstitialHtml = mainHTML(window, mode);
+  const tabsDisplay = window.document.getElementById("tabs")?.style.display || "";
+
+  const newInput = window.document.querySelector("#fp-new");
+  const confirmInput = window.document.querySelector("#fp-confirm");
+  if (newInput) newInput.value = "4321";
+  if (confirmInput) confirmInput.value = "4321";
+  await window.submitForcedPinChange();
+  await tick(); await tick();
+
+  const afterHtml = mainHTML(window, mode);
+  const storedSession = JSON.parse(window.localStorage.getItem("ft_session") || "null");
+
+  return { interstitialHtml, tabsDisplay, afterHtml, storedSession };
 }
 
 // scripts: array of JS source strings to eval, in order, after globals are set.

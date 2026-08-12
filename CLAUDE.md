@@ -299,13 +299,36 @@ before assuming a change is covered just because the suite is green:
   nothing rate-limits guesses against it. Fine at today's scale (~10
   Ambassadors), but worth thinking through deliberately before the ~50-person
   Facebook league joins — a bigger, less-trusted pool. Not solved in Stage C2a.
-- **Open question, not yet addressed: no self-service PIN management.** A
-  player can't change their own PIN, and there's no forgot-PIN path — the only
-  recovery today is an admin running SQL directly against `pin_hash`. Fine at
-  ~10 Ambassadors who can just text the dev; a real problem once the
-  ~50-person Facebook league joins and most of them aren't a text away. Pairs
-  with the PIN-guessing concern above — both are the auth model not scaling
-  past a small, personally-known group, not two unrelated gaps.
+- **Partially addressed (Session 4): admin-triggered PIN reset now exists;
+  voluntary self-service change still doesn't.** A league/global admin can
+  run `admin_reset_player_pin` (`sql/stage_l_admin_pin_reset.sql`) to
+  server-generate a new PIN and force the target to set a real one on next
+  login (`must_change_pin`, `sql/stage_k_pin_management.sql`,
+  `renderForceChangePin()` in `auth.js`) — the "only recovery is raw SQL
+  against `pin_hash`" half of this bullet is no longer true. What's still
+  missing: a player still can't change their own PIN voluntarily (no
+  forgot-PIN self-service, no "change my PIN" control in Settings) —
+  `change_own_pin` exists and is exactly what that control would call, but
+  nothing in Settings calls it yet. Deliberately deferred as its own
+  follow-up (Session 4's own scope was explicitly capped at the admin-reset
+  path, per the roadmap below) — revisit before the Facebook league launches,
+  same reasoning as the PIN-guessing concern above.
+- **Reveal-once secrets (the PIN reset's `new_pin`) transit through whatever
+  request/response logging Supabase's platform does, if any — outside this
+  app's control, but a real property worth having written down rather than
+  assumed away.** `admin_reset_player_pin` never writes the plaintext PIN to
+  any table or application log — it exists only as a `plpgsql` local
+  variable and the single RPC response that returns it once, matching the
+  "admin never sees/chooses it, relayed once" requirement. But if
+  project-level API/request logging is ever enabled on the Supabase project
+  (not something this codebase controls or has audited), that response body
+  — like any RPC response containing a secret — would transit through it the
+  same way. This isn't specific to a coding mistake here; it's an inherent
+  property of any "reveal a secret once via an RPC response" pattern, and
+  applies equally to a future self-service forgot-PIN flow if one is ever
+  built the same way. Worth a one-time check of the project's logging
+  settings before this matters at real scale, not something to re-derive
+  from a chat transcript later.
 - **Fixed: auth rejections from `reopen`/`cutoff_changed`/`finalize` used to all
   return HTTP 500**, indistinguishable from a genuine server bug (the
   handler's single `catch` turned "wrong PIN," "not authorized," and a real
@@ -1033,30 +1056,61 @@ this is the condensed, durable record so the roadmap survives a context boundary
   `realtime_pings`, `pingRealtime()` in the edge function, its own
   dedicated channel and `handlePing()` in `realtime.js`, and the two
   now-dead direct bindings removed rather than left in place.
-- **Session 4 — auth + Global console, manual-approval execution mode** (touches
-  the login flow and adds the most dangerous new control in the app — a PIN
-  reset — so edits get reviewed individually, not batched). Strict internal
-  order: (1) add a global-admin fixture to `test/harness.mjs` *first* — every
-  scenario today presets a league admin, `p1`, and this project has already
-  shipped one real bug from that exact non-admin blind spot; testing the console
-  by hand instead of against the harness would repeat it. **Session 3 added a
-  realtime emit block (setlist_songs/seasons/realtime_pings) to the END of
-  `runScenario` specifically** — it depends on that scenario's own preceding
-  steps leaving `state.currentBracketId` at `ids.CASUAL_ID` (the last
-  `switchToBracket` call before it), so if step 1 here restructures
-  `runScenario` or changes which bracket is current at that point, re-check
-  those emits still assert against the right bracket id. A parallel
-  `runGlobalAdminScenario` (mirroring `runNonAdminScenario`'s existing shape)
-  won't automatically inherit that realtime coverage and doesn't need to —
-  ping delivery isn't role-gated, so it's already covered by the scenario
-  that has it. (2) `must_change_pin`
-  flag + the forced login interstitial. (3) the shared PIN-reset RPC. (4) the
-  reset buttons themselves (league-scoped in `admin.js`, Global-scoped in the new
-  console) — only after 2 and 3 are verified working; a reachable reset button
-  with no forced-change behind it is a worse security posture than the raw SQL
-  it replaces. (5) the Global console shell. (6) self-service PIN change, login
-  rate-limiting, and the Official opt-in default revisit — no dependency on the
-  above, interleave anywhere.
+- **Session 4 — auth + Global console: code complete (steps 1-5 of the
+  6 originally scoped), SQL not yet run against the live database — that's
+  the dev's next action, not done yet.** Ran in the manual-approval mode this
+  bullet used to only describe: every SQL file was reviewed individually
+  before the next was written, and two follow-up gaps the dev caught in
+  review (the server-side bypass below, and the platform-logging caveat now
+  in the Postgres gotchas section above) got fixed before this landed, not
+  after. What shipped, in the order actually built:
+  1. `runGlobalAdminScenario` (`test/harness.mjs`/`test/fixtures.mjs`) — a
+     genuine `is_global_admin:true` session (`p4`), closing the exact blind
+     spot this bullet used to warn about: every scenario before this one
+     ran through the league-admin branch of `isCurrentLeagueAdmin()`, never
+     the global-admin one.
+  2. `must_change_pin` (`sql/stage_k_pin_management.sql`) + the forced
+     interstitial (`renderForceChangePin()`/`submitForcedPinChange()` in
+     `auth.js`, gated in `session.js`'s `boot()`).
+  3. The shared reset RPC, `admin_reset_player_pin`
+     (`sql/stage_l_admin_pin_reset.sql`) — reuses
+     `_is_league_admin_or_global` per the locked design, plus an added
+     target-membership check (the shared guard alone only proves the
+     *caller* admins the league, not that the *target* is in it).
+  4. The "Reset PIN" button in `admin.js`'s Members panel, wired only after
+     2 and 3 were verified — the non-negotiable ordering held.
+  5. The Global console: **not** a new nav tab — folded into Admin as one
+     more `collapsible()` section gated on `is_global_admin` (a deliberate
+     call, not the default; a real tab would have touched `index.html`'s
+     nav, `layout.js`'s 3-column grid, and `dom.js`'s `$()` redirect logic
+     for a screen used a handful of times a year). Wires up
+     `global_create_league`/`global_appoint_league_admin` (which existed
+     since Stage C1 with zero callers until now) plus one new RPC,
+     `global_find_players` (`sql/stage_m_global_console.sql`) — needed
+     because `admin_find_players` is league-scoped and excludes existing
+     members, backwards for "promote someone already in the league."
+  - **A real gap caught in review, fixed before commit, not after:**
+    `must_change_pin` was, as first built, enforced only client-side —
+    `boot()`'s gate is UI routing, not an authorization boundary, and
+    nothing server-side stopped a relayed-but-not-yet-changed PIN from
+    authenticating to every other RPC, including `submit_picks`. Closed in
+    `sql/stage_n_reject_pending_pin_change_writes.sql`: a shared
+    `_reject_if_must_change_pin(pl)` helper (defined in `stage_l`, called
+    from every WRITE rpc immediately after `_auth_player`, reads left
+    ungated on purpose) — 14 already-shipped write RPCs re-touched
+    body-only (same idiom as `stage_d` re-touching `admin_set_season_roster`
+    or `stage_c2a` re-touching `submit_picks`), each verified by mechanical
+    diff against its live body to differ by exactly the one added line and
+    nothing else. `login`/`change_own_pin` are the only two functions that
+    must never call it — they're the only way out of the state it enforces.
+  - **Run order is now `k → l → m → n`**, not the originally-planned
+    `k → l → m` — `n` didn't exist until the review above surfaced the gap
+    it fixes, and it depends on `l`'s helper.
+  - **Deliberately deferred, not forgotten**: self-service PIN change
+    (`change_own_pin` already exists — Settings just doesn't call it yet),
+    login rate-limiting, and the Official opt-in-default revisit. Each gets
+    its own follow-up session — see the two gotcha bullets above for why
+    they weren't folded into this one.
 - **Session 5 — Facebook League launch:** create the league + appoint its two
   admins through the real console this time, provision one Discord webhook
   secret, smoke-test. Blocked on the two admins being named and confirmed.

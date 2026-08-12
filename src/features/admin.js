@@ -85,6 +85,89 @@ function collapsible(key, title, bodyHtml, alwaysVisible = ""){
   </div>`;
 }
 
+// Session 4 step 5 — Global console, folded into the existing Admin screen
+// as one more collapsible() section rather than a new nav tab: used a
+// handful of times a year, Admin already uses this pattern everywhere, and
+// a real tab would touch index.html's nav, layout.js's 3-column grid, and
+// dom.js's $() redirect logic for no real benefit at this scale. Gated
+// entirely on is_global_admin — league admins never see this section at all.
+function globalConsoleHtml(){
+  if (!state.session.is_global_admin) return "";
+  return collapsible("global", "Global console", `
+    <p class="muted">Global-only: create leagues, appoint league admins, and reset any player's PIN app-wide.</p>
+    <div class="field"><label>New league name</label>
+      <div class="row"><input id="gc-league-name" placeholder="e.g. Facebook League">
+      <button class="btn ghost small" onclick="globalCreateLeague()">Create</button></div></div>
+    <div class="err" id="gc-league-err"></div>
+    <div class="field" style="margin-top:14px"><label>Appoint a league admin</label>
+      <select id="gc-appoint-league">${(state.allLeagues||[]).map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join("")}</select>
+      <input id="gc-appoint-search" placeholder="Search player name…" oninput="globalSearchPlayers('appoint')" autocomplete="off"></div>
+    <div id="gc-appoint-results"></div>
+    <div class="field" style="margin-top:14px"><label>Reset a player's PIN (app-wide)</label>
+      <input id="gc-reset-search" placeholder="Search player name…" oninput="globalSearchPlayers('reset')" autocomplete="off"></div>
+    <div id="gc-reset-results"></div>
+  `);
+}
+export async function loadGlobalLeagues(){
+  // leagues has a public RLS read policy (same free read renderNoLeague()
+  // already relies on) — no RPC needed just to list them.
+  const { data, error } = await db.from("leagues").select("id,name").order("name");
+  if (error){ toast(esc(error.message)); return; }
+  state.allLeagues = data || [];
+  const sel = $("#gc-appoint-league");
+  if (sel) sel.innerHTML = state.allLeagues.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join("");
+}
+export async function globalCreateLeague(){
+  $("#gc-league-err").textContent = "";
+  const name = $("#gc-league-name").value.trim();
+  if (!name){ $("#gc-league-err").textContent = "League needs a name"; return; }
+  try{
+    await rpc("global_create_league", { p_name:state.session.name, p_pin:state.session.pin, p_league_name:name });
+    toast(`${name} created`, "score");
+    $("#gc-league-name").value = "";
+    loadGlobalLeagues();
+  }catch(e){ $("#gc-league-err").textContent = e.message; }
+}
+// One search box pattern, reused for both the appoint-admin and reset-PIN
+// player lookups — same shape as searchMembers()/addMember() above, just
+// unscoped (global_find_players has no league_id, unlike admin_find_players).
+export async function globalSearchPlayers(kind){
+  const inputSel = kind === "appoint" ? "#gc-appoint-search" : "#gc-reset-search";
+  const resultsSel = kind === "appoint" ? "#gc-appoint-results" : "#gc-reset-results";
+  const q = $(inputSel).value.trim();
+  if (q.length < 2){ $(resultsSel).innerHTML = ""; return; }
+  try{
+    const rows = await rpc("global_find_players", { p_name:state.session.name, p_pin:state.session.pin, p_query:q });
+    $(resultsSel).innerHTML = (rows||[]).map(p => `
+      <div class="pickres">
+        <span>${esc(p.name)}</span>
+        <span class="pt">${kind === "appoint"
+          ? `<button class="btn ghost small" onclick="globalAppointAdmin('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Appoint</button>`
+          : `<button class="btn ghost small" onclick="globalResetPin('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Reset PIN</button>`}</span>
+      </div>`).join("") || '<p class="muted">No matches.</p>';
+  }catch(e){ $(resultsSel).innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+export async function globalAppointAdmin(id, name){
+  const leagueId = Number($("#gc-appoint-league").value);
+  if (!leagueId){ toast("Pick a league first"); return; }
+  try{
+    await rpc("global_appoint_league_admin", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:leagueId, p_player_id:id });
+    toast(`${name} appointed league admin`, "score");
+    $("#gc-appoint-search").value = ""; $("#gc-appoint-results").innerHTML = "";
+  }catch(e){ toast(esc(e.message)); }
+}
+// Same shape as resetMemberPin() above, but p_league_id:null — Global
+// resetting someone app-wide has no "current league" to scope it to.
+// admin_reset_player_pin treats a null league_id as "caller must be global",
+// already enforced server-side, not re-checked here.
+export async function globalResetPin(id, name){
+  if (!confirm(`Reset ${name}'s PIN app-wide? They'll be forced to set a new one on next login. Relay the new PIN to them directly — it can't be recovered after this.`)) return;
+  try{
+    const r = await rpc("admin_reset_player_pin", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:null, p_player_id:id });
+    alert(`New PIN for ${name}: ${r.new_pin}\n\nRelay this to them now — it will not be shown again.`);
+  }catch(e){ toast(esc(e.message)); }
+}
+
 export async function renderAdmin(){
   clearTimersFor("admin"); state.tab = "admin"; markTab();
   await loadConfig();
@@ -121,6 +204,7 @@ export async function renderAdmin(){
         return `${Number(m)}/${Number(d)}`;
       }).join(", ")}</div>` : "";
   $("#main").innerHTML = `
+    ${globalConsoleHtml()}
     <div class="panel"><h2>Who's picked</h2>
       <div class="field"><label>Show</label>
         <select id="roster-show" onchange="loadRoster()">
@@ -242,6 +326,7 @@ export async function renderAdmin(){
     ${footerHtml()}`;
   if ((shows||[]).length) loadRoster();
   loadMembers();
+  if (state.session.is_global_admin) loadGlobalLeagues();
   wireSettingsPanel();
 }
 export async function loadMembers(){
@@ -256,8 +341,23 @@ export async function loadMembers(){
       <span>${esc(p.name)}${p.official_opt_in ? ' <small class="muted">Official</small>' : ""}</span>
       <span class="pt">${p.player_id===state.session.id ? '<small class="muted">you</small>'
         : (p.is_league_admin ? '<small class="muted">admin</small> ' : '')
+          +'<button class="btn ghost small" onclick="resetMemberPin(\''+p.player_id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')">Reset PIN</button> '
           +'<button class="btn ghost small" onclick="bootPlayer(\''+p.player_id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')" style="border-color:var(--coral);color:var(--coral)">Boot</button>'}</span>
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
+}
+// Session 4 step 4 — server-generates the new PIN (this admin never chooses
+// it), returned once for relay; the reset target is forced to set a real
+// PIN on next login (must_change_pin, Session 4 step 2). Uses alert(), not
+// toast(): toast() auto-dismisses after 6s and caps at 4 visible — wrong for
+// a value that has to be read and relayed carefully with no recovery if
+// missed. alert() blocks until dismissed, and is already a no-op stub in
+// the test harness, so no new test plumbing is needed for it.
+export async function resetMemberPin(id, name){
+  if (!confirm(`Reset ${name}'s PIN? They'll be forced to set a new one on next login. Relay the new PIN to them directly — it can't be recovered after this.`)) return;
+  try{
+    const r = await rpc("admin_reset_player_pin", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_player_id:id });
+    alert(`New PIN for ${name}: ${r.new_pin}\n\nRelay this to them now — it will not be shown again.`);
+  }catch(e){ toast(esc(e.message)); }
 }
 export async function searchMembers(){
   const q = $("#member-search").value.trim();
