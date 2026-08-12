@@ -318,11 +318,29 @@ async function syncSongs() {
 // not banned) in that season's league. From then on scoring reads ONLY this
 // snapshot, never the live opt-in flag — frozen in both directions, so an
 // opt-out or a boot mid-season leaves that player on the board.
+//
+// Confirmed live (season 6, "Test 2"): a plain `.insert(rows)` with no
+// conflict handling and no error check silently wrote ZERO roster rows for
+// an entire season, because one row in the batch already existed (an admin
+// had pre-added a player to that season's roster before it activated) —
+// Postgres aborts the WHOLE multi-row INSERT on a single primary-key
+// conflict, and roster_locked_at got stamped on the very next line
+// regardless, turning a recoverable error into a permanent, invisible one.
+// Fixed two ways: (1) upsert with ignoreDuplicates instead of a bare
+// insert, so an already-present (season_id,player_id) row is skipped, not
+// fatal to the batch — and left untouched, not overwritten, so a manual
+// pre-add's own added_at survives; (2) roster_locked_at is now stamped
+// ONLY if the write actually succeeded — on error, this season is left
+// with roster_locked_at still null, so the next cron run retries it
+// instead of the failure being recorded as a silent success. Any failure
+// also logs (console.error) and is returned in `failed`, threaded into
+// scoreShows()'s response, so it's visible without a forensic query.
 async function activateSeasons() {
   const today = easternDate(0);
   const { data: seasons } = await supa.from("seasons")
     .select("id,bracket_id,name").lte("start_date", today).is("roster_locked_at", null);
   let activated = 0;
+  const failed: string[] = [];
   for (const se of seasons ?? []) {
     const { data: bracket } = await supa.from("brackets").select("league_id").eq("id", se.bracket_id).single();
     if (!bracket) continue;
@@ -330,11 +348,21 @@ async function activateSeasons() {
       .eq("league_id", bracket.league_id).eq("official_opt_in", true).eq("banned", false);
     const joinedAt = new Date().toISOString();
     const rows = (members ?? []).map((m: any) => ({ season_id: se.id, player_id: m.player_id, added_at: joinedAt }));
-    if (rows.length) await supa.from("season_rosters").insert(rows);
+    let insertError = null;
+    if (rows.length) {
+      const { error } = await supa.from("season_rosters")
+        .upsert(rows, { onConflict: "season_id,player_id", ignoreDuplicates: true });
+      insertError = error;
+    }
+    if (insertError) {
+      console.error(`activateSeasons: season ${se.id} (${se.name}) roster write failed, will retry next run:`, insertError);
+      failed.push(`${se.id}:${se.name}`);
+      continue; // roster_locked_at stays null -- next run retries this season
+    }
     await supa.from("seasons").update({ roster_locked_at: new Date().toISOString() }).eq("id", se.id);
     activated++;
   }
-  return activated;
+  return { activated, failed };
 }
 
 // ---------- eligible league_shows for scoring ----------
@@ -503,11 +531,14 @@ async function announcements() {
 
 // ---------- scoring ----------
 async function scoreShows() {
-  const seasonsActivated = await activateSeasons();
+  const seasonActivation = await activateSeasons();
   const autoclosed = await autoFinalize();
   await announcements();
   let rows = await eligibleLeagueShows();
-  if (!rows.length) return { scored: [], autoclosed, seasons_activated: seasonsActivated, note: "no eligible shows" };
+  if (!rows.length) return {
+    scored: [], autoclosed, seasons_activated: seasonActivation.activated,
+    season_activation_failures: seasonActivation.failed, note: "no eligible shows",
+  };
 
   const live = rows.some((r: any) => isLiveWindow(r.show));
   const roundsN = live ? BURST_POLLS : 1;
@@ -520,7 +551,10 @@ async function scoreShows() {
       results.push(await scoreShow(showRows[0].show, showRows));
     }
   }
-  return { scored: results, burst: live, autoclosed, seasons_activated: seasonsActivated };
+  return {
+    scored: results, burst: live, autoclosed, seasons_activated: seasonActivation.activated,
+    season_activation_failures: seasonActivation.failed,
+  };
 }
 
 // One setlist fetch for the whole show, then every bracket of every league
