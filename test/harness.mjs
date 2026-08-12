@@ -240,6 +240,28 @@ export async function runNonAdminScenario({ html, scripts, mode }){
   const sharedTabLabel = window.document.getElementById("admintab")?.textContent
     || window.document.getElementById("col-admin-title")?.textContent || "";
 
+  // Session 4 follow-up: self-service PIN change (decision 3's other half —
+  // until now every PIN change routed through an admin reset, which was
+  // supposed to be the fallback, not the only path). Wrong-current-PIN
+  // rejection is _auth_player's existing behavior, already relied on
+  // everywhere else in this app, not re-modeled here; this exercises the
+  // two things that actually live in JS: the new/confirm mismatch guard,
+  // and a successful change updating the stored session.
+  window.document.getElementById("pin-current").value = "1234";
+  window.document.getElementById("pin-new").value = "5555";
+  window.document.getElementById("pin-confirm").value = "6666";
+  await window.changeOwnPin();
+  await tick();
+  const mismatchErr = window.document.getElementById("pin-err")?.textContent || "";
+  const sessionAfterMismatch = JSON.parse(window.localStorage.getItem("ft_session") || "null");
+
+  window.document.getElementById("pin-current").value = "1234";
+  window.document.getElementById("pin-new").value = "5555";
+  window.document.getElementById("pin-confirm").value = "5555";
+  await window.changeOwnPin();
+  await tick();
+  const sessionAfterPinChange = JSON.parse(window.localStorage.getItem("ft_session") || "null");
+
   // The exact bug: backgrounding (visibilitychange -> hidden) then
   // foregrounding (-> visible) while sitting on this tab used to call
   // renderAdmin() directly instead of the role-aware dispatcher, which
@@ -253,7 +275,8 @@ export async function runNonAdminScenario({ html, scripts, mode }){
   await tick(); await tick();
   const afterForegroundHtml = mainHTML(window, mode);
 
-  return { settingsHtml, sharedTabLabel, afterForegroundHtml };
+  return { settingsHtml, sharedTabLabel, afterForegroundHtml,
+    mismatchErr, sessionAfterMismatch, sessionAfterPinChange };
 }
 
 // Every other scenario presets either a league admin (p1) or a non-admin

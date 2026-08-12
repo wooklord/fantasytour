@@ -299,20 +299,22 @@ before assuming a change is covered just because the suite is green:
   nothing rate-limits guesses against it. Fine at today's scale (~10
   Ambassadors), but worth thinking through deliberately before the ~50-person
   Facebook league joins — a bigger, less-trusted pool. Not solved in Stage C2a.
-- **Partially addressed (Session 4): admin-triggered PIN reset now exists;
-  voluntary self-service change still doesn't.** A league/global admin can
-  run `admin_reset_player_pin` (`sql/stage_l_admin_pin_reset.sql`) to
-  server-generate a new PIN and force the target to set a real one on next
-  login (`must_change_pin`, `sql/stage_k_pin_management.sql`,
-  `renderForceChangePin()` in `auth.js`) — the "only recovery is raw SQL
-  against `pin_hash`" half of this bullet is no longer true. What's still
-  missing: a player still can't change their own PIN voluntarily (no
-  forgot-PIN self-service, no "change my PIN" control in Settings) —
-  `change_own_pin` exists and is exactly what that control would call, but
-  nothing in Settings calls it yet. Deliberately deferred as its own
-  follow-up (Session 4's own scope was explicitly capped at the admin-reset
-  path, per the roadmap below) — revisit before the Facebook league launches,
-  same reasoning as the PIN-guessing concern above.
+- **Resolved (Session 4): both halves of decision 3 now exist.** A
+  league/global admin can run `admin_reset_player_pin`
+  (`sql/stage_l_admin_pin_reset.sql`) to server-generate a new PIN and force
+  the target to set a real one on next login (`must_change_pin`,
+  `sql/stage_k_pin_management.sql`, `renderForceChangePin()` in `auth.js`).
+  Separately, a player can voluntarily change their own PIN any time via a
+  "Change PIN" form in `settingsPanelHtml()` (`settings.js`'s
+  `changeOwnPin()`), calling the same `change_own_pin` RPC the forced flow
+  uses — current PIN required and verified server-side (`_auth_player`
+  raises before any write if it's wrong), so a live session on a shared
+  device can't be used to lock the owner out. This was initially shipped
+  admin-reset-only, with self-service deferred as a "follow-up" — corrected
+  same session, before the SQL was run: the admin reset was always meant as
+  the *fallback*, not the only path, so a player without admin access had no
+  real recovery until this landed. The "only recovery is raw SQL against
+  `pin_hash`" framing of this bullet is fully retired now, not just half of it.
 - **Reveal-once secrets (the PIN reset's `new_pin`) transit through whatever
   request/response logging Supabase's platform does, if any — outside this
   app's control, but a real property worth having written down rather than
@@ -1056,14 +1058,15 @@ this is the condensed, durable record so the roadmap survives a context boundary
   `realtime_pings`, `pingRealtime()` in the edge function, its own
   dedicated channel and `handlePing()` in `realtime.js`, and the two
   now-dead direct bindings removed rather than left in place.
-- **Session 4 — auth + Global console: code complete (steps 1-5 of the
-  6 originally scoped), SQL not yet run against the live database — that's
-  the dev's next action, not done yet.** Ran in the manual-approval mode this
-  bullet used to only describe: every SQL file was reviewed individually
-  before the next was written, and two follow-up gaps the dev caught in
-  review (the server-side bypass below, and the platform-logging caveat now
-  in the Postgres gotchas section above) got fixed before this landed, not
-  after. What shipped, in the order actually built:
+- **Session 4 — auth + Global console: code complete (steps 1-5, plus
+  self-service PIN change pulled forward from step 6's original scope — see
+  below), SQL not yet run against the live database — that's the dev's next
+  action, not done yet.** Ran in the manual-approval mode this bullet used to
+  only describe: every SQL file was reviewed individually before the next
+  was written, and two follow-up gaps the dev caught in review (the
+  server-side bypass below, and the platform-logging caveat now in the
+  Postgres gotchas section above) got fixed before this landed, not after.
+  What shipped, in the order actually built:
   1. `runGlobalAdminScenario` (`test/harness.mjs`/`test/fixtures.mjs`) — a
      genuine `is_global_admin:true` session (`p4`), closing the exact blind
      spot this bullet used to warn about: every scenario before this one
@@ -1106,11 +1109,15 @@ this is the condensed, durable record so the roadmap survives a context boundary
   - **Run order is now `k → l → m → n`**, not the originally-planned
     `k → l → m` — `n` didn't exist until the review above surfaced the gap
     it fixes, and it depends on `l`'s helper.
-  - **Deliberately deferred, not forgotten**: self-service PIN change
-    (`change_own_pin` already exists — Settings just doesn't call it yet),
-    login rate-limiting, and the Official opt-in-default revisit. Each gets
-    its own follow-up session — see the two gotcha bullets above for why
-    they weren't folded into this one.
+  - **Self-service PIN change was initially deferred, then corrected back
+    in before the SQL was run**: it was half of decision 3, not an optional
+    extra — as first shipped, every PIN change routed through an admin,
+    which was supposed to be the fallback path, not the only one. A "Change
+    PIN" form now lives in `settingsPanelHtml()` (`changeOwnPin()`,
+    `settings.js`), calling the same `change_own_pin` RPC the forced
+    interstitial uses. **Login rate-limiting and the Official opt-in-default
+    revisit stay genuinely deferred** — each gets its own follow-up session,
+    see the two gotcha bullets above for why they weren't folded in here.
 - **Session 5 — Facebook League launch:** create the league + appoint its two
   admins through the real console this time, provision one Discord webhook
   secret, smoke-test. Blocked on the two admins being named and confirmed.

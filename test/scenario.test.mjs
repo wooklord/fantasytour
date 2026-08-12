@@ -224,6 +224,16 @@ async function runMode(mode){
   check("non-admin's shared tab is labeled Settings, not Admin",
     nonAdmin.sharedTabLabel === "Settings",
     `sharedTabLabel: "${nonAdmin.sharedTabLabel}"`);
+
+  check("Settings offers self-service PIN change fields",
+    /pin-current/.test(nonAdmin.settingsHtml) && /pin-new/.test(nonAdmin.settingsHtml) && /pin-confirm/.test(nonAdmin.settingsHtml),
+    `settingsHtml: ${nonAdmin.settingsHtml}`);
+  check("a new/confirm PIN mismatch is rejected client-side, no session change",
+    /don't match/.test(nonAdmin.mismatchErr) && nonAdmin.sessionAfterMismatch?.pin === "1234",
+    `mismatchErr: "${nonAdmin.mismatchErr}" sessionAfterMismatch: ${JSON.stringify(nonAdmin.sessionAfterMismatch)}`);
+  check("a successful self-service PIN change updates the stored session and leaves must_change_pin false",
+    nonAdmin.sessionAfterPinChange?.pin === "5555" && nonAdmin.sessionAfterPinChange?.must_change_pin === false,
+    `sessionAfterPinChange: ${JSON.stringify(nonAdmin.sessionAfterPinChange)}`);
   check("backgrounding+foregrounding on that tab still shows Settings, not the admin panel (the actual bug)",
     /Bracket/.test(nonAdmin.afterForegroundHtml) && /Log out/.test(nonAdmin.afterForegroundHtml)
       && !/Master switch/.test(nonAdmin.afterForegroundHtml) && !/Who's picked/.test(nonAdmin.afterForegroundHtml),

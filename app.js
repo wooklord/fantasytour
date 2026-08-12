@@ -1102,7 +1102,13 @@ Save anyway?`)) return;
     return `<div class="panel"><h2>Settings</h2>
     <div class="field"><label>Bracket</label><div class="switcher" id="bracketToggle"></div></div>
     <div id="leagueSelect"></div>
-    <button class="btn ghost" onclick="logout()">Log out</button>
+    <p class="muted" style="margin-top:16px;font-weight:600">Change PIN</p>
+    <div class="field"><label>Current PIN</label><input id="pin-current" inputmode="numeric" autocomplete="current-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
+    <div class="field"><label>New PIN (4\u20138 digits)</label><input id="pin-new" inputmode="numeric" autocomplete="new-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
+    <div class="field"><label>Confirm new PIN</label><input id="pin-confirm" inputmode="numeric" autocomplete="new-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
+    <button class="btn ghost small" onclick="changeOwnPin()">Change PIN</button>
+    <div class="err" id="pin-err"></div>
+    <button class="btn ghost" style="margin-top:16px" onclick="logout()">Log out</button>
     <div class="credits">
       <p>Fantasy Eggy is an unofficial fan project \u2014 not affiliated with, endorsed by, or sponsored by Eggy or their management. Band names and song titles belong to their respective owners.</p>
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
@@ -1121,6 +1127,26 @@ Save anyway?`)) return;
     markTab();
     $("#main").innerHTML = settingsPanelHtml() + footerHtml();
     wireSettingsPanel();
+  }
+  async function changeOwnPin() {
+    $("#pin-err").textContent = "";
+    const current = $("#pin-current").value;
+    const next = $("#pin-new").value, confirmPin = $("#pin-confirm").value;
+    if (next !== confirmPin) {
+      $("#pin-err").textContent = "New PINs don't match.";
+      return;
+    }
+    try {
+      await rpc("change_own_pin", { p_name: state.session.name, p_pin: current, p_new_pin: next });
+      state.session = { ...state.session, pin: next, must_change_pin: false };
+      localStorage.setItem("ft_session", JSON.stringify(state.session));
+      $("#pin-current").value = "";
+      $("#pin-new").value = "";
+      $("#pin-confirm").value = "";
+      toast("PIN changed \u2714", "score");
+    } catch (e) {
+      $("#pin-err").textContent = e.message;
+    }
   }
 
   // src/core/venueTime.js
@@ -1965,6 +1991,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
     doLogin,
     doRegister,
     submitForcedPinChange,
+    changeOwnPin,
     openShow,
     renderShows,
     setBoardSeason,
