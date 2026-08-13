@@ -622,19 +622,104 @@ instance constants.
   string touched above: mechanical justification only, no "other bands"
   framing anywhere.
 
-## Current state / next step (durability protocol checkpoint)
+## STATUS as of 2026-08-13 (durability checkpoint — read this first)
 
-**Done**: CLAUDE.md updated (Module B locked decisions incl. the coverage-
-vs-count and orphaned-row fixes, the Test 3 activation checkpoint with
-tolerance/pre-add caveats, the Session Durability Protocol section). This
-plan copied into the repo at `docs/module_b_ranked_choice_plan.md`. Stray
-screenshot deleted, `.gitignore` updated.
+**The edge-function half is DONE and committed. The entire frontend half is
+NOT STARTED. Nothing is deployed.**
 
-**Next step**: commit the above (two commits — CLAUDE.md; then plan file +
-gitignore), confirm `main` matches `origin/main`, then get an explicit
-answer on the one open question before writing any of the `scoring.js`/
-`admin.js`/`picks.js` code in the Implementation section above: **ladder
-mutability mid-season** — leave it exposed like `slots` already is (do
-nothing), or treat this as the trigger to build a real guard for
-`brackets.config` generally (separate scope, likely SQL). Everything else
-in this document is confirmed/locked and ready to build once that lands.
+Done:
+- `scoreRankedPicks()` in `supabase/functions/carton-sync/scoring.js`.
+- The mode dispatch as the **first line** of `scorePicks()`, before any
+  slot logic runs.
+- Non-finite ladder-rung coercion (`Number.isFinite` guard → 0).
+- Test blocks **7a–7p** in `test/scoring.test.mjs`, mutation-verified (see
+  below). `node test/scoring.test.mjs` passes.
+
+Not started:
+- `src/core/config.js` — `RANKED_CHOICE_ENABLED` **does not exist yet**.
+- `src/features/admin.js` — scoring-mode `<select>`; moving the
+  perfect-sheet field out of the standard section; making the two Game
+  rules sections conditional; the ranked collapsible + ladder editor
+  (`rankRow`/`addRankRow`/`readLadder`); the `saveConfig()`
+  read-through-to-`state.cfg` guards.
+- `src/features/picks.js` — `slotDefs()`, `ruleDefs`, `breakdownSlotInfo()`
+  ranked branches.
+- `test/fixtures.mjs` + `test/harness.mjs` — ranked bracket fixture and
+  `runRankedChoiceScenario`.
+- `node build.mjs` + committing the bundle; the manual smoke test; the
+  config round-trip check.
+- **Deploy** — `supabase functions deploy carton-sync` has NOT been run, so
+  ranked scoring does not execute against real shows. Deploy is a separate,
+  explicitly-approved step.
+
+**NEXT STEP, concretely, in this order**: `src/core/config.js` →
+`src/features/admin.js` → `src/features/picks.js`.
+
+## Mutation-testing results (which fix is protected by which test)
+
+Recorded because a green suite is itself a proxy — it proves the tests pass,
+not that they'd catch the bug. Each of the three review-driven fixes was
+reverted in turn and the suite re-run. Block numbers are the **final**
+numbering (7a–7p); mutations were run before the 7j-gap renumber, so old
+7n→7m and old 7o(a)/(b)→7n(a)/(b).
+
+| Fix | Mutation applied | Blocks that failed | Guardians |
+|---|---|---|---|
+| Canonical index (`rankIndex`) vs string surgery | `ladder[Number(slot.replace("rank",""))-1]` | 7h (3 checks) | **7h**, plus the hitting zero-padded row in **7n(a)** |
+| Coverage vs count | `complete = picks.length === ladder.length` | 7d, 7f, 7h, 7i, 7m (9 checks) | 7d, 7f, 7h, 7i, 7m |
+| In-ladder hit scoping | `breakdown.every(hit)` | 7f (2 checks) | **7f** and **7n(b)** |
+
+Notes worth keeping:
+- The coverage mutation failed in **both directions** — 7d caught it firing
+  when it shouldn't (the exploit direction), while 7f/7h/7i/7m caught it
+  *ceasing* to fire when it should. Two-directional coverage was not
+  designed in; it fell out of the orphan/duplicate cases.
+- The in-ladder mutation can only fail one direction by construction:
+  widening the hit check makes perfect strictly harder to earn, never
+  easier.
+- **The canonical-index fix was guarded by a single block (7h) until
+  7n(a)'s hitting zero-padded row was added.** 7n(b)'s `"rank02"` does not
+  back it up — that row misses, and `points = hit ? value : 0` zeroes a
+  miss under either implementation. **Only a *hitting* non-canonical row
+  discriminates.**
+- **Tests that stay green under the coverage mutation by luck, not design —
+  do not read their green as coverage of the coverage check**: any
+  full-sheet block where `picks.length` coincidentally equals the ladder
+  length (the count and the coverage agree by accident), and the
+  short-sheet blocks where the count is false for the wrong reason. Blocks
+  in that category at the time of the run were the full-all-hit case and
+  the 1- and 2-pick cases. (Derived from the observed failure lists rather
+  than separately re-verified after the renumber — if this matters, re-run
+  the mutation rather than trusting this line.)
+
+## Open questions — recorded as open, not dropped
+
+1. **Where the pick-sheet autocomplete appends "Any Debut" was never
+   located.** Needs tracing during the `picks.js` work, to confirm it isn't
+   offered as a suggestion on a ranked-mode input. **UX cleanliness, not
+   scoring correctness** — `scoreRankedPicks` scores the literal string as
+   a normal unmatched song name, i.e. 0 (pinned by 7g).
+2. **Duplicate ladder keys are pinned, not decided.** Test 7i records
+   current behavior: coverage passes on `Set` semantics so perfect-sheet
+   still fires, and the duplicated position pays its value twice. There is
+   no duplicate prevention in the UI or at the DB level today, same as slot
+   mode. Pinned so a later edit can't move it silently — but whether that
+   behavior is *desired* was never decided.
+3. **Whether any of the 13 current players have already installed the app
+   to a home screen.** The dev will ask them. Affects domain-move timing —
+   installed PWAs eat a reinstall and lose local storage when the origin
+   changes (see the domain-move roadmap bullet in CLAUDE.md).
+4. **7n(a) and 7n(b) are CLAIMED guardians, not demonstrated ones.** Both
+   appear in the guardian column of the table above but in neither failure
+   list, because both were written *after* mutations 1 and 3 had already
+   run and been reverted. The reasoning for why they should catch those
+   mutations is sound and is recorded beside each test — but reasoning is
+   what mutation testing exists to replace, so listing them as guardians on
+   that basis is exactly the proxy-for-the-condition substitution
+   discipline item 5 warns about. **Resolve by re-running mutation 1
+   (`ladder[Number(slot.replace("rank",""))-1]`) and mutation 3
+   (`breakdown.every(hit)`) and updating the failure columns with what
+   actually fails** — or, if that's not done, demote both to "expected to
+   guard, unverified" in the table. Deferred deliberately to the next
+   session rather than done at the end of this one; it is a ~5-minute job
+   with the run-report-revert discipline.
