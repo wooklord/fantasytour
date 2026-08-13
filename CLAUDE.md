@@ -110,6 +110,18 @@ directly (lower risk), keep these habits:
 4. **Trace critical paths end-to-end after touching them** (tap-Pick → save;
    score update → standings; etc.). A valid-syntax, wrong-scope bug won't be caught
    by a syntax check — only by tracing.
+5. **Verify the condition, not a proxy for it.** This codebase has produced the
+   same bug three times: `picks.length === expected` instead of checking which
+   rank positions are actually covered; `added_at IS NOT NULL` instead of
+   comparing it to `roster_locked_at`; "zero pre-adds on Wednesday" asserted
+   about Friday's state. Each was a real, measurable thing that *usually*
+   correlates with the condition that actually mattered — which is exactly what
+   makes the substitution easy to miss in review and easy to pass in testing.
+   When writing a check, state the condition in words first, then confirm the
+   code tests **that** and not a correlate of it. The three above are worth
+   re-reading as a set: a count standing in for coverage, a
+   presence check standing in for equality, and a point-in-time observation
+   standing in for a claim about the future.
 
 **`test/compare.mjs` and `legacy-index.html` are retired (Stage C2a).** That harness
 diffed the current build's rendered DOM against a frozen pre-2.0 monolith, to catch
@@ -298,7 +310,7 @@ before assuming a change is covered just because the suite is green:
   mean — check for this same gap on any future internal-only helper.
 - **Case-insensitive login was never actually the bug — `_auth_player` has
   compared on `lower(name)` since the original schema.sql.** A real player
-  ended up with duplicate accounts (`Carmanjesse` / `CARMANJESSE`) and
+  ended up with two case-variant accounts and
   couldn't reliably log into either, which read as "login is case-sensitive."
   It isn't, and never was. The actual defect: `players.name` had a plain
   (case-sensitive) `unique` constraint, so `register_player`'s duplicate
@@ -326,11 +338,83 @@ before assuming a change is covered just because the suite is green:
   group is always empty in that shape, by construction, not by bug. The
   medal color rendered there still just follows the player's real resolved
   rank (bronze in practice) — nothing is hardcoded to display as "silver."
-- **Open question, not yet addressed: PIN-guessing surface at scale.** `login`
-  is a public, unrated RPC endpoint that accepts a name + a 4–8 digit PIN, and
-  nothing rate-limits guesses against it. Fine at today's scale (~10
-  Ambassadors), but worth thinking through deliberately before the ~50-person
-  Facebook league joins — a bigger, less-trusted pool. Not solved in Stage C2a.
+- **Login rate-limiting: the top real security exposure in this app, deferred
+  with a dated trigger — not an open-ended "someday."** `login` is a public,
+  unrated RPC that takes a nickname + a 4–8 digit PIN, and nothing throttles
+  guesses. The reason this outranks every other gap on the list is that all
+  four preconditions for cheap online guessing are already satisfied *and
+  public*: nicknames are enumerable (they're printed on the leaderboard),
+  PINs can be as short as 4 digits — nominally a 10k keyspace, but the
+  *effective* one is far smaller, since a meaningful share of human-chosen
+  4-digit PINs are `1234`, `0000`, or a birth year, which is exactly why
+  part (3) of the fix below is not optional — the anon key needed to call
+  the endpoint ships in the deployed frontend by design, and `login`'s exact
+  signature is in committed SQL. None of that is a leak — every piece is
+  public on purpose or unavoidably — but together they mean the only thing
+  standing between an attacker and an account is the absence of any
+  throttling or PIN-strength floor.
+  - **Trigger: before Session 5's Facebook League, and before any non-dev
+    league admin exists** — whichever comes first. Same dated-trigger pattern
+    as the ladder-mutability decision below. Today's Ambassadors are a
+    closed, trusted pool where the risk is theoretical — counted directly
+    2026-08-12: 14 league members, all 14 in the Official opt-in set, 13
+    currently rostered. A ~50-person semi-public league is where it stops
+    being theoretical.
+  - **Minimal viable fix — three parts. Any one alone is insufficient, and
+    they cover different attacks; don't ship a subset.**
+    1. **Per-nickname progressive delay, NOT lockout.** Escalating
+       server-side delay (or reject-with-retry-after) on consecutive
+       failures for the same `lower(name)`, reset on success. Throttles
+       vertical guessing (many PINs against one account) without ever
+       handing anyone a button that disables an account.
+    2. **Aggregate failed-attempt throttle across ALL accounts in a rolling
+       window.** This is the only part that sees PIN *spraying* at all, and
+       it is not redundant with (1) — do not drop it as belt-and-braces.
+       The efficient attack here is horizontal, not vertical: try one likely
+       PIN (`1234`, `0000`, a birth year) exactly once against every
+       enumerable nickname. Each account records a single failure, so no
+       per-account counter ever trips, while across ~50 accounts a handful
+       of common PINs has good odds of landing one. Per-account state is
+       structurally blind to this; only a global failure rate sees it.
+    3. **Weak-PIN rejection at set/reset time.** Minimum length above 4 for
+       newly-set PINs, plus a denylist of trivial values (repeated digits,
+       ascending/descending sequences, plausible birth years). This is the
+       only one of the three that shrinks the *useful* keyspace rather than
+       slowing access to it — throttling alone leaves `1234` just as likely
+       to be someone's PIN, it just takes longer to try. Note that existing
+       short/weak PINs stay weak until rotated; **whether to force rotation
+       on existing accounts is an open sub-question, deliberately not
+       decided here** (it trades a real security gain against pushing every
+       player through a forced-change interstitial — the machinery for which
+       already exists, see `must_change_pin`).
+    All three must be enforced **server-side inside `login`** (and, for (3),
+    inside `change_own_pin`/`admin_reset_player_pin`). A client-side check is
+    worth nothing against an attacker calling the RPC directly, which is the
+    entire threat model.
+  - **Rejected design, recorded so it isn't re-proposed as the simpler
+    option: a per-nickname failed-attempt counter with a hard lockout
+    window.** It was proposed more than once and it's the wrong shape, for
+    two independent reasons — either alone disqualifies it. (a) It doesn't
+    see spraying, per (2) above: the attack's volume is distributed across
+    accounts while the counter measures per-account attempts. (b) A hard
+    lockout is a griefing vector, not an acceptable tradeoff — nicknames are
+    public and picks have hard submission deadlines, so anyone could lock
+    every account in a bracket an hour before cutoff and prevent the entire
+    league from submitting. That's a worse and more likely outage than the
+    compromise it prevents. Progressive delay gets the throttling benefit
+    without creating the button.
+  - **Why the integrity notes elsewhere in this file are publishable and this
+    one is still worth fixing** — the distinction matters and is easy to get
+    backwards. Notes like "`admin_update_config` has no schema validation" or
+    "`admin_set_season_roster` has no `roster_locked_at` check" are safe to
+    write down publicly **because they're dominated by this exposure, not
+    because admin auth contains them.** "It's admin-gated" is not a
+    containment argument in a system whose auth is the weakest link — if PIN
+    guessing works, admin-gating is exactly as strong as a PIN. They're
+    publishable because they disclose nothing an attacker who already reads
+    the committed SQL doesn't have, and because compromising auth is strictly
+    easier than exploiting any of them. Fix this bullet and the admin-gating
+    argument becomes real; until then, don't lean on it.
 - **Resolved (Session 4): both halves of decision 3 now exist.** A
   league/global admin can run `admin_reset_player_pin`
   (`sql/stage_l_admin_pin_reset.sql`) to server-generate a new PIN and force
@@ -455,16 +539,103 @@ before assuming a change is covered just because the suite is green:
   pre-added row's original, older `added_at` rather than overwriting it
   (`ignoreDuplicates`) — so a legitimately pre-added member's row is
   SUPPOSED to differ from `roster_locked_at`, and that's correct behavior,
-  not a bug. So the actual check: group Test 3's `season_rosters` rows by
-  `added_at` — the largest cluster should share one timestamp within ~60s of
-  `roster_locked_at` (that cluster, not just `roster_locked_at` being
-  non-null, is the real proof the automatic batch wrote successfully). Any
-  row sitting meaningfully outside that cluster is only expected if it
-  corresponds to a real pre-add via `admin_set_season_roster` before
-  activation — if no one was pre-added to Test 3, an outlier timestamp there
-  is the bug, not a false alarm. Was supposed to be recorded and checked
-  last session; wasn't — recorded now so it survives to whoever's driving
-  after 2026-08-14.
+  not a bug.
+  **Which season id 8 is, since the whole verdict rests on that mapping and
+  a bare integer asks a future reader to take it on faith**: it resolved
+  from `select id, bracket_id, name, start_date, end_date, roster_locked_at
+  from seasons` as `name = 'Test 3'`, `bracket_id = 1`, `start_date =
+  end_date = 2026-08-14`, `roster_locked_at = null` — the only unactivated
+  season of the three Test seasons on that bracket (ids 5 = "Test" and
+  6 = "Test 2" were both already activated, with `roster_locked_at` stamped
+  2026-07-30 and 2026-08-06 respectively; there is no slug column on
+  `seasons`, `name` is the only human-readable identifier).
+  **The roster was deliberately populated by hand on 2026-08-12, ahead of
+  activation, so players could vote — which changes what Friday tests, and
+  in a useful direction.** Exact state, verified after the manual adds:
+  **13 rows, each with its own distinct `added_at`**, spread across 15.4
+  seconds from `2026-08-13 02:55:08.612875+00` to `2026-08-13
+  02:55:23.981966+00`. (That's UTC — 2026-08-12 ~22:55 Eastern. The rows
+  read as Aug 13 in the database even though the work happened on Aug 12
+  local; assert against the UTC values, not the local date.) Thirteen
+  distinct timestamps rather than one cluster is exactly the signature of
+  13 individual `admin_set_season_roster` calls — one per click — not a
+  batch.
+  **The conflict will be partial, not total, and the difference is
+  load-bearing.** Activation's member set is 14: `league_members` where
+  `league_id = 1` (bracket 1 is league 1's Official bracket),
+  `official_opt_in = true`, `banned = false` → 14 of 14 total members.
+  Compared both directions against the roster: **0 roster rows fall outside
+  that set**, and **exactly 1 member of the set is not on the roster** — an
+  unused test account (resolve which one with the not-exists query above
+  rather than recording a name or player UUID here — this repo is public).
+  So activation will attempt 14 rows against 13 existing ones: 13 conflict
+  and are skipped with their original `added_at` preserved, and that 1
+  inserts fresh at activation time.
+  **That 14th member is deliberately left off the roster, and should stay
+  off until after 2026-08-14 — this is intent, not an oversight to tidy
+  up.** It's a test account: nobody is waiting to vote with it and nothing
+  depends on it being rostered, whereas its absence is the *only* thing
+  giving this run any coverage of the insert path at all. Add it (or
+  "complete" the roster for neatness) and activation becomes 14-of-14
+  duplicates, which silently deletes the insert-path and
+  `added_at`-on-fresh-insert coverage described below while still looking
+  like a tidier roster. Leave it alone until the checkpoint is resolved. **Friday therefore exercises the conflict branch at near-maximum
+  (13 of 14 duplicates), the insert path (1 row), and the
+  stamp-only-on-success ordering — all three in one pass**, which is a
+  strictly better test than either a clean all-insert run or an
+  all-duplicate run would have been.
+  **Expected state after activation, as checkable assertions** (run these
+  on 2026-08-14, don't eyeball a cluster):
+  - **Success**: `roster_locked_at` stamped 2026-08-14; row count is
+    **14**; the 13 original rows still carry their original `added_at`
+    values inside the `02:55:08.61`–`02:55:23.99` UTC window above; and
+    the test account's row carries a fresh `added_at` within ~60s of
+    `roster_locked_at`.
+  - **Batch errored**: `roster_locked_at` still null after 2026-08-14 —
+    meaning the stamp-only-on-success ordering held (good) but the conflict
+    branch did not (the thing to investigate).
+  - **`ignoreDuplicates` not preserving `added_at`**: any of the 13
+    original rows rewritten to the activation timestamp. **This is the
+    specific regression the fix exists to prevent, and this run tests it
+    directly** — it is the single highest-value assertion in this list.
+  - **Batch aborted (the original failure mode)**: row count stays **13**
+    — the test account never inserts — **and** `roster_locked_at` stays
+    null. Note there is no "rows went missing" signature to look for and
+    none is possible: nothing in this path deletes from `season_rosters`
+    (the activation write is insert-only, and the only delete lives in
+    `admin_set_season_roster`'s remove branch), so the 13 manually-added
+    rows survive any activation failure. An abort shows up as *absence of
+    the 14th row*, never as loss of the 13.
+  **Within the edge function, nothing else writes those rows — checked
+  because Test 3 has `start_date = end_date = 2026-08-14` and would
+  otherwise activate and complete on the same day.** It can't: activation
+  selects `start_date <= today` (`activateSeasons`, index.ts:341) while
+  season completion selects `end_date < today` — strictly less than
+  (`announcements` block (d), index.ts:504) — so completion for this season
+  can't fire until 2026-08-15 at the earliest, and that `lt` vs `lte`
+  asymmetry is the only thing separating them. Independently of the timing:
+  **completion never touches roster data at all** — it writes only
+  `seasons.winner_sent` (index.ts:527), and `season_rosters` is written in
+  exactly one place in the entire edge function (the activation upsert,
+  index.ts:353; the only other reference, index.ts:693, is `scoreBracket`'s
+  read-only roster fetch), with `roster_locked_at` likewise written only by
+  activation (index.ts:362).
+  **But the edge function is not the only writer, and the other one is
+  unguarded**: `admin_set_season_roster` also writes `season_rosters`
+  (current live definition — `sql/stage_n_reject_pending_pin_change_writes.sql:223-239`,
+  the latest of three re-touches), and it checks auth, league-admin, and
+  `must_change_pin` — but **nothing about `roster_locked_at`**. It inserts
+  with `added_at = now()` whether or not the season has already activated,
+  and it's reachable by clicking (the Seasons panel's "manage roster"
+  control, Stage C2b), not just by raw RPC. So a manual roster add *after*
+  activation lands outside the cluster and is indistinguishable by
+  timestamp from the failure this checkpoint is looking for. **On
+  2026-08-14, rule out a post-activation manual add before calling an
+  outlier a bug.** Recorded here so nobody re-derives it — and noting the
+  shape, since it's the same one discipline item 5 exists for: "nothing
+  else writes this" was true of the file examined and false of the system. Was supposed to be
+  recorded and checked last session; wasn't — recorded now so it survives
+  to whoever's driving after 2026-08-14.
 
 ---
 
@@ -1318,8 +1489,8 @@ ladder (e.g. 5/4/3/2/1); hits pay their assigned rank, summed.
      position (Rank 1 always pays the ladder's first value, Rank 2 the
      second, etc.), so there's no duplicate-value-prevention UI the way free
      assignment would have required.
-  - **Open, not decided**: whether editing a bracket's ladder mid-season
-    should be guarded. Traced whether `slots` has the same exposure today —
+  - **Decided: mid-season ladder edits stay unguarded, with an explicit
+    revisit trigger.** Traced whether `slots` has the same exposure today —
     it does: `admin_update_config` (`sql/stage_c1_rpcs.sql`) has no
     season-status guard at all, and `scoreBracket` (`carton-sync/index.ts`)
     reads `bracket.config` fresh every scoring pass, so a config edit takes
@@ -1328,8 +1499,24 @@ ladder (e.g. 5/4/3/2/1); hits pay their assigned rank, summed.
     scoring run..."), not a lock — `brackets.config` has no freeze
     mechanism anywhere, unlike `season_rosters`. Ranked choice's ladder
     inherits this exact pre-existing exposure rather than introducing a new
-    one; whether that's acceptable as-is or worth a real guard someday is
-    unresolved.
+    one, so no guard was built for it (that would be new scope, and would
+    leave `slots` — the identical hole — still open beside it).
+    **The part that decides WHEN this gets revisited: a config change is
+    visible going forward but silent backward.** Forward is fine — the pick
+    sheet and "The Rules" card both re-render from `cfg`, so a player sees
+    the new ladder before picking against it. The retroactive half has no
+    such tell: because `scoreBracket` re-reads config fresh on every pass,
+    editing a ladder rewrites `breakdown` and `points` for shows that were
+    already scored and already shown, so a player sees a different number
+    than they saw before, with no notice and no record that a rule moved
+    underneath it. (Contrast the frozen-`breakdown`-text gotcha above: that
+    one freezes *wording* at score time, not the point values a later pass
+    recomputes.) That's acceptable only while exactly one person — the
+    dev — can edit bracket config, which is true today and stops being true
+    the moment a league admin who isn't the dev is appointed. **Revisit
+    before appointing any league admin who isn't the dev — i.e. before
+    Session 5's Facebook League admins**, not on some later "if it gets
+    painful" trigger.
 
 **Architecture: a `mode` field on the existing `brackets.config`, not a parallel
 system.** Brackets already carry fully independent config (Casual could run

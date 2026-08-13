@@ -202,11 +202,15 @@ through the admin dropdown, so ranked-choice test coverage doesn't require
 flipping the flag. Manual browser smoke-testing via `npm run dev` does —
 flip locally, test, revert before committing.
 
-## Open question — ladder mutability mid-season (not decided, needs your call)
+## Resolved — ladder mutability mid-season: stays unguarded, with a revisit trigger
 
-Nothing stops an admin from editing the ladder after picks are submitted.
+**Decision (2026-08-12): no guard, no new scope.** Nothing stops an admin
+from editing the ladder after picks are submitted, and nothing will. The
+reasoning, and the trigger that reopens it, are below — the trigger is the
+part that matters, because it's dated rather than vague.
+
 Traced whether the same exposure already exists for `slots` today, and
-whether anything guards it, before proposing anything:
+whether anything guards it:
 
 - **`admin_update_config`** (`sql/stage_c1_rpcs.sql:241-251`) has no guard
   beyond league-admin auth — no season-status check, no lock, no snapshot.
@@ -227,12 +231,27 @@ least by long-standing precedent) — shortening a bracket's slots mid-season
 already silently changes what already-submitted picks score against, same
 as shortening/lengthening a ladder would. Ranked choice isn't introducing a
 new category of risk, just a new instance of an existing, already-accepted
-one.** Not proposing a guard this session — that would be inventing new
-scope, and you said you'd decide. Flagging for your call: leave the ladder
-exposed exactly like slots already are (do nothing extra), or use this as
-the trigger to build a real guard for `brackets.config` generally (which
-would be its own, separately-scoped piece of work, likely touching the SQL
-RPC).
+one.** Building a guard for the ladder alone would be new scope AND would
+leave `slots` — the identical hole — open right beside it, so nothing is
+built here.
+
+**The refinement that sets the revisit date: a config change is visible
+going forward, but silent backward.** Forward is genuinely fine — the pick
+sheet and "The Rules" card both re-render from `cfg`, so a player sees the
+new ladder before picking against it. The retroactive half has no such
+tell: because `scoreBracket` re-reads config fresh on every pass, editing a
+ladder rewrites `breakdown` and `points` for shows that were *already
+scored and already shown to players*. They see a different number than
+before, with no notice and no record that a rule moved underneath it. (Not
+the same as the frozen-`breakdown`-text gotcha in CLAUDE.md — that one
+freezes the *wording* written at score time; the point values a later pass
+recomputes are not frozen.)
+
+That's acceptable only while exactly one person — the dev — can edit
+bracket config. It stops being acceptable the moment a league admin who
+isn't the dev exists. **Revisit before appointing any league admin who
+isn't the dev — i.e. before Session 5's Facebook League admins.** Not an
+"if it gets painful" trigger; a dated one.
 
 **The narrower question — orphaned rows, resolved without needing the above
 decided first:** out-of-ladder pick rows (e.g. a stale "rank5" after the
@@ -249,6 +268,73 @@ still renders, labeled via `prettifySlotKey` ("rank5" → "Rank 5"), just
 sorted after the current ladder's rows instead of in position. This mirrors
 exactly how slots mode already handles a removed slot type today, so no new
 code is needed for this part regardless of what you decide above.
+
+## Pre-implementation checks (both verified 2026-08-12, both clear)
+
+Two things had to be true before a bracket could run ranked choice while its
+sibling stays on slots. Both were traced against the source rather than
+assumed:
+
+**1. Nothing aggregates scores across brackets — verified, so mixed
+currencies can't collide.** Ranked ladder points and slot points are
+different units, so any cross-bracket total would silently become
+meaningless the moment the two brackets run different modes. There is no
+such total. The argument is positive evidence about call sites, not the
+absence of a keyword — aggregation needs no particular token (it can be
+`count()`, `avg()`, a window function, or plain JS; `scoring.js` already
+does `breakdown.reduce((sum, b) => sum + b.points, 0)`, so summing
+demonstrably happens — the only question was ever whether any of it spans
+brackets). What was actually checked:
+- **Every `get_bracket_scores` call site passes exactly one
+  `p_bracket_id: state.currentBracketId`** — `core/realtime.js:31`,
+  `features/picks.js:284`, `features/shows.js:159`,
+  `features/standings.js:80`. That is the complete set of callers; none
+  loops over brackets or passes a second id.
+- **`get_bracket_seasons` is likewise per-bracket** (`standings.js:82`).
+- **Standings' second data source** — the season roster join dates feeding
+  the "fewest zeros" tiebreaker — is season-scoped, and a season belongs to
+  exactly one bracket.
+- **The Global console renders nothing score-derived at all**, checked
+  specifically because a cross-league surface is the one place two
+  currencies could actually meet. `globalConsoleHtml()`
+  (`features/admin.js:94-110`) renders exactly three controls: create
+  league (text input), appoint league admin (league `<select>` + player
+  search), and reset a player's PIN (player search). Its only data sources
+  are `state.allLeagues` (an `id,name` read off `leagues`,
+  `admin.js:114`) and `global_find_players` (a name lookup). It never
+  calls `get_bracket_scores`, never reads `scores`/`seasons`/
+  `season_rosters`, and displays no points, totals, standings, or bracket
+  config. The cross-league *stats* screen that would have been the real
+  risk was deliberately never built (see CLAUDE.md's Global-console
+  decision) — but the console that does exist was confirmed clean rather
+  than assumed clean on the strength of that.
+
+**Conclusion: every score surface in the app is strictly per-bracket;
+Casual-on-ranked + Official-on-slots cannot produce a mixed-currency number
+anywhere.**
+
+**2. `state.cfg` cannot diverge from the bracket `saveConfig()` writes to —
+verified, so the read-through fallback is safe.** The fallback added above
+is only correct if `state.cfg` is always the config of the bracket being
+edited; otherwise a save could copy one bracket's values onto another.
+It can't: `state.currentBracketId` is assigned in exactly two places
+(`core/switcher.js:54`, the boot-time resolve; and `core/switcher.js:106`,
+`switchToBracket`), `loadConfig()` reads `brackets.config where id =
+state.currentBracketId` into `state.cfg` (`switcher.js:20-24`), and
+`switchToBracket` calls `await loadConfig()` immediately after the
+assignment (`switcher.js:111`). `renderAdmin()` additionally re-runs
+`loadConfig()` before rendering the panel (`admin.js:173`), and
+`saveConfig()` writes to `p_bracket_id: state.currentBracketId`
+(`admin.js:582`). **There is no separate "bracket being edited" concept at
+all — the admin panel edits whatever bracket the switcher currently has
+selected, so viewed and edited are the same bracket by construction.**
+- Residual caveat, pre-existing and not introduced by the fallback: if
+  another admin (or another tab) changes the same bracket's config between
+  `renderAdmin`'s `loadConfig()` and the save, `state.cfg` is stale and the
+  save silently overwrites their change. That's already true of every field
+  in `saveConfig()` today — it writes the whole config blob wholesale, so
+  it's a last-write-wins surface regardless of this change. Worth knowing;
+  not this session's problem to fix.
 
 ## Config schema
 
