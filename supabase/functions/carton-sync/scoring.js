@@ -91,6 +91,80 @@ export function resolveConfigSection(cfg, format) {
   return (format === "one_set" && cfg.oneset) ? cfg.oneset : cfg;
 }
 
+// Ranked-choice scoring: N picks against a fixed descending point ladder
+// (`cfg.ranked.ladder`, e.g. [5,4,3,2,1]). A pick either got played or it
+// didn't — there is no positional matching, so none of deriveSlotFacts'
+// output is consulted here beyond "was this song played at all," and this
+// function deliberately takes no `slotFacts`/`format` parameter to make
+// that structural rather than a convention.
+//
+// Written as a separate function rather than a branch inside scorePicks
+// for one specific reason: cover bonuses, debut bonuses, and the Any Debut
+// wildcard must not apply in this mode. Those reward obscurity, which is a
+// second risk axis competing with the only question ranked choice asks —
+// how confident is the player in this song. Keeping them out by *having no
+// code path that applies them* is enforceable; keeping them out with an
+// `if` inside the slot loop is a convention that a later edit can quietly
+// undo. Perfect-sheet is the single bonus that carries over, because it
+// scores the whole sheet being right rather than any one song's rarity.
+//
+// Row count never varies by show format here. Slot mode splits on format
+// because its slots name set structure ("Set 2 Closer") that a one-set
+// show doesn't have; a ladder position names nothing structural, so
+// `cfg.ranked` is read from the top level and never through
+// resolveConfigSection's oneset branch.
+export function scoreRankedPicks({ picks, songs, cfg }) {
+  const ladder = (cfg.ranked?.ladder ?? []).map(Number);
+  const played = new Set(songs.map((s) => norm(s.songname)));
+
+  // ONE definition of "which ladder position is this slot," used for
+  // scoring, for coverage, and for the hit test alike. An earlier draft
+  // derived the index by string surgery (`Number(slot.replace("rank",""))`)
+  // while testing membership by exact match, which are two different
+  // notions that disagree on real input: `picks.slot` is plain text with no
+  // enum behind it, so `"rank02"` parsed to index 1 and scored 4 points
+  // while failing an exact-match test — earning points without
+  // participating in either the coverage or hit check. (`" rank2"` slipped
+  // through the same way, since Number() tolerates leading whitespace.)
+  // Deriving the index from the canonical list removes the third state: a
+  // slot either IS a ladder position — scoring its value and counting
+  // toward both tests — or it isn't, and scores 0 in every sense.
+  const expectedSlots = ladder.map((_, i) => "rank" + (i + 1));
+  const rankIndex = (slot) => expectedSlots.indexOf(String(slot));
+
+  const breakdown = picks.map((p) => {
+    const value = ladder[rankIndex(p.slot)] ?? 0; // -1 indexes to undefined -> 0
+    const hit = played.has(norm(p.songname));
+    return {
+      slot: p.slot, songname: p.songname, hit,
+      points: hit ? value : 0,
+      reason: hit ? "played" : "not played",
+    };
+  });
+
+  // Perfect-sheet gates on which distinct ladder POSITIONS are covered, not
+  // on how many picks were submitted. `picks.length === ladder.length` looks
+  // equivalent and isn't: several rows that don't actually cover every
+  // position (a duplicated slot key, a stale row from a longer ladder) can
+  // satisfy a count while a real rank sits unfilled. Coverage is the
+  // condition; count is only correlated with it.
+  //
+  // The hit check is scoped to the ladder's own positions for the mirror
+  // reason: a pick outside the current ladder (a "rank7" row left over from
+  // before the ladder was shortened) must not block an otherwise-complete,
+  // all-hit sheet just by existing unplayed. Such rows still appear in the
+  // breakdown, scoring 0; they simply don't participate in either test.
+  const inLadder = breakdown.filter((b) => rankIndex(b.slot) >= 0);
+  const filledSlots = new Set(inLadder.map((b) => b.slot));
+  const complete = expectedSlots.length > 0 && expectedSlots.every((k) => filledSlots.has(k));
+  const perf = Number((cfg.bonuses ?? {}).perfect ?? 0);
+  if (perf > 0 && complete && inLadder.every((x) => x.hit)) {
+    breakdown.push({ slot: "bonus", songname: "Perfect sheet", hit: true, points: perf, reason: "every pick hit" });
+  }
+  const total = breakdown.reduce((sum, b) => sum + b.points, 0);
+  return { breakdown, total };
+}
+
 // Score one player's picks against one show, given the bracket's config.
 // Always scores fresh off the current setlist snapshot — a live show only
 // ever grows its setlist_songs rows (a genuine undo goes through reopen,
@@ -103,6 +177,11 @@ export function resolveConfigSection(cfg, format) {
 // instead of a premature exact/wrong-slot verdict, then get scored for real
 // the moment (or pass) the slot becomes determined.
 export function scorePicks({ picks, songs, slotFacts, cfg, format }) {
+  // Mode dispatch happens before anything slot-related is computed, so a
+  // ranked bracket never reaches the slot/flat logic, the Any Debut branch,
+  // or the cover/debut bonus block below. A config with no `mode` key is
+  // slot mode, which is what every existing bracket has — no migration.
+  if (cfg.mode === "ranked_choice") return scoreRankedPicks({ picks, songs, cfg });
   const sect = resolveConfigSection(cfg, format);
   const flatPts = Number(sect.flat_points ?? cfg.flat_points ?? 1);
   const slotPoints = {};
