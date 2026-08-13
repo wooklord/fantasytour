@@ -114,7 +114,33 @@ export function resolveConfigSection(cfg, format) {
 // `cfg.ranked` is read from the top level and never through
 // resolveConfigSection's oneset branch.
 export function scoreRankedPicks({ picks, songs, cfg }) {
-  const ladder = (cfg.ranked?.ladder ?? []).map(Number);
+  // A non-finite rung is coerced to 0 rather than trusted. `.map(Number)`
+  // alone turns "abc" (or undefined) into NaN, and a single NaN rung makes
+  // the pick that lands on it score NaN, which propagates into `total`,
+  // gets written to scores.points, and then poisons every standings sum
+  // for that player for the rest of the season — a far worse failure than
+  // a rung that pays nothing. Blank and null already coerce to 0 on their
+  // own; this only adds the NaN cases.
+  //
+  // This lives in the scorer even though save-time validation is the right
+  // PRIMARY defense, because today it's the only layer that can exist:
+  // brackets.config is schemaless jsonb, admin_update_config writes
+  // whatever JSON it's handed, and readLadder() (which will scrape DOM
+  // input values — strings) isn't built yet. Nothing between an admin's
+  // keystroke and this function currently checks anything.
+  //
+  // Residual this deliberately cannot fix: a coerced-to-0 rung is
+  // indistinguishable from an admin who typed 0 on purpose, and either way
+  // it stays a real ladder position that counts toward perfect-sheet
+  // coverage while paying nothing. Only save-time validation can tell those
+  // apart — see the readLadder() requirements in
+  // docs/module_b_ranked_choice_plan.md. Coercing to 0 rather than dropping
+  // the rung is also deliberate: dropping would shorten the ladder and
+  // silently renumber every position beneath it.
+  const ladder = (cfg.ranked?.ladder ?? []).map((v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  });
   const played = new Set(songs.map((s) => norm(s.songname)));
 
   // ONE definition of "which ladder position is this slot," used for

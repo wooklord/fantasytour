@@ -122,6 +122,24 @@ directly (lower risk), keep these habits:
    re-reading as a set: a count standing in for coverage, a
    presence check standing in for equality, and a point-in-time observation
    standing in for a claim about the future.
+6. **Record mentions at the weight they were given.** One offhand comment is a
+   mention, not a commitment — and writing it down as a deliverable makes it
+   indistinguishable from one later. This project has run the failure in both
+   directions on the same subject (the desktop sidebar): a single passing
+   remark was escalated across sessions into a named artifact with its own
+   roadmap entry and an implied rejected alternative, and then the correction
+   over-swung to "never existed," deleting the real preference along with the
+   invented detail around it. Inflation and erasure look like opposite
+   mistakes but are the same one — **a claim not calibrated to the evidence
+   behind it.** So: write down what was actually said, at the strength it was
+   actually said, and mark the strength explicitly ("mentioned once, never
+   specified") rather than letting a later reader infer it from the fact that
+   it got written down at all.
+   - Note the remedy in item 5 and the repo-check remedy elsewhere in this
+     file **do not cover this case**. "Check it against the actual repo"
+     adjudicates claims about *code*; a claim about what the dev *wants* has
+     no artifact to check against, and never will. Calibrating at the moment
+     of recording is the only defense available.
 
 **`test/compare.mjs` and `legacy-index.html` are retired (Stage C2a).** That harness
 diffed the current build's rendered DOM against a frozen pre-2.0 monolith, to catch
@@ -415,6 +433,94 @@ before assuming a change is covered just because the suite is green:
     the committed SQL doesn't have, and because compromising auth is strictly
     easier than exploiting any of them. Fix this bullet and the admin-gating
     argument becomes real; until then, don't lean on it.
+- **The stored session IS the credential: `ft_session` persists the
+  plaintext PIN.** Same auth story as the bullet above, recorded separately
+  because the fix is different. `auth.js:26` writes
+  `state.session = { ...d, pin: $("#a-pin").value }` straight into
+  `localStorage`, and every RPC in the app reads `state.session.pin` to
+  authenticate (`switcher.js:49`, `realtime.js:31`, and ~everywhere else).
+  Consequences worth stating plainly:
+  - **There is no revocation path short of changing the PIN.** A leaked
+    session isn't a token that can be invalidated server-side — it's the
+    password itself, so "log this device out" and "rotate the credential"
+    are the same operation.
+  - **It currently sits on a shared storage origin.** Everything served
+    from `wooklord.github.io` is ONE origin, so this app shares
+    `localStorage` with the Ambassadors app and anything else published
+    there. Key prefixing (`ft_*`) is naming, not isolation — any script on
+    any page of that origin can read `ft_session` and recover a player's
+    PIN in plaintext. A bug in a *sibling* app is therefore enough to
+    expose Fantasy Eggy credentials, which is what makes the domain move
+    below a real concern rather than architecture hygiene.
+  - **Eventual fix, recorded so it isn't redesigned from scratch: exchange
+    the PIN for an opaque server-issued session token at login, store the
+    token, never store the PIN.** That gives a real revocation path and
+    makes a stolen session bounded rather than permanent. This is genuine
+    work — a new table, token issue/verify/expiry, and re-pointing every
+    RPC's auth argument off `p_pin` — **not a quick patch. Don't start it
+    without scoping it as its own session.**
+  - Scale note, same as elsewhere: today every app on that origin is the
+    dev's own, so the practical exposure is a bug in the dev's own code,
+    not a third party. That's why this is recorded rather than treated as
+    an incident.
+- **At rest, PINs ARE hashed — bcrypt, verified correctly. Don't
+  re-investigate this.** Different question from the bullet above (which is
+  about the *client*), with a different answer, so both are recorded.
+  `register_player` stores `crypt(p_pin, gen_salt('bf'))` into
+  `players.pin_hash` (`sql/stage_c1_rpcs.sql:72-73`) — `gen_salt('bf')` is
+  Blowfish/bcrypt with a per-row salt — and `_auth_player` verifies with
+  `pl.pin_hash <> crypt(p_pin, pl.pin_hash)`, the standard
+  recompute-using-the-stored-hash-as-salt comparison. There is no plaintext
+  PIN column anywhere; the column is `pin_hash`.
+  - **Blast radius, stated honestly rather than reassuringly:** read access
+    to `players` yields bcrypt hashes, not a plaintext credential dump — so
+    a table read is meaningfully better than the client-side story above.
+    But **against a 4-digit PIN the hashing buys far less than it would for
+    real passwords**: the entire keyspace is 10k candidates, so an attacker
+    holding the hashes brute-forces them offline regardless of bcrypt's
+    cost factor. This is the same root cause as the weak-PIN half of the
+    rate-limiting bullet — hashing protects the *storage*, only PIN length
+    protects the *credential*.
+  - Implication for the eventual token exchange: since storage is already
+    hashed and correct, that work is confined to the client/session layer —
+    issue and store a token instead of the PIN. It does **not** require
+    re-doing password storage, which is one of the few things here that's
+    already right.
+- **Roadmap: move the app onto a subdomain of `wooklord.net`. Trigger —
+  before Facebook-league recruitment begins.** Same dated-trigger pattern
+  as the rate-limiting and ladder-mutability entries. The domain is already
+  owned, so there's nothing to buy. Two structural reasons:
+  - **Host portability.** The URL is currently a `github.io` path, so
+    leaving GitHub Pages later breaks every installed PWA. On a controlled
+    domain the host becomes a DNS change nobody notices.
+  - **Storage origin isolation** — and this is the half that actually
+    matters, per the `ft_session` bullet above: everything on
+    `wooklord.github.io` is ONE origin, so this app currently shares
+    `localStorage` with the Ambassadors app and anything else published
+    there, while storing a plaintext PIN in it. Key prefixing is the only
+    separation today, and prefixing is not isolation.
+  - **Why the trigger is recruitment specifically, not "eventually":** the
+    manifest's `scope` and `start_url` are origin-bound, so moving *after*
+    players install to home screens forces reinstalls and drops their local
+    storage (including in-progress pick drafts). Recruitment hasn't
+    started, so this is nearly free today and stops being free the moment
+    it does. **Worth asking the current 13 players whether any have already
+    installed to home screen** — if some have, they eat a reinstall
+    whenever this happens.
+  - **Implementation, recorded so it isn't re-derived**: a `CNAME` file in
+    the repo containing the subdomain, a DNS `CNAME` record pointing at
+    `wooklord.github.io`, then enable HTTPS in the repo's Pages settings.
+    Use a **subdomain, not the apex** — GitHub Pages allows one apex/www
+    site per account but unlimited project sites, so don't spend the apex
+    here.
+  - **Caveat that survives the move**: subdomains are separate *storage*
+    origins, but `wooklord.net` is a registrable domain, so a cookie set
+    with `domain=.wooklord.net` is readable by every subdomain. Storage
+    separates automatically; cookies don't. Scope any cookie to the exact
+    host with no `domain` attribute. (Moot today — the app sets no cookies
+    at all and uses no `sessionStorage`/`indexedDB`; `localStorage` is the
+    entire client-side surface: `ft_session`, `ft_bracket_id`, `ft_theme2`,
+    `ft_admin_sections`, and the per-show `ft_draft_*` keys.)
 - **Resolved (Session 4): both halves of decision 3 now exist.** A
   league/global admin can run `admin_reset_player_pin`
   (`sql/stage_l_admin_pin_reset.sql`) to server-generate a new PIN and force
@@ -718,7 +824,12 @@ behavior.** It's a frozen snapshot of the pre-2.0 feature set, written once
 before the rebuild began, and every rebuild stage since has moved the actual
 UI further away from it without this section being updated to match. It has
 already sent work down the wrong path four times now: it described a
-collapsible sidebar that was never built; an admin show-row layout that (in
+collapsible sidebar that was **never built** (precisely: no code for one was
+ever committed — that is all the git evidence below can show, and it is not
+the same as "the dev never wanted one." **Git history can disprove an
+artifact; it can never disprove an intention.** The dev did mention a desktop
+sidebar redesign once, in passing — see the deferred-items entry near the end
+of this file, and discipline item 6); an admin show-row layout that (in
 an earlier draft) only ever existed in a chat message, never in the repo;
 and, separately from this section's own text, a personal task list compiled
 from conversation memory once again claimed a desktop sidebar mockup
@@ -736,7 +847,21 @@ corrected). **The mechanism is the same whether the false claim is about a
 past decision or a feature's current status**: a plan or possibility gets
 written down — in a chat message, a personal task list, a "known pending
 work" bullet — and later gets read back as if it already existed, because
-nothing forced a check against the actual repo in between. Treat any
+nothing forced a check against the actual repo in between.
+**The mechanism runs in BOTH directions, and this note used to arm you
+against only one of them.** The four instances above are all *inflation* — a
+possibility read back as fact. The mirror case happened later, on the sidebar
+entry itself: a correction concluded "never existed" from evidence that only
+ever showed "never committed," and in doing so deleted a real (if very
+low-weight) stated preference along with the invented specifics around it.
+Inflating a mention into a deliverable and erasing a mention as fictional are
+the same error wearing opposite signs — a claim not calibrated to the
+evidence actually behind it. **And note the remedy below does not cover the
+erasure direction**: "check it against the actual repo" adjudicates claims
+about code, but the sidebar mention was never a claim about code — it was a
+claim about what the dev wanted, which no repo check can settle in either
+direction. The only defense there is recording a mention at the weight it was
+given in the first place; see discipline item 6. Treat any
 specific claim below — exact wording, layout details, which widget does
 what, or whether a described feature is actually live — as unverified until
 you've actually read the relevant source (`src/features/*.js`,
@@ -1396,9 +1521,50 @@ this is the condensed, durable record so the roadmap survives a context boundary
 - **Session 5 — Facebook League launch:** create the league + appoint its two
   admins through the real console this time, provision one Discord webhook
   secret, smoke-test. Blocked on the two admins being named and confirmed.
+  **See the PRE-SESSION-5 GATE immediately below — do not start this
+  session without walking that list.**
 
-**Dropped entirely:** the desktop sidebar/"mock2" claim — never existed, see the
-false-memory note above.
+### PRE-SESSION-5 GATE (walk this list before launching the Facebook League)
+
+Six separate items elsewhere in this file are gated on "before Session 5 /
+before the Facebook League / before a non-dev league admin exists." They were
+each recorded beside the code they concern, which is right for understanding
+them and wrong for remembering them — six separately-buried triggers is five
+chances to miss one. This is the index; **the full reasoning stays in the
+bullets referenced, deliberately not duplicated here**, since a duplicated
+rationale is one that drifts.
+
+| # | Item | Where the full bullet lives | Why it's gated here |
+|---|---|---|---|
+| 1 | **Login rate-limiting** (3-part fix: progressive delay + aggregate spray throttle + weak-PIN rejection) | Postgres/Supabase gotchas — "Login rate-limiting: the top real security exposure" | ~50 semi-strangers is where enumerable nicknames + short PINs stop being theoretical |
+| 2 | **`ft_session` plaintext PIN → server-issued token** | Same section, the bullet immediately after #1 | The stored session IS the credential, with no revocation path; scope as its own session, it's real work |
+| 3 | **Domain move to a `wooklord.net` subdomain** | Same section, the roadmap bullet after #2 | Origin isolation for #2, and PWA installs become expensive to move *after* recruitment |
+| 4 | **Ladder-mutability revisit** (Module B) | "Alternate scoring modes" → Module B locked decisions → "Decided: mid-season ladder edits stay unguarded" | Unguarded config edits silently rewrite already-published scores; acceptable only while one trusted person can edit |
+| 5 | **Appointing any non-dev league admin** | Cross-cuts #4 and the `admin_update_config`/`admin_set_season_roster` integrity notes | This is the event that invalidates "only the dev can do damage," which several decisions currently rest on |
+| 6 | **Official opt-in default revisit** (Stage F flipped it to `true` for beta convenience) | 2.0 rebuild key decisions — the `official_opt_in` bullet | Opt-in-by-default was a closed-group convenience; a semi-public pool should choose deliberately |
+
+Note #5 is not independent — it's the *trigger* for #4 and for re-reading the
+admin-gated integrity notes, so ordering matters: settle #4 before doing #5,
+and #1–#3 before either, since they're what make an untrusted-ish admin pool
+safe at all. (#6 was already gated this way before today and is easy to miss
+because it sits far from the others — it's listed for completeness, not
+because it's newly decided.)
+
+**Deferred at its real (low) weight, NOT dropped — the desktop sidebar
+redesign.** Recording both halves, because an earlier version of this line
+said "never existed," which was itself an over-correction:
+- **The idea is real.** The dev mentioned a desktop sidebar redesign once, in
+  passing. It was never specified, never mocked up, never scoped. It stays on
+  the deferred list **as an idea at that weight — a passing mention, not a
+  planned deliverable.**
+- **"mock2," and any artifact implied by it, never existed.** A prior session
+  took the offhand mention and inflated it into a named deliverable with its
+  own roadmap entry and an implied rejected alternative. That part is
+  invented; see the false-memory note in the "Feature set frozen" section
+  above for the verification (`git log --all -S"mock2"` matches nothing,
+  ever).
+- The correction then over-swung the other way, deleting the real mention
+  along with the invented detail — see discipline item 6.
 
 **Deferred with an explicit revisit trigger, not dropped:** cross-league global
 stats (revisit past 2-3 leagues); the per-league webhook DB+UI (revisit if

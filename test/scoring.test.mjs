@@ -462,7 +462,7 @@ const R = rockingDocks; // played: Laurel, Shatter, Beaming, High Noon, Smile, T
   check("ranked 7i: total (5+5+4+3+2+1) + 5 bonus", r.total, 25);
 }
 
-// 7k. Complete sheet with one miss — the most likely real outcome of any
+// 7j. Complete sheet with one miss — the most likely real outcome of any
 //     given show, and distinct from both 7b (partial, all hit) and 7d
 //     (count satisfied, coverage not). Here coverage DOES pass and the hit
 //     test is what fails, so perfect must not fire.
@@ -475,12 +475,12 @@ const R = rockingDocks; // played: Laurel, Shatter, Beaming, High Noon, Smile, T
     { slot: "rank5", songname: "Distraction" }, // miss 0
   ];
   const r = scorePicks({ picks, songs: R, slotFacts: null, cfg: rankedCfg, format: "standard" });
-  check("ranked 7k: complete but imperfect -> no bonus row", r.breakdown.some(b => b.slot === "bonus"), false);
-  check("ranked 7k: total is the four hits only", r.total, 14);
-  check("ranked 7k: the miss is recorded, not dropped", [r.breakdown[4].hit, r.breakdown[4].points], [false, 0]);
+  check("ranked 7j: complete but imperfect -> no bonus row", r.breakdown.some(b => b.slot === "bonus"), false);
+  check("ranked 7j: total is the four hits only", r.total, 14);
+  check("ranked 7j: the miss is recorded, not dropped", [r.breakdown[4].hit, r.breakdown[4].points], [false, 0]);
 }
 
-// 7l. Empty or absent ladder — exercises the `expectedSlots.length > 0`
+// 7k. Empty or absent ladder — exercises the `expectedSlots.length > 0`
 //     guard, which nothing else tests. Without it an empty ladder would
 //     make `every()` vacuously true and hand out perfect for free.
 for (const [label, cfg] of [
@@ -489,12 +489,12 @@ for (const [label, cfg] of [
 ]) {
   const picks = [{ slot: "rank1", songname: "Laurel" }]; // a played song
   const r = scorePicks({ picks, songs: R, slotFacts: null, cfg, format: "standard" });
-  check(`ranked 7l (${label}): pick scores 0`, r.breakdown[0].points, 0);
-  check(`ranked 7l (${label}): no vacuous perfect`, r.breakdown.some(b => b.slot === "bonus"), false);
-  check(`ranked 7l (${label}): total 0`, r.total, 0);
+  check(`ranked 7k (${label}): pick scores 0`, r.breakdown[0].points, 0);
+  check(`ranked 7k (${label}): no vacuous perfect`, r.breakdown.some(b => b.slot === "bonus"), false);
+  check(`ranked 7k (${label}): total 0`, r.total, 0);
 }
 
-// 7m. Perfect bonus disabled — exercises the `perf > 0` guard, also
+// 7l. Perfect bonus disabled — exercises the `perf > 0` guard, also
 //     otherwise untested. Same all-hit sheet as 7e.
 for (const [label, bonuses] of [["perfect: 0", { perfect: 0 }], ["bonuses omitted", undefined]]) {
   const cfg = { mode: "ranked_choice", ranked: { ladder: [5, 4, 3, 2, 1] }, ...(bonuses ? { bonuses } : {}) };
@@ -506,11 +506,11 @@ for (const [label, bonuses] of [["perfect: 0", { perfect: 0 }], ["bonuses omitte
     { slot: "rank5", songname: "Smile" },
   ];
   const r = scorePicks({ picks, songs: R, slotFacts: null, cfg, format: "standard" });
-  check(`ranked 7m (${label}): no bonus row`, r.breakdown.some(b => b.slot === "bonus"), false);
-  check(`ranked 7m (${label}): total 15`, r.total, 15);
+  check(`ranked 7l (${label}): no bonus row`, r.breakdown.some(b => b.slot === "bonus"), false);
+  check(`ranked 7l (${label}): total 15`, r.total, 15);
 }
 
-// 7n. A ladder of a different length, with string values — the realistic
+// 7m. A ladder of a different length, with string values — the realistic
 //     production shape, since readLadder() scrapes DOM inputs and those are
 //     strings unless saveConfig coerces them. Also confirms expectedSlots
 //     is derived from the ladder's actual length, not an implicit 5.
@@ -521,20 +521,20 @@ for (const [label, bonuses] of [["perfect: 0", { perfect: 0 }], ["bonuses omitte
     { slot: "rank2", songname: "Shatter" },
   ];
   const r = scorePicks({ picks, songs: R, slotFacts: null, cfg, format: "standard" });
-  check("ranked 7n: string ladder values coerce to numbers", [r.breakdown[0].points, r.breakdown[1].points], [10, 5]);
-  check("ranked 7n: 2-row ladder is complete at 2 -> perfect fires", r.breakdown.filter(b => b.slot === "bonus").length, 1);
-  check("ranked 7n: total 10 + 5 + 7 bonus", r.total, 22);
+  check("ranked 7m: string ladder values coerce to numbers", [r.breakdown[0].points, r.breakdown[1].points], [10, 5]);
+  check("ranked 7m: 2-row ladder is complete at 2 -> perfect fires", r.breakdown.filter(b => b.slot === "bonus").length, 1);
+  check("ranked 7m: total 10 + 5 + 7 bonus", r.total, 22);
   // A third position doesn't exist on this ladder, so it scores 0 and is
   // outside coverage — same as any other non-canonical key (7h).
   const r3 = scorePicks({
     picks: [...picks, { slot: "rank3", songname: "Beaming" }],
     songs: R, slotFacts: null, cfg, format: "standard",
   });
-  check("ranked 7n: rank3 off a 2-row ladder scores 0", r3.breakdown.find(b => b.slot === "rank3").points, 0);
-  check("ranked 7n: and does not disturb the bonus", r3.total, 22);
+  check("ranked 7m: rank3 off a 2-row ladder scores 0", r3.breakdown.find(b => b.slot === "rank3").points, 0);
+  check("ranked 7m: and does not disturb the bonus", r3.total, 22);
 }
 
-// 7o. The complement of 7f, pinning ladder-scoping from the other side.
+// 7n. The complement of 7f, pinning ladder-scoping from the other side.
 //     Two sub-cases, and they do different jobs — worth stating, because
 //     they look interchangeable:
 //     (a) an orphan that HIT. Both a correctly-scoped hit test and a
@@ -560,30 +560,85 @@ for (const [label, bonuses] of [["perfect: 0", { perfect: 0 }], ["bonuses omitte
     picks: [...full, { slot: "rank7", songname: "Trixieville" }],
     songs: R, slotFacts: null, cfg: rankedCfg, format: "standard",
   });
-  check("ranked 7o(a): hitting orphan still scores 0", rHit.breakdown.find(b => b.slot === "rank7").points, 0);
-  check("ranked 7o(a): hitting orphan is recorded as a hit", rHit.breakdown.find(b => b.slot === "rank7").hit, true);
-  check("ranked 7o(a): bonus fires", rHit.breakdown.filter(b => b.slot === "bonus").length, 1);
-  check("ranked 7o(a): total not inflated by the orphan", rHit.total, 20);
+  check("ranked 7n(a): hitting orphan still scores 0", rHit.breakdown.find(b => b.slot === "rank7").points, 0);
+  check("ranked 7n(a): hitting orphan is recorded as a hit", rHit.breakdown.find(b => b.slot === "rank7").hit, true);
+  check("ranked 7n(a): bonus fires", rHit.breakdown.filter(b => b.slot === "bonus").length, 1);
+  check("ranked 7n(a): total not inflated by the orphan", rHit.total, 20);
+  // Second guardian for the canonical-index fix, which 7h otherwise
+  // protects alone. A zero-padded key that HITS is the only shape that
+  // discriminates: string surgery reads "rank01" as position 1 and pays 5,
+  // while an exact-match index reads it as no position at all and pays 0.
+  // 7n(b)'s "rank02" can't cover this — it misses, and `hit ? value : 0`
+  // zeroes a miss under either implementation.
+  const rPad = scorePicks({
+    picks: [...full, { slot: "rank01", songname: "Trixieville" }],
+    songs: R, slotFacts: null, cfg: rankedCfg, format: "standard",
+  });
+  check("ranked 7n(a): hitting zero-padded key scores 0, not rank1's value", rPad.breakdown.find(b => b.slot === "rank01").points, 0);
+  check("ranked 7n(a): and does not inflate the total", rPad.total, 20);
   // (b) non-canonical key that did NOT play — the discriminating case
   const rMiss = scorePicks({
     picks: [...full, { slot: "rank02", songname: "Distraction" }],
     songs: R, slotFacts: null, cfg: rankedCfg, format: "standard",
   });
-  check("ranked 7o(b): missed non-canonical row does not block perfect", rMiss.breakdown.filter(b => b.slot === "bonus").length, 1);
-  check("ranked 7o(b): it scores 0 and is marked a miss", [rMiss.breakdown.find(b => b.slot === "rank02").hit, rMiss.breakdown.find(b => b.slot === "rank02").points], [false, 0]);
-  check("ranked 7o(b): total 15 + 5 bonus", rMiss.total, 20);
+  check("ranked 7n(b): missed non-canonical row does not block perfect", rMiss.breakdown.filter(b => b.slot === "bonus").length, 1);
+  check("ranked 7n(b): it scores 0 and is marked a miss", [rMiss.breakdown.find(b => b.slot === "rank02").hit, rMiss.breakdown.find(b => b.slot === "rank02").points], [false, 0]);
+  check("ranked 7n(b): total 15 + 5 bonus", rMiss.total, 20);
 }
 
-// 7j. Dispatch: a config with no `mode` key keeps today's slot behavior
+// 7o. Malformed ladder rungs must never produce a non-finite total. The
+//     condition under test is "`total` is a real number," so that's what's
+//     asserted — a specific expected value would only be a proxy for it,
+//     and would pass for the wrong reason if the arithmetic changed.
+//     Without the coercion in scoreRankedPicks, "abc" and undefined map to
+//     NaN, a pick landing on that rung scores NaN, and `total` becomes NaN
+//     — which would reach scores.points and poison every standings sum for
+//     that player for the season.
+for (const [label, ladder, expected] of [
+  ["blank string", [5, "", 3], 15],
+  ["non-numeric", [5, "abc", 3], 15],
+  ["null", [5, null, 3], 15],
+  ["undefined", [5, undefined, 3], 15],
+  ["all strings", ["5", "4", "3"], 19],
+]) {
+  const cfg = { mode: "ranked_choice", ranked: { ladder }, bonuses: { perfect: 7 } };
+  const picks = [
+    { slot: "rank1", songname: "Laurel" },
+    { slot: "rank2", songname: "Shatter" },
+    { slot: "rank3", songname: "Beaming" },
+  ];
+  const r = scorePicks({ picks, songs: R, slotFacts: null, cfg, format: "standard" });
+  check(`ranked 7o (${label}): total is finite`, Number.isFinite(r.total), true);
+  check(`ranked 7o (${label}): every row's points are finite`, r.breakdown.every(b => Number.isFinite(b.points)), true);
+  check(`ranked 7o (${label}): total`, r.total, expected);
+}
+// The residual the scorer cannot fix, pinned so it's a known property
+// rather than a surprise: a coerced rung is a real ladder position worth 0
+// that still counts toward coverage, so a full sheet of hits still earns
+// perfect-sheet even though one rung paid nothing. Only save-time
+// validation can distinguish that from an admin typing 0 deliberately.
+{
+  const cfg = { mode: "ranked_choice", ranked: { ladder: [5, "", 3] }, bonuses: { perfect: 7 } };
+  const picks = [
+    { slot: "rank1", songname: "Laurel" },
+    { slot: "rank2", songname: "Shatter" },  // lands on the 0-value rung
+    { slot: "rank3", songname: "Beaming" },
+  ];
+  const r = scorePicks({ picks, songs: R, slotFacts: null, cfg, format: "standard" });
+  check("ranked 7o: 0-value rung still counts toward coverage", r.breakdown.filter(b => b.slot === "bonus").length, 1);
+  check("ranked 7o: the pick on it hits but pays nothing", [r.breakdown[1].hit, r.breakdown[1].points], [true, 0]);
+}
+
+// 7p. Dispatch: a config with no `mode` key keeps today's slot behavior
 //     exactly — the "config doesn't opt into the variant" case, same shape
 //     resolveConfigSection is tested for above.
 {
   const facts = deriveSlotFacts(R, true);
   const picks = [{ slot: "opener", songname: "Silver Steed (My Blue)" }];
   const r = scorePicks({ picks, songs: R, slotFacts: facts, cfg: standardCfg, format: "standard" });
-  check("ranked 7j: no mode key -> slot scoring still runs", r.breakdown[0].reason, "opener — exact");
+  check("ranked 7p: no mode key -> slot scoring still runs", r.breakdown[0].reason, "opener — exact");
   const viaRanked = scoreRankedPicks({ picks: [{ slot: "rank1", songname: "Laurel" }], songs: R, cfg: rankedCfg });
-  check("ranked 7j: scoreRankedPicks callable directly", viaRanked.total, 5);
+  check("ranked 7p: scoreRankedPicks callable directly", viaRanked.total, 5);
 }
 
 // ---------------------------------------------------------------

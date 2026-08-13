@@ -435,6 +435,37 @@ existing shape) with `mode:"ranked_choice"`, `ranked:{ladder:[5,4,3,2,1]}`,
   confirms none of that ever appears in the breakdown (proves suppression
   is structural, not config-off).
 
+### `readLadder()` save-time requirements (referenced by a comment in `scoring.js` — don't drop these)
+
+`scoreRankedPicks` coerces any non-finite ladder rung to `0` defensively,
+and its comment points here for the half a scorer structurally cannot do.
+When `readLadder()` is built in `admin.js`, it must:
+
+1. **Drop blank rows entirely** rather than saving them. `Number("")` is
+   `0`, not `NaN`, so a blank row silently becomes a real ladder position
+   worth nothing that still counts toward perfect-sheet coverage — a player
+   fills it, hits it, scores 0, and the sheet still reads complete.
+2. **Reject non-numeric input** with a message in `#cfg-err` instead of
+   saving. `Number("abc")` is `NaN`; before the scorer's coercion that
+   produced a `NaN` `total`, which reaches `scores.points` and poisons every
+   standings sum for that player for the season. The scorer now floors that
+   to 0, but a silently-zeroed rung is still a broken config an admin should
+   be told about rather than shipped.
+3. **Coerce survivors with `Number()`** so the stored jsonb is numeric.
+   `readLadder()` scrapes DOM input values, which are strings, so without
+   this the stored config is `["5","4","3","2","1"]` and the scorer is left
+   fixing types at read time on every scoring pass.
+
+Why both layers rather than picking one: save-time validation is the right
+*primary* defense but cannot be the only one — `brackets.config` is
+schemaless `jsonb` and `admin_update_config` writes whatever JSON it is
+handed, so nothing between an admin's keystroke and the scorer enforces
+anything. Equally, the scorer alone cannot be sufficient: it cannot tell a
+blank from an admin deliberately typing `0`, so only save-time validation
+can catch that case at all. Covered by test block **7o** in
+`test/scoring.test.mjs`, which asserts `Number.isFinite(total)` for all five
+malformed shapes and pins the 0-rung-counts-toward-coverage residual.
+
 ### `src/core/config.js`
 
 Add `export const RANKED_CHOICE_ENABLED = false;` alongside the existing
