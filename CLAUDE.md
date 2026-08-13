@@ -60,6 +60,38 @@ Sibling app: the "Ambassadors" tour-map PWA (separate project, same developer).
 
 ---
 
+## SESSION DURABILITY PROTOCOL (standing rule — read this every session)
+
+A session can end without warning at any point — a usage limit, a context
+boundary, a closed terminal. This project already lost a full session's
+worth of decisions once this way (the edge-function-scope assumption behind
+Module B sat wrong in conversation for an entire session because nothing
+forced a write to disk). Three rules, effective 2026-08-12:
+
+1. **Write decisions when they're made, not at wrap-up.** The moment a
+   decision, interpretation, or answer to an open question is locked, write
+   it into CLAUDE.md (or the relevant in-repo plan file) and commit it right
+   then — don't batch documentation for an end-of-session step. Don't ask
+   permission first; make the write, then report what was written in one
+   line. If mid-task when a decision lands, finish the write before
+   continuing the task.
+2. **On "park" / "stop" / "wrap up" / "I'm done," do the durable writes
+   FIRST, in this order:** (a) update CLAUDE.md with every decision locked
+   this session; (b) update the in-repo plan file with current state, next
+   step, and any question still open — including unresolved ones, since a
+   question that only exists in conversation is lost the moment the session
+   ends; (c) commit and push both, confirm `main` matches `origin/main`;
+   (d) only then stop any dev server, report what's still running, and give
+   the resume command/directory. (a)-(c) are the only steps that require the
+   assistant at all — if something is about to cut the session off, do
+   (a)-(c) and skip (d).
+3. **If a decision from an earlier session turns out wrong or was never
+   actually recorded, say so explicitly rather than quietly working around
+   it.** That's exactly how the edge-function assumption behind Module B
+   survived as long as it did.
+
+---
+
 ## THE MERCILESS EDITING DISCIPLINE (hard-won — do not skip)
 
 The single-file paste workflow caused real bugs. Even though Claude Code edits files
@@ -408,6 +440,31 @@ before assuming a change is covered just because the suite is green:
   intentional there — a dead Discord webhook correctly shouldn't retry-storm
   forever, unlike a roster real players get scored against. Nothing else in
   the file currently matches the dangerous version of this shape.
+- **Open checkpoint, not yet verified: Test 3 season activation
+  (`roster_locked_at` fix).** The Test 3 season is scheduled to activate
+  2026-08-14. Traced the exact code before writing this checkpoint
+  (`activateSeasons()`, `supabase/functions/carton-sync/index.ts:338-364`):
+  `added_at` (line 349, `joinedAt`) and `roster_locked_at` (line 362) are
+  two SEPARATE `new Date().toISOString()` calls in JS, with an awaited
+  network round-trip for the roster upsert in between — not the same
+  Postgres transaction, so don't check exact equality; allow a tolerance
+  (recommend ~60 seconds — generous enough to absorb normal upsert latency,
+  tight enough that a different cron run or a manual edit hours/days apart
+  still fails the check).
+  A second wrinkle: the fix above deliberately preserves a manually
+  pre-added row's original, older `added_at` rather than overwriting it
+  (`ignoreDuplicates`) — so a legitimately pre-added member's row is
+  SUPPOSED to differ from `roster_locked_at`, and that's correct behavior,
+  not a bug. So the actual check: group Test 3's `season_rosters` rows by
+  `added_at` — the largest cluster should share one timestamp within ~60s of
+  `roster_locked_at` (that cluster, not just `roster_locked_at` being
+  non-null, is the real proof the automatic batch wrote successfully). Any
+  row sitting meaningfully outside that cluster is only expected if it
+  corresponds to a real pre-add via `admin_set_season_roster` before
+  activation — if no one was pre-added to Test 3, an outlier timestamp there
+  is the bug, not a false alarm. Was supposed to be recorded and checked
+  last session; wasn't — recorded now so it survives to whoever's driving
+  after 2026-08-14.
 
 ---
 
@@ -1228,6 +1285,51 @@ ladder (e.g. 5/4/3/2/1); hits pay their assigned rank, summed.
   once the mode-field architecture below exists at all.
 - Multiple hits sum their assigned ranks — confirmed, the only sensible
   behavior, no further design needed.
+- **Locked decisions (session of 2026-08-12):**
+  1. Pure rank-value scoring only. Cover bonuses, debut bonuses, and the Any
+     Debut wildcard are suppressed at code level in this mode — not
+     defaulted to 0, not left toggleable. They reward obscurity, a second
+     risk axis competing with the only question ranked choice asks: how
+     confident is the player in this song. A future admin cannot turn them
+     on for a ranked bracket.
+  2. Perfect-sheet is the single exception and still applies — it scores the
+     whole sheet being right, not any individual song's rarity. Scored
+     against the FULL ladder length, not however many picks were actually
+     submitted, so a partial sheet can never qualify (a 1-pick sheet that
+     hits its one pick must not collect the bonus meant for filling and
+     hitting every row). The completeness check is against distinct rank
+     positions (rank1..rankN all present), not a raw pick count — a count-
+     only check has the same shape as the partial-sheet exploit it's meant
+     to close (several picks that don't actually cover every position could
+     satisfy a count without covering the board), and the hit check that
+     pairs with it is scoped to picks inside the ladder only, so a stale
+     pick left over from a since-shortened ladder can't block an otherwise-
+     complete sheet by sitting there unplayed.
+  3. Fixed row count regardless of show format. Standard slots reference set
+     structure ("Set 2 Closer"), which is why one-set shows and festivals
+     need separate handling there. Ranked choice has no positional concept
+     at all, so that distinction does not apply and the row count never
+     varies — the ladder lives at the bracket-config top level, not nested
+     under the `oneset` section slot mode uses.
+  4. Fewer than N picks submitted: allowed, no penalty. Any subset of the N
+     rank rows may be left blank; a blank row simply contributes no pick and
+     scores nothing, the same way an unfilled slot or flat pick already
+     behaves today. Rows are not free-assignment — each row is a fixed rank
+     position (Rank 1 always pays the ladder's first value, Rank 2 the
+     second, etc.), so there's no duplicate-value-prevention UI the way free
+     assignment would have required.
+  - **Open, not decided**: whether editing a bracket's ladder mid-season
+    should be guarded. Traced whether `slots` has the same exposure today —
+    it does: `admin_update_config` (`sql/stage_c1_rpcs.sql`) has no
+    season-status guard at all, and `scoreBracket` (`carton-sync/index.ts`)
+    reads `bracket.config` fresh every scoring pass, so a config edit takes
+    effect on the very next cron tick. The only existing mitigation is a
+    warning label in the admin panel ("Rule changes apply on the next
+    scoring run..."), not a lock — `brackets.config` has no freeze
+    mechanism anywhere, unlike `season_rosters`. Ranked choice's ladder
+    inherits this exact pre-existing exposure rather than introducing a new
+    one; whether that's acceptable as-is or worth a real guard someday is
+    unresolved.
 
 **Architecture: a `mode` field on the existing `brackets.config`, not a parallel
 system.** Brackets already carry fully independent config (Casual could run
