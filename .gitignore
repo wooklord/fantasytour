@@ -19,6 +19,7 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+/Screenshot *.png
 # logs
 *.log
 npm-debug.log*
