@@ -719,10 +719,39 @@ before assuming a change is covered just because the suite is green:
     from `opener`/`closer`/`encore`/`flat1-3` to `rank1..rank6` on
     2026-08-13, so reverting the mode alone leaves them unreadable by slot
     mode; they'd need re-keying back too.
-  - This is the **second** item with a 2026-08-14 deadline, alongside the
-    Test 3 roster check immediately below. Both land the same day.
-- **Open checkpoint, not yet verified: Test 3 season activation
-  (`roster_locked_at` fix).** The Test 3 season is scheduled to activate
+  - This was the **second** item with a 2026-08-14 deadline, alongside the
+    Test 3 roster check immediately below. Both landed that day and both are
+    closed — see the DATED DEADLINES table, which now has no open entries.
+- **✅ VERIFIED 2026-08-14: Test 3 activated cleanly — the roster fix works
+  under a real conflict.** Result of the checkpoint below, which is kept for
+  its method. `roster_locked_at = 04:00:04.757Z` (first cron tick after
+  midnight Eastern, as expected — `activateSeasons` gates on Eastern date,
+  not UTC), 14 rows total.
+  - **All 13 hand-added rows kept their original `added_at`**, still
+    spanning `08-13 02:55:08.612` → `02:55:23.981`. Nothing was rewritten to
+    activation time — the highest-value assertion, and the specific
+    regression `ignoreDuplicates` exists to prevent.
+  - **The 14th row (the deliberately un-rostered test account) inserted at
+    `04:00:04.682`, i.e. 0.1s BEFORE `roster_locked_at`.** The sign matters:
+    `activateSeasons` captures `joinedAt`, writes the batch, then stamps, so
+    `added_at` preceding the stamp is the correct causal order. A row
+    stamped *after* would be the old bug's signature.
+  - **What this does NOT prove.** Today's run exercised the SUCCESS path
+    under heavy conflict — the write succeeded, so the ordering held and the
+    stamp followed it. The error path is still unexercised: no write failed,
+    so "on failure, `roster_locked_at` is left null and the next cron run
+    retries" has never actually run. That half of the fix remains verified
+    only by reading the code. See the Deferred section for a unit test that
+    would close it.
+  - **This exercised the conflict branch at near-maximum** — 13 of 14 rows
+    collided and were skipped, 1 inserted — which is the branch no test
+    covers, since a clean fixture produces no conflict. The old bare
+    `.insert()` would have aborted the whole batch on the first collision
+    and stamped `roster_locked_at` anyway.
+- **Method (retained): how the Test 3 activation check was constructed.**
+  Resolved — see the VERIFIED entry above. Kept because the reasoning
+  generalises to any future activation check. The Test 3 season was
+  scheduled to activate
   2026-08-14. Traced the exact code before writing this checkpoint
   (`activateSeasons()`, `supabase/functions/carton-sync/index.ts:338-364`):
   `added_at` (line 349, `joinedAt`) and `roster_locked_at` (line 362) are
@@ -1626,12 +1655,13 @@ them.
 | Date | Status | Item | Full bullet |
 |---|---|---|---|
 | **2026-08-14** | ✅ **DONE** | **Ranked-choice deploy batch** — carton-sync deployed, Stage O applied, verified end to end (ranked save accepted, duplicate rejected, slots-mode save unaffected) | "✅ RESOLVED 2026-08-14 — ranked-choice deploy batch…" in Postgres/Supabase gotchas |
-| **2026-08-14** | ⏳ **OPEN** | **Test 3 roster check** — confirm the activation cluster's `added_at` values against `roster_locked_at`, and that the 13 hand-added rows kept their original timestamps | "Open checkpoint, not yet verified: Test 3 season activation" in the same section |
+| **2026-08-14** | ✅ **DONE** | **Test 3 roster check** — activated 04:00:04Z, 14 rows, all 13 originals kept their timestamps, the new row landed 0.1s before the stamp | "✅ VERIFIED 2026-08-14: Test 3 activated cleanly…" in Postgres/Supabase gotchas |
 
-The deploy batch had the hard cutoff (showtime) and is closed. **The roster
-check is the one still live** — it can be done any time after Test 3
-activates, but it gets harder to interpret the longer it's left, since the
-distinguishing signal is a timestamp cluster.
+**Both 2026-08-14 items are closed.** The ranked-choice deploy batch met its
+hard showtime cutoff (deployed and applied, verified end to end), and the
+Test 3 roster check was verified at `04:00:04Z`. **No open dated deadlines
+remain in this table** — it is retained as a record and as the place to add
+the next one.
 
 ### PRE-SESSION-5 GATE (walk this list before launching the Facebook League)
 
@@ -1680,6 +1710,36 @@ stats (revisit past 2-3 leagues); the per-league webhook DB+UI (revisit if
 env-var management gets painful, or the Global console expands); the
 notification-preference toggle (no strong trigger, pick up whenever wanted);
 game numbering past 12 shows (revisit only if a season actually gets there).
+
+**Deferred, small, and worth doing: a unit test for `activateSeasons()`'s
+ERROR path.** Test 3's activation on 2026-08-14 exercised the success path
+under heavy conflict (13 of 14 rows collided and were skipped, 1 inserted,
+`roster_locked_at` stamped 0.1s after the write) — but **no write failed, so
+the error path has never actually run**. The half still unverified is: on a
+failed roster write, `roster_locked_at` is left `null`, the failure is
+`console.error`-logged and surfaced, and the next cron run retries the
+season. **Two identifiers are involved and they are not interchangeable**:
+`failed` is the local array and the key in `activateSeasons()`'s own return
+(`return { activated, failed }`, index.ts:365), while
+`season_activation_failures` is the HTTP-response key `scoreShows()` maps it
+to (index.ts:540 and 556). A unit test calling the function directly sees
+`failed`; only an end-to-end HTTP call sees `season_activation_failures`.
+That behaviour is currently guaranteed only by
+reading the code, and it is precisely the half whose absence caused the
+original bug — the old code stamped `roster_locked_at` regardless of whether
+the insert succeeded, turning a recoverable error into a permanent silent
+one.
+- **Shape**: stub the Supabase roster write to return an error, call
+  `activateSeasons()`, assert `roster_locked_at` stays null, the season
+  appears in the returned `failed` list, and a second call retries it.
+- **Same harness idiom as the 7a-7p blocks in `test/scoring.test.mjs`** —
+  plain Node, no Deno, no network, a hand-rolled `check()` and fixture
+  objects. The wrinkle is that `activateSeasons` lives in `index.ts` and
+  talks to `supa` directly, unlike `scoring.js` which is pure data-in/
+  data-out; the stub therefore has to stand in for the Supabase client
+  rather than just supply inputs, or the function needs its client injected.
+  Worth sizing that before starting — it may be the difference between a
+  30-minute task and a refactor.
 
 ### Alternate scoring modes (designed, not scheduled)
 
