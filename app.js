@@ -450,6 +450,16 @@
     return key.replace(/[_-]+/g, " ").replace(/([a-zA-Z])(\d)/g, "$1 $2").trim().split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
   }
   function breakdownSlotInfo(format) {
+    var _a, _b;
+    if (state.cfg.mode === "ranked_choice") {
+      const ladder = (_b = (_a = state.cfg.ranked) == null ? void 0 : _a.ladder) != null ? _b : [];
+      const order2 = ladder.map((_, i) => "rank" + (i + 1));
+      const label2 = {};
+      order2.forEach((k, i) => {
+        label2[k] = "Rank " + (i + 1);
+      });
+      return { order: order2, label: label2 };
+    }
     const sect = format === "one_set" && state.cfg.oneset ? state.cfg.oneset : state.cfg;
     const slots = sect.slots || [];
     const coverKeys = slots.filter((s) => (s.type || s.key) === "cover_pick").map((s) => s.key);
@@ -475,13 +485,15 @@
     });
   }
   function slotDefs(format) {
-    var _a, _b;
+    var _a, _b, _c, _d;
+    if (state.cfg.mode === "ranked_choice")
+      return ((_b = (_a = state.cfg.ranked) == null ? void 0 : _a.ladder) != null ? _b : []).map((pts, i) => ({ key: "rank" + (i + 1), label: "Rank " + (i + 1), tooltip: null, pts, type: "ranked" }));
     const sect = format === "one_set" && state.cfg.oneset ? state.cfg.oneset : state.cfg;
     const slots = (sect.slots || []).map((s) => {
       const type = s.type || s.key;
       return { key: s.key, label: slotLabelFor(type, format) || prettifySlotKey(type), tooltip: SLOT_TOOLTIPS[type] || null, pts: s.points, type };
     });
-    for (let i = 1; i <= (sect.flat_picks || 0); i++) slots.push({ key: "flat" + i, label: "Pick " + i, tooltip: FLAT_PICK_TOOLTIP, pts: (_b = (_a = sect.flat_points) != null ? _a : state.cfg.flat_points) != null ? _b : 1, flat: true });
+    for (let i = 1; i <= (sect.flat_picks || 0); i++) slots.push({ key: "flat" + i, label: "Pick " + i, tooltip: FLAT_PICK_TOOLTIP, pts: (_d = (_c = sect.flat_points) != null ? _c : state.cfg.flat_points) != null ? _d : 1, flat: true });
     return slots;
   }
   async function renderPickSheet(show) {
@@ -505,6 +517,15 @@
     </div>`;
     const structured = slots.filter((s) => !s.flat), flats = slots.filter((s) => s.flat);
     const ruleDefs = (() => {
+      var _a2, _b;
+      if (state.cfg.mode === "ranked_choice") {
+        const ladder = (_b = (_a2 = state.cfg.ranked) == null ? void 0 : _a2.ladder) != null ? _b : [];
+        if (!ladder.length) return [];
+        return [{
+          term: ladder.length > 1 ? `Rank 1\u2013${ladder.length}` : "Rank 1",
+          desc: `Worth ${ladder.join(" / ")} ${ladder.length > 1 ? "points respectively" : "points"} if the song is played \u2014 anywhere in the show. Position doesn't matter.`
+        }];
+      }
       const seen = /* @__PURE__ */ new Set();
       const defs = structured.filter((s) => !seen.has(s.label) && seen.add(s.label)).map((s) => ({ term: s.label, desc: s.tooltip }));
       if (flats.length) defs.push({ term: flats.length > 1 ? `Pick 1\u2013${flats.length}` : "Pick", desc: FLAT_PICK_TOOLTIP });
@@ -531,7 +552,7 @@
         ${ruleDefs.map((d) => `<div class="ruledef"><span class="rd-term">${esc(d.term)}</span><span class="rd-desc">${esc(d.desc || "")}</span></div>`).join("")}
       </div>
       ${customRules.length ? `<div class="divider">House rules</div><ul class="customrules">${customRules.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
-      <p class="rulenote">Numbers on the pick sheet are points per slot.</p>
+      <p class="rulenote">${state.cfg.mode === "ranked_choice" ? "Numbers on the pick sheet are what each rank pays." : "Numbers on the pick sheet are points per slot."}</p>
     </div>
     ${footerHtml()}`;
     document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
@@ -581,7 +602,8 @@
       const coverOnly = input.dataset.type === "cover_pick";
       const pool = coverOnly ? state.songList.filter((s) => s.is_original === false) : state.songList;
       const wc = [];
-      if (!coverOnly && ((_b = (_a = state.cfg.wildcards) == null ? void 0 : _a.debut) != null ? _b : true) && ("any debut".includes(q) || "debut".includes(q)))
+      const wildcardOffered = state.cfg.mode !== "ranked_choice" && ((_b = (_a = state.cfg.wildcards) == null ? void 0 : _a.debut) != null ? _b : true);
+      if (!coverOnly && wildcardOffered && ("any debut".includes(q) || "debut".includes(q)))
         wc.push({ songname: "Any Debut", times_played: "\u2605" });
       const hits = [...wc, ...pool.filter((s) => normSong(s.songname).includes(q))].slice(0, 8);
       if (!hits.length) return;
@@ -624,7 +646,8 @@
   async function savePicks() {
     $("#p-err").textContent = "";
     const picks = [...document.querySelectorAll(".slotline input")].map((i) => ({ slot: i.dataset.slot, songname: i.value.trim() })).filter((p) => p.songname);
-    const unknown = picks.filter((p) => !isWildcard(p.songname) && !state.songList.some((s) => normSong(s.songname) === normSong(p.songname)));
+    const wildcardLive = state.cfg.mode !== "ranked_choice";
+    const unknown = picks.filter((p) => !(wildcardLive && isWildcard(p.songname)) && !state.songList.some((s) => normSong(s.songname) === normSong(p.songname)));
     if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):
 ${unknown.map((u) => u.songname).join("\n")}
 

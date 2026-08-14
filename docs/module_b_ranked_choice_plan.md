@@ -716,6 +716,62 @@ copy — nothing currently tells an admin that changing it governs which rule
 sections exist at all.** Whether perfect-sheet belongs in Master switch or
 wants its own small section is open.
 
+**Client-side duplicate warning on the ranked pick sheet.** Stage O rejects
+duplicate songs server-side in ranked mode unconditionally, so a player who
+enters the same song at two ranks currently finds out via an error after
+pressing save. A pre-save check in `picks.js` would catch it at entry and
+say so in place. **Worth doing, and deliberately not entangled with the
+picks.js pass**: it changes nothing about correctness — Stage O already
+makes the duplicate impossible — so it is purely a matter of when the
+player learns. Bundling it would mix a UX improvement into a batch whose
+other changes all have correctness stakes.
+
+## `picks.js` — change plan (implementing now)
+
+Five items. Items 1 and 3 are the ones that also close the config-leak
+described in resolved open question 1; items 4 and 5 are the two halves of
+the "Any Debut" bug.
+
+1. **`slotDefs(format)`** (line 116) — ranked branch at the top, before the
+   slot/flat logic:
+   ```js
+   if (state.cfg.mode === "ranked_choice")
+     return (state.cfg.ranked?.ladder ?? []).map((pts, i) =>
+       ({ key:"rank"+(i+1), label:"Rank "+(i+1), tooltip:null, pts, type:"ranked" }));
+   ```
+   Rows leave `flat` unset, so `renderPickSheet`'s existing
+   `structured`/`flats` split puts them all in `structured` and the
+   "Anywhere in the show" divider does not render — no change needed there.
+   Also makes lines 117/122's `oneset`/`flat_picks` reads unreachable in
+   ranked mode.
+2. **`ruleDefs` in `renderPickSheet`** (line 151) — one row rather than N
+   near-identical ones, since the existing dedup is by label and every rank
+   has a distinct one. Plus ranked wording for the trailing "numbers are
+   points per slot" note.
+3. **`breakdownSlotInfo(format)`** (line 90) — ranked branch supplying
+   `order`/`label`. **Not cosmetic**: without it, breakdown rows fall to the
+   unrecognized-key fallback, which labels correctly via `prettifySlotKey`
+   but leaves ordering to `sortBySlotOrder`, where every unknown key
+   compares equal — so Rank 1..N would display in DB row order. Also makes
+   lines 91/102's reads unreachable in ranked mode.
+4. **`attachAutocomplete`** (line 232) — add a mode check to the wildcard
+   gate, so "Any Debut" is not suggested on a ranked sheet.
+5. **`savePicks`** (line 263) — lift the `isWildcard` exemption in ranked
+   mode, so a manually typed "Any Debut" gets the normal not-in-catalog
+   confirm rather than saving silently. `savePicks` needs no other change:
+   it reads `data-slot` off each input, so `rank1..rankN` already flow
+   through to `submit_picks` correctly.
+
+**Testing**, extending `runRankedChoiceScenario` to open a ranked pick
+sheet: N rank inputs carrying ladder values; one rules row rather than N;
+no "Any Debut" in the autocomplete; and breakdown ordering.
+
+**Item 3's check must be mutated specifically.** Removing that branch will
+look correct most of the time, because DB row order will often happen to
+match rank order — so a passing assertion proves nothing unless the
+fixture's stored breakdown rows are deliberately out of order and the
+mutation is shown to fail. This is the one whose absence is least visible.
+
 ## Mutation-testing results (which fix is protected by which test)
 
 Recorded because a green suite is itself a proxy — it proves the tests pass,
@@ -876,13 +932,94 @@ punctuation. Fixing it means either teaching the SQL a `norm()` equivalent
 or moving duplicate detection to a place that already has one — a decision
 with its own scope, not a line change.
 
+## Mutation-testing results — picks.js (2026-08-13)
+
+All five plan items reverted in turn. **Two of the five initially passed
+green**, which is the useful part of this table — both were assertions that
+looked correct and tested nothing.
+
+| # | Mutation applied | Failing checks | Note |
+|---|---|---|---|
+| P1 | `breakdownSlotInfo` ranked branch removed | `frozen breakdown displays ranks in rank order` — showed `["Rank 3","Rank 1","Rank 5","Rank 2","Rank 4"]` | The one flagged in advance. Its positive control stayed green: five rows still render and still label correctly via `prettifySlotKey` — only order breaks |
+| P2 | `attachAutocomplete` mode check removed | *(initially NONE — see below)* → after relocation, `'Any Debut' is NOT offered … when wildcards.debut is ON` (`offersAnyDebut: true`) | |
+| P3 | `slotDefs` ranked branch removed | `slotKeys`, `labels`, `points`, and `no 'Anywhere in the show' divider` — 8 across both modes | The divider failure is the config leak made visible: `flat_picks: 2` survives in a ranked config and renders UI for a mode with no flat picks |
+| P4 | `savePicks` wildcard exemption un-scoped | *(initially NONE — see below)* → after adding a check, `typing 'Any Debut' … still triggers the not-in-catalog confirm` (`confirmedUnknown: false`) | |
+
+**P2 was blind because of the fixture value, not the assertion.** The
+pick-sheet probe ran on the first scenario run, whose fixture sets
+`wildcards.debut: false` — so the wildcard was absent with or without the
+mode check, and "Any Debut is not offered" was true for the wrong reason.
+Fixed by asserting on the **wildcard-ON** run instead, where the mode check
+is the only thing keeping it off the sheet. Same fixture-value blindness as
+the `wildcards.debut` save guard, in a different consumer — **that flag has
+now caused this twice, and it is the only config boolean that can.**
+
+**P4 was untested entirely** — nothing exercised the confirm path. Covered
+by adding an assertion rather than by recording it as a known gap: the
+machinery already existed (`window.confirm` is stubbed in `installGlobals`,
+and `runCatalogWhitespaceScenario` already captures `confirmCalls` for this
+exact dialog), so it cost about six lines. Had it needed new machinery the
+right call would have been to record it as knowingly untested — a UX guard
+whose scoring outcome is already pinned by test 7g — rather than let it sit
+in a batch of five reading as verified by association.
+
+**Positive controls earned their place twice here.** The breakdown control
+caught a wrong expectation of mine before it could mask anything: I asserted
+5 rows, but `renderShowDetail` renders one `.panel` per scoring player, so
+the page-wide selector returned 10. And the autocomplete control required
+choosing a query (`"d"`) that both triggers the wildcard condition AND
+matches real fixture songs — `"debut"` matches nothing in the catalog, so
+the dropdown would not have rendered at all and the assertion would have
+been trivially true.
+
 ## Open questions — recorded as open, not dropped
 
-1. **Where the pick-sheet autocomplete appends "Any Debut" was never
-   located.** Needs tracing during the `picks.js` work, to confirm it isn't
-   offered as a suggestion on a ranked-mode input. **UX cleanliness, not
-   scoring correctness** — `scoreRankedPicks` scores the literal string as
-   a normal unmatched song name, i.e. 0 (pinned by 7g).
+1. ~~**Where the pick-sheet autocomplete appends "Any Debut" was never
+   located.**~~ **TRACED 2026-08-13 — and it is a BUG, not the UX-cleanliness
+   item this was originally filed as.** Located at
+   `src/features/picks.js:232-233`, inside `attachAutocomplete`:
+   ```js
+   if (!coverOnly && (state.cfg.wildcards?.debut ?? true) && ("any debut".includes(q) || "debut".includes(q)))
+     wc.push({ songname: "Any Debut", times_played: "★" });
+   ```
+   The gate is `wildcards.debut` **and nothing else** — no mode check. A
+   ranked bracket preserves that flag (admin.js's read-through save guards
+   keep it deliberately, precisely so a mode round-trip doesn't destroy it),
+   so **"Any Debut" would be offered as a suggestion on a ranked pick sheet
+   and would score 0** — `scoreRankedPicks` treats it as an ordinary
+   unmatched song name (pinned by test 7g). A player picks the starred
+   suggestion the UI recommended and silently gets nothing for that rank.
+   - **`savePicks` is the second half of the same bug**, not a separate
+     issue. Line 263 exempts `isWildcard(...)` from the unknown-song
+     confirm dialog, so a manually typed "Any Debut" bypasses even the
+     "not in the catalog — save anyway?" warning that would otherwise be
+     the last thing standing between the player and a dead pick.
+   - Both are the same root cause: **a flag surviving into a mode that
+     ignores it.** The flag's survival is correct and deliberate; what's
+     missing is that the two places consuming it never ask which mode is
+     running. Fixed as items 4 and 5 of the picks.js plan below.
+   - **Swept the rest of `picks.js` for the same shape rather than assuming
+     this was the only one** — "Any Debut" sat misfiled as cleanliness for
+     two days on exactly that assumption. All seven `state.cfg` reads in
+     the file, plus every access path to `wildcards` / `allow_duplicates` /
+     `partial_credit` / `partial_points` / `bonuses.*` / `flat_picks` /
+     `flat_points` / `oneset`:
+     - **`allow_duplicates`, `partial_credit`, `partial_points`,
+       `bonuses.*` appear nowhere in `picks.js`** — zero matches. They are
+       read only by the scorer and the admin panel, so there is no third
+       instance hiding in the pick sheet.
+     - `custom_rules` (line 157) and `voting_override` (168, 215) are
+       deliberately mode-independent — house rules are bracket-wide by
+       design, and Master switch stays visible in ranked mode. Correct
+       as-is.
+     - **`oneset` / `flat_picks` / `flat_points` at lines 91, 102, 117, 122
+       ARE currently reachable in ranked mode.** This is the part worth
+       being precise about: they become unreachable *only because* items 1
+       and 3 add their ranked branches above them. **Items 1 and 3 are
+       therefore not purely cosmetic** — they are what stops `cfg.oneset`
+       and `flat_picks` reaching a mode that has neither, which is the same
+       root cause as item 4, just via a different consumer. A future reader
+       should not conclude item 4 was the only real fix in this batch.
 2. **Duplicate ladder keys are pinned, not decided.** Test 7i records
    current behavior: coverage passes on `Set` semantics so perfect-sheet
    still fires, and the duplicated position pays its value twice. There is

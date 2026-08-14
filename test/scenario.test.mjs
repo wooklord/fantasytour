@@ -344,6 +344,42 @@ async function runMode(mode){
       onesetFlatPicks: 1, onesetFlatPoints: 2,
     }),
     `actual: ${JSON.stringify(ranked.preserved)}`);
+  // ---- the ranked pick sheet (player-facing) ----
+  check("ranked pick sheet renders one input per ladder rung, keyed rank1..rankN",
+    JSON.stringify(ranked.sheet.slotKeys) === JSON.stringify(["rank1","rank2","rank3","rank4","rank5"]),
+    `slotKeys: ${JSON.stringify(ranked.sheet.slotKeys)}`);
+  check("ranked pick sheet labels rows by rank",
+    JSON.stringify(ranked.sheet.labels) === JSON.stringify(["Rank 1","Rank 2","Rank 3","Rank 4","Rank 5"]),
+    `labels: ${JSON.stringify(ranked.sheet.labels)}`);
+  check("each row shows its ladder value",
+    JSON.stringify(ranked.sheet.points) === JSON.stringify(["5","4","3","2","1"]),
+    `points: ${JSON.stringify(ranked.sheet.points)}`);
+  check("the rules card explains the ladder once, not once per rank",
+    ranked.sheet.ruleRowCount === 1,
+    `ruleRowCount: ${ranked.sheet.ruleRowCount}`);
+  check("the rules row names the ladder values",
+    /5 \/ 4 \/ 3 \/ 2 \/ 1/.test(ranked.sheet.ruleText),
+    `ruleText: "${ranked.sheet.ruleText}"`);
+  check("no 'Anywhere in the show' divider in ranked mode (no flat picks)",
+    ranked.sheet.hasFlatDivider === false,
+    `hasFlatDivider: ${ranked.sheet.hasFlatDivider}`);
+  // NOTE: the "Any Debut" assertions deliberately do NOT run here. This
+  // fixture sets wildcards.debut:false, so the wildcard would be absent
+  // even with the mode check removed — the assertion would pass for the
+  // wrong reason. They run against the wildcard-ON fixture below instead.
+  // (Found by mutation: reverting the mode gate left this run green.)
+  // Breakdown ordering. The fixture stores these rows shuffled, so this is
+  // the check that proves breakdownSlotInfo supplied a real order rather
+  // than falling through to sortBySlotOrder's compares-equal path — which
+  // would leave DB order, and would look right whenever DB order happened
+  // to match. Length asserted first: a wrong selector yields [] silently.
+  check("frozen breakdown renders one row per rank (positive control)",
+    ranked.breakdownLabels.length === 5,
+    `breakdownLabels: ${JSON.stringify(ranked.breakdownLabels)}`);
+  check("frozen breakdown displays ranks in rank order, not stored order",
+    JSON.stringify(ranked.breakdownLabels) === JSON.stringify(["Rank 1","Rank 2","Rank 3","Rank 4","Rank 5"]),
+    `breakdownLabels: ${JSON.stringify(ranked.breakdownLabels)}`);
+
   // Second run, wildcard flipped. wildcards.debut is the one config boolean
   // no single fixture value can cover: dropping its guard yields false when
   // the input is absent, keeping it with a literal fallback yields true, so
@@ -354,6 +390,24 @@ async function runMode(mode){
   check("saving from ranked mode preserves wildcards.debut when it is ON",
     rankedWildcardOn.preserved.wildcardDebut === true,
     `wildcardDebut: ${rankedWildcardOn.preserved.wildcardDebut}`);
+  // "Any Debut" suppression is asserted HERE, on the wildcard-ON fixture,
+  // not on the run above. With wildcards.debut:false the wildcard is absent
+  // regardless of the mode check, so that run cannot distinguish suppression
+  // from the flag simply being off — verified by mutation, which passed
+  // green against the other fixture. Only with the flag ON does the mode
+  // check become the sole thing keeping "Any Debut" off a ranked sheet.
+  check("autocomplete dropdown actually renders (positive control)",
+    rankedWildcardOn.sheet.autocompleteRendered === true,
+    `autocompleteRendered: ${rankedWildcardOn.sheet.autocompleteRendered}`);
+  check("'Any Debut' is NOT offered in ranked mode even when wildcards.debut is ON",
+    rankedWildcardOn.sheet.offersAnyDebut === false,
+    `offersAnyDebut: ${rankedWildcardOn.sheet.offersAnyDebut}`);
+  // The other half of the same bug: savePicks exempts wildcards from the
+  // not-in-catalog confirm, so without a mode check a typed-from-memory
+  // "Any Debut" would save silently in ranked mode — where it scores 0.
+  check("typing 'Any Debut' in ranked mode still triggers the not-in-catalog confirm",
+    rankedWildcardOn.sheet.confirmedUnknown === true,
+    `confirmedUnknown: ${rankedWildcardOn.sheet.confirmedUnknown}`);
 
   // Session 4 step 2: must_change_pin:true must block the normal tabs
   // behind a forced interstitial, and submitting a matching new PIN must

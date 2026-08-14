@@ -457,9 +457,83 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
   await tick(); await tick();
   const after = tables.brackets.find(b => b.id === casualId).config;
 
+  // ---- player-facing side: the ranked pick sheet ----
+  // Show 1 is upcoming with cutoff_at +60min (open for picks); show 2 is
+  // status:"final" with score rows. Both per makeFixtures.
+  clickTab(window, "shows");
+  await tick(); await tick();
+  window.openShow(1);
+  await tick(); await tick();
+  const sheetInputs = [...window.document.querySelectorAll(".slotline input")];
+  const sheet = {
+    slotKeys: sheetInputs.map(i => i.dataset.slot),
+    labels: [...window.document.querySelectorAll(".slotline label")].map(l => l.textContent),
+    points: [...window.document.querySelectorAll(".slotline .pts")].map(p => p.textContent),
+    // One rules row explaining the ladder, not one per rank — renderPickSheet
+    // dedups by label and every rank has a distinct one.
+    ruleRowCount: window.document.querySelectorAll(".ruledef").length,
+    ruleText: window.document.querySelector(".ruledef .rd-desc")?.textContent || "",
+    // The "Anywhere in the show" divider belongs to flat picks, which ranked
+    // mode has none of.
+    hasFlatDivider: /Anywhere in the show/.test(mainHTML(window, mode)),
+  };
+  // Autocomplete, in two probes. The second is the assertion; the FIRST is a
+  // positive control, without which a wrong selector or a dropdown that
+  // never rendered would make "Any Debut is absent" trivially true.
+  // One query, chosen so it is its own positive control. "d" is a substring
+  // of "debut", so it satisfies attachAutocomplete's wildcard condition and
+  // WOULD surface "Any Debut" in slot mode; it also matches Distraction and
+  // Space Oddity in songs_cache, so the dropdown renders regardless of
+  // whether the wildcard is offered.
+  //
+  // That second property is what makes the assertion meaningful. The
+  // autocomplete returns early when nothing matches (`if (!hits.length)
+  // return;`), so with a query like "debut" — which matches no fixture song
+  // — no dropdown would exist at all in ranked mode, and "Any Debut is
+  // absent" would be trivially true for the wrong reason. Here, a rendered
+  // list containing Distraction but not Any Debut proves suppression.
+  sheetInputs[0].value = "d";
+  sheetInputs[0].dispatchEvent(new window.Event("input", { bubbles: true }));
+  await tick();
+  const accHtml = window.document.querySelector(".acc-list")?.innerHTML || "";
+  sheet.autocompleteRendered = /Distraction/.test(accHtml); // positive control
+  sheet.offersAnyDebut = /Any Debut/.test(accHtml);          // the assertion
+
+  // Item 5: in ranked mode "Any Debut" is not a wildcard, just a song name
+  // matching nothing, so it must get the normal not-in-catalog confirm
+  // rather than the wildcard exemption. Same capture pattern as
+  // runCatalogWhitespaceScenario below.
+  const confirmCalls = [];
+  window.confirm = (msg) => { confirmCalls.push(msg); return true; };
+  sheetInputs[0].value = "Any Debut";
+  sheetInputs[0].dispatchEvent(new window.Event("input", { bubbles: true }));
+  await tick();
+  // Clicked rather than called: savePicks is not on window (renderPickSheet
+  // wires it as $("#save").onclick directly), so the button is the only
+  // reachable entry point — same as runCatalogWhitespaceScenario.
+  window.document.getElementById("save").click();
+  await tick(); await tick();
+  sheet.confirmedUnknown = confirmCalls.some(m => /Any Debut/.test(m));
+  window.confirm = () => true;
+
+  // Frozen breakdown on the already-scored show. makeRankedFixtures stores
+  // those rows SHUFFLED, so the rendered order proves breakdownSlotInfo
+  // supplied a real order rather than falling through to the
+  // everything-compares-equal path.
+  window.openShow(2);
+  await tick(); await tick();
+  // Scoped to the FIRST player's panel, not the whole page: renderShowDetail
+  // renders one .panel per scoring player, so a page-wide selector returns
+  // every player's rows concatenated and the count depends on how many
+  // players the fixture scores — which is not what this is testing.
+  const firstScorePanel = [...window.document.querySelectorAll(".panel")]
+    .find(p => p.querySelector(".pickres"));
+  const breakdownLabels = [...(firstScorePanel?.querySelectorAll(".pickres .sl") ?? [])].map(e => e.textContent.trim());
+
   return {
     ladderValues, rankLabels, leakedSlotsFields, perfectPresent,
     afterSwitchToSlots, backToRanked, blankRowReject, emptyLadderReject,
+    sheet, breakdownLabels,
     savedMode: after.mode,
     savedLadder: after.ranked?.ladder,
     // Deep contents, not lengths — a regressed guard returning a different

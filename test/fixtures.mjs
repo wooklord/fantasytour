@@ -178,6 +178,23 @@ export function makeRankedFixtures({ wildcardDebut = false } = {}){
       flat_points: 2,  // literal 1
     },
   };
+  // Ranked breakdown rows for the already-scored show, stored DELIBERATELY
+  // OUT OF RANK ORDER. This is the whole point of the ordering assertion:
+  // breakdownSlotInfo's ranked branch supplies an explicit `order`, and
+  // without it sortBySlotOrder leaves rows in whatever sequence the DB
+  // returned — which, with rows stored in rank order, would look correct
+  // while proving nothing. Shuffled here so a missing branch is visible.
+  const casualScores = f.tables.scores.filter(s => s.bracket_id === casual.id);
+  for (const row of casualScores){
+    row.breakdown = [
+      { slot: "rank3", songname: "Beaming",     points: 3, hit: true,  reason: "played" },
+      { slot: "rank1", songname: "Laurel",      points: 5, hit: true,  reason: "played" },
+      { slot: "rank5", songname: "Smile",       points: 1, hit: true,  reason: "played" },
+      { slot: "rank2", songname: "Distraction", points: 0, hit: false, reason: "not played" },
+      { slot: "rank4", songname: "High Noon",   points: 2, hit: true,  reason: "played" },
+    ];
+    row.points = 11;
+  }
   return f;
 }
 

@@ -88,6 +88,26 @@ function prettifySlotKey(key){
 // isn't in that map at all (a genuinely retired type) prettifies its key
 // too, same fallback as the missing-from-order case just above it.
 function breakdownSlotInfo(format){
+  // Ranked mode returns before the slot logic, same as slotDefs and for the
+  // same reason — everything below reads `oneset`/`flat_picks`, which a
+  // ranked bracket still carries but never uses.
+  //
+  // This branch is NOT cosmetic, which is easy to assume since the fallback
+  // labels ranked rows correctly on its own: `prettifySlotKey` turns
+  // "rank1" into "Rank 1" without help. What the fallback cannot do is
+  // ORDER them. A key missing from `order` compares equal to every other
+  // missing key in sortBySlotOrder (both indexOf calls return -1, so it
+  // returns 0), leaving Rank 1..N in whatever order the DB happened to
+  // return the rows — which will often look right by luck and occasionally
+  // won't. Supplying a real order is what makes the frozen breakdown
+  // display in rank order deterministically.
+  if (state.cfg.mode === "ranked_choice"){
+    const ladder = state.cfg.ranked?.ladder ?? [];
+    const order = ladder.map((_, i) => "rank" + (i+1));
+    const label = {};
+    order.forEach((k, i) => { label[k] = "Rank " + (i+1); });
+    return { order, label };
+  }
   const sect = (format === "one_set" && state.cfg.oneset) ? state.cfg.oneset : state.cfg;
   const slots = sect.slots || [];
   const coverKeys = slots.filter(s => (s.type||s.key) === "cover_pick").map(s => s.key);
@@ -114,6 +134,22 @@ function sortBySlotOrder(items, order){
 }
 
 export function slotDefs(format){
+  // Ranked choice has no positional slots at all, so it returns before any
+  // of the slot/flat logic below runs. That ordering is load-bearing rather
+  // than tidy: everything past this point reads `oneset`/`flat_picks`, and
+  // a ranked bracket's config still carries both (admin.js's read-through
+  // save guards preserve them deliberately, so a mode round-trip can't
+  // destroy an admin's slot setup). Returning first is what stops those
+  // values reaching a mode that has neither.
+  //
+  // Row count is fixed by the ladder and never varies by show format —
+  // `cfg.ranked` is read from the top level, never through the `oneset`
+  // branch, so a one-set show and a standard show render the same sheet.
+  // No tooltip per row: "The Rules" card explains the ladder once instead
+  // of repeating the same sentence N times (see renderPickSheet).
+  if (state.cfg.mode === "ranked_choice")
+    return (state.cfg.ranked?.ladder ?? []).map((pts, i) =>
+      ({ key: "rank" + (i+1), label: "Rank " + (i+1), tooltip: null, pts, type: "ranked" }));
   const sect = (format === "one_set" && state.cfg.oneset) ? state.cfg.oneset : state.cfg;
   const slots = (sect.slots||[]).map(s => {
     const type = s.type||s.key;
@@ -149,6 +185,19 @@ export async function renderPickSheet(show){
   // "House rules" divider at all when the admin hasn't written any,
   // rather than an empty header.
   const ruleDefs = (() => {
+    // Ranked mode gets ONE row, not one per rank. The dedup below is by
+    // label, and every rank has a distinct one ("Rank 1", "Rank 2", ...),
+    // so left alone this would render N rows repeating the same sentence
+    // with a different number — the opposite of what the dedup exists for.
+    // What a player actually needs explained is the ladder, once.
+    if (state.cfg.mode === "ranked_choice"){
+      const ladder = state.cfg.ranked?.ladder ?? [];
+      if (!ladder.length) return [];
+      return [{
+        term: ladder.length > 1 ? `Rank 1–${ladder.length}` : "Rank 1",
+        desc: `Worth ${ladder.join(" / ")} ${ladder.length > 1 ? "points respectively" : "points"} if the song is played — anywhere in the show. Position doesn't matter.`,
+      }];
+    }
     const seen = new Set();
     const defs = structured.filter(s => !seen.has(s.label) && seen.add(s.label)).map(s => ({ term: s.label, desc: s.tooltip }));
     if (flats.length) defs.push({ term: flats.length > 1 ? `Pick 1–${flats.length}` : "Pick", desc: FLAT_PICK_TOOLTIP });
@@ -175,7 +224,9 @@ export async function renderPickSheet(show){
         ${ruleDefs.map(d => `<div class="ruledef"><span class="rd-term">${esc(d.term)}</span><span class="rd-desc">${esc(d.desc||"")}</span></div>`).join("")}
       </div>
       ${customRules.length ? `<div class="divider">House rules</div><ul class="customrules">${customRules.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
-      <p class="rulenote">Numbers on the pick sheet are points per slot.</p>
+      <p class="rulenote">${state.cfg.mode === "ranked_choice"
+        ? "Numbers on the pick sheet are what each rank pays."
+        : "Numbers on the pick sheet are points per slot."}</p>
     </div>
     ${footerHtml()}`;
   document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
@@ -229,7 +280,16 @@ export function attachAutocomplete(input){
     const coverOnly = input.dataset.type === "cover_pick";
     const pool = coverOnly ? state.songList.filter(s => s.is_original === false) : state.songList;
     const wc = [];
-    if (!coverOnly && (state.cfg.wildcards?.debut ?? true) && ("any debut".includes(q) || "debut".includes(q)))
+    // The mode check is not redundant with the wildcards.debut flag, and
+    // leaving it out was a real bug: a ranked bracket PRESERVES that flag
+    // (admin.js's read-through save guards keep it so a mode round-trip
+    // can't destroy the admin's setting), while scoreRankedPicks ignores
+    // the wildcard entirely and scores "Any Debut" as an ordinary
+    // unmatched song name — i.e. 0. Without this the sheet would suggest a
+    // starred pick that silently scores nothing. See savePicks for the
+    // other half of the same bug.
+    const wildcardOffered = state.cfg.mode !== "ranked_choice" && (state.cfg.wildcards?.debut ?? true);
+    if (!coverOnly && wildcardOffered && ("any debut".includes(q) || "debut".includes(q)))
       wc.push({ songname: "Any Debut", times_played: "★" });
     const hits = [...wc, ...pool.filter(s => normSong(s.songname).includes(q))].slice(0, 8);
     if (!hits.length) return;
@@ -260,7 +320,14 @@ export async function savePicks(){
     .map(i => ({ slot: i.dataset.slot, songname: i.value.trim() }))
     .filter(p => p.songname);
   // warn on unknown songs (typos) but allow — could be a debut call
-  const unknown = picks.filter(p => !isWildcard(p.songname) && !state.songList.some(s => normSong(s.songname) === normSong(p.songname)));
+  // The wildcard exemption is mode-scoped for the same reason the
+  // autocomplete gate is: in ranked mode "Any Debut" is not a wildcard, it
+  // is just a song name that matches nothing and scores 0. Exempting it
+  // there would let a typed-from-memory "Any Debut" save silently, skipping
+  // the not-in-catalog confirm that is the last thing standing between the
+  // player and a dead pick.
+  const wildcardLive = state.cfg.mode !== "ranked_choice";
+  const unknown = picks.filter(p => !(wildcardLive && isWildcard(p.songname)) && !state.songList.some(s => normSong(s.songname) === normSong(p.songname)));
   if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):\n${unknown.map(u=>u.songname).join("\n")}\n\nSave anyway?`)) return;
   try{
     await rpc("submit_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:state.currentShow.id, p_picks:picks });
