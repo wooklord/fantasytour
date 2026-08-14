@@ -195,6 +195,24 @@ export function makeRankedFixtures({ wildcardDebut = false } = {}){
     ];
     row.points = 11;
   }
+  // A third show reaching the PRE-SCORING pick board — cutoff passed, picks
+  // public, nothing scored yet. Neither base-fixture show can: show 1 is
+  // still open (so openShow renders the pick sheet), and show 2 has score
+  // rows (so the scored breakdown renders instead). That board is the
+  // surface keeping slotDefs' "Rank N" labels alive now that the pick sheet
+  // omits them, so it needs a fixture that actually renders it.
+  const now3 = Date.now();
+  f.tables.shows.push({ id: 3, showdate: new Date(now3 - 864e5).toISOString().slice(0,10), venue: "Rank Hall", city: "Kingston", state: "NY" });
+  f.tables.league_shows.push({
+    league_id: f.tables.leagues[0].id, show_id: 3,
+    cutoff_at: new Date(now3 - 3600e3).toISOString(), format: "standard", status: "locked",
+    remind_sent: null, lock_sent: null, winner_sent: null,
+  });
+  f.tables.picks.push(
+    { player_id: "p1", bracket_id: casual.id, show_id: 3, slot: "rank1", songname: "Distraction" },
+    { player_id: "p1", bracket_id: casual.id, show_id: 3, slot: "rank2", songname: "Rambling Boy" },
+    { player_id: "p1", bracket_id: casual.id, show_id: 3, slot: "rank3", songname: "Space Oddity" },
+  );
   return f;
 }
 

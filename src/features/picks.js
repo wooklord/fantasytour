@@ -167,9 +167,25 @@ export async function renderPickSheet(show){
   const savedVal = k => ((mine.find(p => p.slot===k)||{}).songname || "").trim();
   const val = k => esc((draft && draft[k] != null ? draft[k] : savedVal(k)) || "");
   const slots = slotDefs(show.format);
+  // Ranked rows drop the label and put the points bubble where it was: the
+  // rank IS the points, so "Rank 1" and "5" are two encodings of one fact at
+  // opposite ends of the row, and the number is the one that tells a player
+  // something. Slot mode keeps its labels — "Set 2 Closer" is real
+  // information the points don't convey.
+  //
+  // The label is OMITTED rather than hidden with CSS. Hiding it would keep
+  // the markup uniform, but would leave "Rank N" in the DOM as text nothing
+  // displays — and the scenario asserts that text, so we'd have a passing
+  // check about something invisible. The modifier class carries only the
+  // reordering (.slotline.ranked .pts{order:-1} in styles.css).
+  //
+  // Note slotDefs still RETURNS label:"Rank N" — only this row omits it.
+  // renderShowDetail's pre-scoring pick board reads those same labels, and
+  // there the rank is meaningful, same as in the scored breakdown.
+  const rankedRow = state.cfg.mode === "ranked_choice";
   const slotHtml = s => `
-    <div class="slotline autocomplete">
-      <label>${esc(s.label)}</label>
+    <div class="slotline autocomplete${rankedRow ? " ranked" : ""}">
+      ${rankedRow ? "" : `<label>${esc(s.label)}</label>`}
       <input data-slot="${s.key}" data-type="${s.type||s.key}" value="${val(s.key)}" placeholder="${(s.type||s.key)==="cover_pick"?"a cover…":"song…"}" autocomplete="off" spellcheck="false">
       <span class="pts">${s.pts}</span>
       <span class="unsaved" title="Unsaved change — differs from your saved pick">${UNLOCKED_ICON}</span>
@@ -193,9 +209,14 @@ export async function renderPickSheet(show){
     if (state.cfg.mode === "ranked_choice"){
       const ladder = state.cfg.ranked?.ladder ?? [];
       if (!ladder.length) return [];
+      // Worded against what the player can actually SEE. The sheet's rows
+      // are no longer labelled "Rank N" (see slotHtml), so naming ranks
+      // here would point at something off-screen, and "5 / 4 / 3 / 2 / 1
+      // respectively" would have no visible referent to be respective to.
+      // The number beside each row is the whole vocabulary now.
       return [{
-        term: ladder.length > 1 ? `Rank 1–${ladder.length}` : "Rank 1",
-        desc: `Worth ${ladder.join(" / ")} ${ladder.length > 1 ? "points respectively" : "points"} if the song is played — anywhere in the show. Position doesn't matter.`,
+        term: "The ladder",
+        desc: `Each row pays the number beside it if that song is played, anywhere in the show. Top row is worth most (${ladder[0]}), down to ${ladder[ladder.length-1]} — where a song lands in the setlist doesn't matter.`,
       }];
     }
     const seen = new Set();

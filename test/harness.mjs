@@ -58,7 +58,19 @@ const RPC_HANDLERS = {
     return [{ ok: true, reason: null }];
   },
   get_my_picks: async () => [],
-  get_show_picks: async () => [],
+  // Real join against the fixture, same idiom as get_bracket_scores /
+  // my_leagues rather than a fixed stub. It returned [] unconditionally
+  // until 2026-08-13, which meant renderShowDetail's pre-scoring pick board
+  // ("The picks are in" — cutoff passed, picks public, nothing scored yet)
+  // could never render in ANY scenario, in either mode. Joins players for
+  // the display name the way the real RPC does.
+  get_show_picks: async ({ p_bracket_id, p_show_id }, tables) =>
+    (tables.picks || [])
+      .filter(p => p.bracket_id === p_bracket_id && p.show_id === p_show_id)
+      .map(p => ({
+        ...p,
+        player_name: (tables.players_public.find(pl => pl.id === p.player_id) || {}).name || "?",
+      })),
   // Batch pick-count RPC backing the shows-list marker. Computed against
   // the fixture's real picks rows, same "real join, not a fixed stub"
   // idiom as get_bracket_scores/my_leagues above.
@@ -467,7 +479,17 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
   const sheetInputs = [...window.document.querySelectorAll(".slotline input")];
   const sheet = {
     slotKeys: sheetInputs.map(i => i.dataset.slot),
-    labels: [...window.document.querySelectorAll(".slotline label")].map(l => l.textContent),
+    // Ranked rows omit the label entirely (the rank IS the points), so this
+    // should be 0. Omitted rather than CSS-hidden on purpose: a hidden label
+    // would still be in the DOM and this assertion would pass while nothing
+    // was on screen.
+    labelCount: window.document.querySelectorAll(".slotline label").length,
+    rowsCarryRankedClass: [...window.document.querySelectorAll(".slotline")].every(r => r.classList.contains("ranked")),
+    // NOTE: the points bubble's VISUAL left-position comes from
+    // `.slotline.ranked .pts{order:-1}` in styles.css. Markup order is
+    // input → .pts in both modes, so there is no DOM sequence to assert
+    // here — JSDOM loads no stylesheet and cannot see flex order. That
+    // half is verified by the manual browser pass.
     points: [...window.document.querySelectorAll(".slotline .pts")].map(p => p.textContent),
     // One rules row explaining the ladder, not one per rank — renderPickSheet
     // dedups by label and every rank has a distinct one.
@@ -530,10 +552,19 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
     .find(p => p.querySelector(".pickres"));
   const breakdownLabels = [...(firstScorePanel?.querySelectorAll(".pickres .sl") ?? [])].map(e => e.textContent.trim());
 
+  // Pre-scoring pick board (show 3: cutoff passed, picks public, unscored).
+  // This is the surface that keeps slotDefs' "Rank N" labels meaningful now
+  // that the pick sheet itself omits them — nothing else asserts it, so
+  // blanking the label in slotDefs would otherwise have gone unnoticed here.
+  window.openShow(3);
+  await tick(); await tick();
+  const pickBoardHtml = mainHTML(window, mode);
+  const pickBoardLabels = [...window.document.querySelectorAll(".pickres .sl")].map(e => e.textContent.trim());
+
   return {
     ladderValues, rankLabels, leakedSlotsFields, perfectPresent,
     afterSwitchToSlots, backToRanked, blankRowReject, emptyLadderReject,
-    sheet, breakdownLabels,
+    sheet, breakdownLabels, pickBoardLabels, pickBoardHtml,
     savedMode: after.mode,
     savedLadder: after.ranked?.ladder,
     // Deep contents, not lengths — a regressed guard returning a different

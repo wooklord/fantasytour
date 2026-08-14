@@ -32,7 +32,7 @@
   // src/core/config.js
   var SUPABASE_URL = "https://zdfhglvjxquvkjyvophz.supabase.co";
   var SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
-  var RANKED_CHOICE_ENABLED = false;
+  var RANKED_CHOICE_ENABLED = true;
   var APP_NAME = "Fantasy Eggy";
   var THEME_COLOR_LIGHT = "#F4ECD9";
   var THEME_COLOR_DARK = "#171233";
@@ -508,9 +508,10 @@
     const savedVal = (k) => ((mine.find((p) => p.slot === k) || {}).songname || "").trim();
     const val = (k) => esc((draft && draft[k] != null ? draft[k] : savedVal(k)) || "");
     const slots = slotDefs(show.format);
+    const rankedRow = state.cfg.mode === "ranked_choice";
     const slotHtml = (s) => `
-    <div class="slotline autocomplete">
-      <label>${esc(s.label)}</label>
+    <div class="slotline autocomplete${rankedRow ? " ranked" : ""}">
+      ${rankedRow ? "" : `<label>${esc(s.label)}</label>`}
       <input data-slot="${s.key}" data-type="${s.type || s.key}" value="${val(s.key)}" placeholder="${(s.type || s.key) === "cover_pick" ? "a cover\u2026" : "song\u2026"}" autocomplete="off" spellcheck="false">
       <span class="pts">${s.pts}</span>
       <span class="unsaved" title="Unsaved change \u2014 differs from your saved pick">${UNLOCKED_ICON}</span>
@@ -522,8 +523,8 @@
         const ladder = (_b = (_a2 = state.cfg.ranked) == null ? void 0 : _a2.ladder) != null ? _b : [];
         if (!ladder.length) return [];
         return [{
-          term: ladder.length > 1 ? `Rank 1\u2013${ladder.length}` : "Rank 1",
-          desc: `Worth ${ladder.join(" / ")} ${ladder.length > 1 ? "points respectively" : "points"} if the song is played \u2014 anywhere in the show. Position doesn't matter.`
+          term: "The ladder",
+          desc: `Each row pays the number beside it if that song is played, anywhere in the show. Top row is worth most (${ladder[0]}), down to ${ladder[ladder.length - 1]} \u2014 where a song lands in the setlist doesn't matter.`
         }];
       }
       const seen = /* @__PURE__ */ new Set();

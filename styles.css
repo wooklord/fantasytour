@@ -253,7 +253,14 @@ html[data-theme="light"] .panel.live-halo{
    wrapping onto its own second line; the input (flex:1, min-width:0)
    is what absorbs the space difference between rows, not the label. */
 .slotline label{font-family:'Fraunces',serif;font-weight:700;font-size:1rem;flex:none;white-space:nowrap}
-.slotline .pts{font-family:var(--mono);font-size:.7rem;color:var(--paper-ink-soft);border:1px solid var(--paper-ink-soft);border-radius:999px;padding:1px 7px;white-space:nowrap}
+.slotline .pts{font-family:var(--mono);font-size:.95rem;font-weight:700;color:var(--paper-ink);border:2px solid var(--paper-ink);border-radius:999px;padding:2px 10px;white-space:nowrap}
+/* Ranked rows have no label, so the points bubble takes the leading position
+   the label held: [5] [song input…]. The markup order stays input → .pts in
+   both modes; only this rule moves it, so the DOM is one shape.
+   --paper-ink, not --cream or --ink: this sits on the theme-invariant cream
+   sheet, where app-wide tokens flip with the theme and disappear — CLAUDE.md
+   documents three separate bugs from exactly that. */
+.slotline.ranked .pts{order:-1}
 .slotline input{flex:1;min-width:0;background:transparent;border:none;border-bottom:2px dashed var(--paper-ink-soft);color:var(--paper-ink);padding:4px 2px;font-size:1rem;font-family:'Outfit'}
 .slotline input:focus{outline:none;border-bottom-color:var(--yolk-deep);border-bottom-style:solid}
 /* Unlocked-padlock marker: pairs with the save button's "Lock 'em in"

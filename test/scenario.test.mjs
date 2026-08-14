@@ -348,17 +348,29 @@ async function runMode(mode){
   check("ranked pick sheet renders one input per ladder rung, keyed rank1..rankN",
     JSON.stringify(ranked.sheet.slotKeys) === JSON.stringify(["rank1","rank2","rank3","rank4","rank5"]),
     `slotKeys: ${JSON.stringify(ranked.sheet.slotKeys)}`);
-  check("ranked pick sheet labels rows by rank",
-    JSON.stringify(ranked.sheet.labels) === JSON.stringify(["Rank 1","Rank 2","Rank 3","Rank 4","Rank 5"]),
-    `labels: ${JSON.stringify(ranked.sheet.labels)}`);
+  // Rows carry no label in ranked mode — the points bubble replaces it,
+  // since the rank and the points are the same fact. Omitted from the DOM
+  // rather than CSS-hidden, so this count is a real check rather than an
+  // assertion about invisible text. The bubble's left position is
+  // `.slotline.ranked .pts{order:-1}`, which JSDOM cannot see; the manual
+  // browser pass covers that half.
+  check("ranked pick sheet rows carry no label element",
+    ranked.sheet.labelCount === 0,
+    `labelCount: ${ranked.sheet.labelCount}`);
+  check("ranked pick sheet rows carry the .ranked modifier class",
+    ranked.sheet.rowsCarryRankedClass === true,
+    `rowsCarryRankedClass: ${ranked.sheet.rowsCarryRankedClass}`);
   check("each row shows its ladder value",
     JSON.stringify(ranked.sheet.points) === JSON.stringify(["5","4","3","2","1"]),
     `points: ${JSON.stringify(ranked.sheet.points)}`);
   check("the rules card explains the ladder once, not once per rank",
     ranked.sheet.ruleRowCount === 1,
     `ruleRowCount: ${ranked.sheet.ruleRowCount}`);
-  check("the rules row names the ladder values",
-    /5 \/ 4 \/ 3 \/ 2 \/ 1/.test(ranked.sheet.ruleText),
+  // Copy is worded against what's on screen: rows are unlabelled now, so the
+  // rules row explains the number beside each row rather than naming ranks
+  // the player can no longer see.
+  check("the rules row explains the ladder in terms of the visible numbers",
+    /number beside it/.test(ranked.sheet.ruleText) && /5/.test(ranked.sheet.ruleText) && /1/.test(ranked.sheet.ruleText),
     `ruleText: "${ranked.sheet.ruleText}"`);
   check("no 'Anywhere in the show' divider in ranked mode (no flat picks)",
     ranked.sheet.hasFlatDivider === false,
@@ -379,6 +391,12 @@ async function runMode(mode){
   check("frozen breakdown displays ranks in rank order, not stored order",
     JSON.stringify(ranked.breakdownLabels) === JSON.stringify(["Rank 1","Rank 2","Rank 3","Rank 4","Rank 5"]),
     `breakdownLabels: ${JSON.stringify(ranked.breakdownLabels)}`);
+  // The pre-scoring pick board still names ranks. This is the surface that
+  // keeps slotDefs' labels alive now the sheet omits them — blanking the
+  // label there would break this and nothing else.
+  check("pre-scoring pick board still labels picks by rank",
+    JSON.stringify(ranked.pickBoardLabels) === JSON.stringify(["Rank 1","Rank 2","Rank 3"]),
+    `pickBoardLabels: ${JSON.stringify(ranked.pickBoardLabels)}`);
 
   // Second run, wildcard flipped. wildcards.debut is the one config boolean
   // no single fixture value can cover: dropping its guard yields false when

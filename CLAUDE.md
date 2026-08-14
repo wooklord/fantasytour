@@ -651,6 +651,43 @@ before assuming a change is covered just because the suite is green:
   intentional there — a dead Discord webhook correctly shouldn't retry-storm
   forever, unlike a roster real players get scored against. Nothing else in
   the file currently matches the dangerous version of this shape.
+- **⚠ DEADLINE 2026-08-14: Casual is in `ranked_choice` mode with the OLD
+  scorer deployed. The deploy batch MUST complete before that night's show
+  goes live.** Set 2026-08-13. The batch is TWO things, in this order:
+  1. `supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz`
+  2. run `sql/stage_o_ranked_submit_picks.sql`
+  (`RANKED_CHOICE_ENABLED` was a third step until 2026-08-13, when it was set
+  `true` and committed. It existed to stop a bracket being switched to a mode
+  the live scorer doesn't run — Casual is already switched, deliberately, so
+  the gate had nothing left to guard. It is a plain feature flag now.)
+  - **The show**: 2026-08-14, The Pines Music Park, cutoff `23:00 UTC`.
+    Nothing scores until it goes live (a show only scores once setlist rows
+    appear or it's finalized), so this could sit overnight — the deadline is
+    showtime, not the cron, which runs every minute regardless.
+  - **What happens if the show goes live first**: the deployed scorer has no
+    mode dispatch, so `"rank1" in slotPoints` is false and every rank-keyed
+    pick falls through to the flat-pick branch — **each hit pays
+    `flat_points` (1) instead of its ladder value.** For Casual's ladder
+    `[6,5,4,3,2,1]`, three hits score 3 instead of 15. No error is raised
+    and nothing looks wrong: plausible numbers, silently incorrect.
+  - **Verified empirically against the deployed blob, not inferred** —
+    extracted `scoring.js` at `1dec497` (the last commit touching it before
+    the ranked work, and the build CLAUDE.md records as deployed) and ran
+    Casual's real config plus rank-keyed picks through it. Output:
+    `rank1 1 played / rank2 1 played / rank3 1 played`, total 3.
+  - **Recovery if it does happen**: `reopen` the show (wipes that league's
+    scores and resets status to live), complete the deploy batch, then
+    finalize again — the corrected scorer re-scores from the setlist. Same
+    repair path as the Boston 7/31 incident.
+  - **Fastest mitigation if the batch can't be finished in time**: flip
+    Casual's `config.mode` back to `"slots"`. The slots-mode config is fully
+    intact underneath (`slots` still has 3 entries, `flat_picks` still 3) —
+    only `mode` was changed. But note the 6 picks for that show were re-keyed
+    from `opener`/`closer`/`encore`/`flat1-3` to `rank1..rank6` on
+    2026-08-13, so reverting the mode alone leaves them unreadable by slot
+    mode; they'd need re-keying back too.
+  - This is the **second** item with a 2026-08-14 deadline, alongside the
+    Test 3 roster check immediately below. Both land the same day.
 - **Open checkpoint, not yet verified: Test 3 season activation
   (`roster_locked_at` fix).** The Test 3 season is scheduled to activate
   2026-08-14. Traced the exact code before writing this checkpoint
@@ -1544,6 +1581,22 @@ this is the condensed, durable record so the roadmap survives a context boundary
   secret, smoke-test. Blocked on the two admins being named and confirmed.
   **See the PRE-SESSION-5 GATE immediately below — do not start this
   session without walking that list.**
+
+### DATED DEADLINES — check these first, they expire
+
+Distinct from the Pre-Session-5 gate below, which is triggered by an *event*
+(launching the Facebook League). These are triggered by a *date* and stop
+being actionable once it passes. Indexed here because both previously lived
+only inside the Postgres/Supabase gotchas section, where nothing pointed at
+them.
+
+| Date | Item | Full bullet |
+|---|---|---|
+| **2026-08-14** | **Deploy batch must complete before that night's show goes live** — Casual is in `ranked_choice` mode with the old scorer deployed; if the show scores first, every hit pays `flat_points` (1) instead of its ladder value, silently | "⚠ DEADLINE 2026-08-14: Casual is in `ranked_choice` mode…" in Postgres/Supabase gotchas |
+| **2026-08-14** | **Test 3 roster check** — confirm the activation cluster's `added_at` values against `roster_locked_at`, and that the 13 hand-added rows kept their original timestamps | "Open checkpoint, not yet verified: Test 3 season activation" in the same section |
+
+Both land the same day. The deploy batch is the one with a hard cutoff
+(showtime); the roster check can be done any time after activation.
 
 ### PRE-SESSION-5 GATE (walk this list before launching the Facebook League)
 
