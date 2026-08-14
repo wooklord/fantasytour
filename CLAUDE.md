@@ -839,9 +839,10 @@ before assuming a change is covered just because the suite is green:
     an argument from the only writer in that path, not an observation. If
     that distinction ever matters, read `updated_at` directly.
 - **⚠️ OPEN 2026-08-14 — the standard→one_set toggle ORPHANS two Official
-  slot keys on show `1765912122`, and any Official save after the toggle
-  makes it permanent. Undecided pending a read of the live picks.** Found
-  while recording the entry above; the toggle was made minutes earlier.
+  slot keys on show `1765912122`. THE FORMAT IS CORRECT AND STANDS — the
+  band is playing one set; the dev confirmed the toggle was intended and
+  meant to have been made days earlier. What is open is the exposure, not
+  the decision. Do not revert.**
   Casual is unaffected (ranked mode is format-independent); **Official is
   the exposed bracket, and Test 3 (season id 8, `start_date = end_date =
   2026-08-14`, roster 14) covers this show, so Official picks are live and
@@ -908,12 +909,82 @@ before assuming a change is covered just because the suite is green:
     unfiltered, which also returned `[]`; don't read either as "no picks."
     Needs the SQL editor or an admin PIN (`admin_pick_status` returns
     `picks_count` + `last_saved` per player, which answers both halves).
-  - **Revert is non-destructive and the window is what matters**: setting
-    `format` back to `standard` restores the 6-row sheet and the original
-    point values, and every row not yet deleted by a post-toggle save comes
-    back with it. Damage is confined to Official players who saved between
-    the toggle and the revert. Cutoff is `03:00Z`, so players can still be
-    saving — the window is open until the format is settled either way.
+  - **Revert would be non-destructive, but is NOT happening** — the format
+    is correct. Recorded only because it bounds the damage: `submit_picks`
+    upserts per slot, so every row not deleted by a post-toggle save is
+    still there, and a hypothetical revert would restore the 6-row sheet
+    and the original point values. Nothing about the orphaning is
+    irreversible except rows an actual save has already deleted.
+  - **NOTHING RECORDS WHEN THE FORMAT CHANGED. Checked exhaustively
+    2026-08-14; do not re-derive this.** `league_shows` has no `updated_at`
+    (`sql/stage_a_schema.sql` — the columns are `league_id, show_id,
+    cutoff_at, format, status, remind_sent, lock_sent, winner_sent`);
+    there are **zero triggers anywhere in `sql/`**;
+    `admin_set_show_format` writes `format` and nothing else; no Discord
+    notice exists for a format change (only `cutoff_changed`/`reopen`/
+    `finalize` have edge actions); `pingRealtime()` is never called from an
+    admin RPC; and this show's `remind_sent`/`lock_sent`/`winner_sent` are
+    all still `null`, so no announcement fired that could date it either.
+    **`picks` cannot date it from the inside**: `picks.id` is a
+    `uuid default gen_random_uuid()`, not a sequence, so there is no
+    insertion-order signal, and the table has `updated_at` but **no
+    `created_at`** — a row's timestamp tells you its last write, never its
+    first. **The only timestamped record that exists is the Supabase
+    dashboard's API log** (a `POST /rest/v1/rpc/admin_set_show_format`
+    entry), subject to the project's retention window.
+  - **But the picks themselves give a hard LOWER bound, and it's proof, not
+    inference: format was `standard` at 17:24Z on 2026-08-14.** An `encore`
+    or `flat2` row cannot be written while `format = 'one_set'` —
+    `submit_picks` derives `valid_slots` from `ls.format` and raises
+    `Invalid slot: encore`. So the existence of encore/flat2 rows stamped
+    17:24Z proves the format was still standard at that moment. **The upper
+    bound is inference only**: four players (Budman, Kovajam, pooka,
+    Justin) hold exactly `opener/closer/cover1/flat1` — the one_set key set
+    — with last saves 20:07–21:07Z, which is strong behavioural evidence
+    the format was already one_set by 20:07, since four people
+    independently leaving exactly those two rows blank is not credible.
+    It is not proof: blank rows are filtered client-side
+    (`picks.js:342`), so a standard-format sheet CAN produce that exact
+    footprint. **The dev's recollection of having toggled it "a few minutes
+    before ~21:10Z" is therefore probably off by one to three hours** — and
+    note that the recollection and the evidence disagree in a direction
+    that does not matter much, because no save has occurred after 21:07Z
+    under either reading.
+  - **The cron did NOT do it — the auto-promotion path is real but inert,
+    verified live.** `syncShows` (`index.ts:279-281`) runs
+    `update league_shows set format='one_set' ... .eq("format","standard")`
+    for every festival-tagged show on **every sync tick**, which would have
+    been a much better explanation than a misremembered manual toggle.
+    It isn't the explanation: `GET /shows.json?show_tag=festival` returns
+    `{"error":false,"data":[]}` — the tag is not in use on The Carton at
+    all, so `festIds` is always empty and the `if (festIds.length)` guard
+    never opens. Confirmed against a control query (an untagged
+    `shows.json` returns rows through the same parser), because an empty
+    array from a misparsed response would have exonerated the cron
+    incorrectly.
+  - **Latent bug found while ruling that out — the comment above that block
+    is wrong, and it will matter the day anyone uses the tag.**
+    `index.ts:252-253` claims the promotion is "promote only — a manual
+    admin toggle back to standard is never overwritten by a later sync."
+    The first clause is true (it never demotes one_set→standard). **The
+    second is false**: `.eq("format","standard")` doesn't protect a manual
+    toggle, it *targets* it — a festival-tagged show that an admin sets
+    back to standard is re-promoted to one_set by the next cron tick,
+    within a minute, silently and forever. Inert today only because the tag
+    is unused. See the deferred `toggleFormat` warning item for where this
+    is tracked.
+  - **Whether the four ever held 6 rows is NOT answerable from `picks`, and
+    the ambiguity is structural.** A player who saved fresh under one_set
+    and a player who held 6 rows and lost 2 to the catch-all delete leave
+    **identical** footprints: four rows, one timestamp, no residue. There
+    is no `created_at`, no row-id ordering (uuid), no history table, and
+    the localStorage draft is cleared on successful save
+    (`picks.js:355`). **The one place an answer could still exist is the
+    Supabase API log**: count `POST /rest/v1/rpc/submit_picks` entries for
+    today against the six distinct last-save timestamps — extra calls mean
+    somebody saved more than once. It cannot attribute a call to a player
+    (every request carries the same anon key, there is no per-request
+    identity), so it can establish that a double-save happened, never who.
 - **✅ VERIFIED 2026-08-14: Test 3 activated cleanly — the roster fix works
   under a real conflict.** Result of the checkpoint below, which is kept for
   its method. `roster_locked_at = 04:00:04.757Z` (first cron tick after
@@ -1905,6 +1976,34 @@ stats (revisit past 2-3 leagues); the per-league webhook DB+UI (revisit if
 env-var management gets painful, or the Global console expands); the
 notification-preference toggle (no strong trigger, pick up whenever wanted);
 game numbering past 12 shows (revisit only if a season actually gets there).
+
+**Deferred, and the shape is already proven: `toggleFormat` needs the same
+orphan warning `saveConfig` got.** Identical failure, identical mechanism, no
+confirm on the dangerous one. A format change swaps which config section
+supplies the slot keys (`cfg.oneset` vs `cfg`), so every stored pick keyed to
+a slot the new section doesn't define is orphaned — exactly what a scoring-
+mode change does when it swaps `slots` keys for `rank1..rankN`. The
+mode-change confirm (`admin.js:679-724`, commit `e266a40`) was built on
+2026-08-14 for precisely this failure and does not cover the format toggle,
+which fires `admin_set_show_format` immediately and toasts success
+(`admin.js:566`) — one click from the Shows & cutoffs panel, no confirmation
+of any kind. **This is not hypothetical: it happened in production the same
+day it was written** — see the "⚠️ OPEN 2026-08-14 — the standard→one_set
+toggle ORPHANS two Official slot keys" bullet in the Postgres/Supabase
+gotchas section for the live case, including the detail that a post-toggle
+save deletes the orphaned rows via `submit_picks`'s catch-all delete and that
+the loss is **not** detectable afterwards (a player who lost a row and a
+player who never filled it are indistinguishable in `picks`).
+- **Reuse, don't re-derive**: `saveConfig`'s existing check already computes
+  "which stored slot keys would no longer be valid" — the format version asks
+  the same question with `sect = (format === 'one_set' && cfg.oneset) ?
+  cfg.oneset : cfg` as the new section, against all picks for that one show
+  rather than the whole bracket.
+- **Worth covering the reverse direction too**: one_set→standard orphans
+  nothing *today* only because Official's `oneset` keys happen to be a subset
+  of its `slots` keys. That is a property of one bracket's current config,
+  not a guarantee — a bracket with a one-set-only slot type would orphan on
+  the way back. Check the actual key sets, don't assume a direction is safe.
 
 **Deferred, small, and worth doing: a unit test for `activateSeasons()`'s
 ERROR path.** Test 3's activation on 2026-08-14 exercised the success path
