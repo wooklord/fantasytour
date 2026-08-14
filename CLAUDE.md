@@ -2005,6 +2005,68 @@ player who never filled it are indistinguishable in `picks`).
   not a guarantee — a bracket with a one-set-only slot type would orphan on
   the way back. Check the actual key sets, don't assume a direction is safe.
 
+**Open DESIGN QUESTION, not a task — format changes are transparent to
+players in ranked mode and destructive in slot mode, and the asymmetry is
+structural.** Recorded alongside the mechanical `toggleFormat` item above
+because it is the *operational* argument for ranked choice, which the
+mechanical framing loses. Slot keys encode set structure, so the valid key
+space is a function of `ls.format` — changing the format changes which
+stored picks are addressable at all. Rank keys encode only ladder position,
+read from `cfg.ranked.ladder` at config top level and never through the
+`oneset` section: `rank1` means the same thing at a one-set show, a two-set
+show, and a festival. A ranked bracket cannot be orphaned by a format
+toggle; a slot bracket is orphaned by definition whenever the two sections'
+key sets differ.
+
+**The concrete case, 2026-08-14 — the incentive problem is the part worth
+remembering.** Two Official players held 6 rows against everyone else's 4,
+purely because of when they last saved relative to an admin toggle. Their
+two stranded rows fall to the flat branch and pay `flat_points` (2) each on
+the *easiest* condition in the game — played anywhere, no position required
+— while the perfect-sheet bonus they forfeit is only +2. So the accident was
+worth **up to 4 extra points**, and the correct advice to those two players
+was "don't touch your sheet," which is not a rule anyone designed. Full
+detail in the "⚠️ OPEN 2026-08-14" bullet in the Postgres/Supabase gotchas
+section.
+
+**Three candidate shapes for slot mode, not mutually exclusive. Read the
+caveats — two of the three do less than they look like they do:**
+1. **A `toggleFormat` orphan warning** (the item above). Necessary but weak,
+   as noted: it warns about damage rather than preventing it, and it fires
+   at the admin, who is not the person who loses picks.
+2. **Constrain `oneset` keys to be a SUBSET of `slots` keys.** Two caveats
+   that matter. **(a) It protects the recovery path, not the change** —
+   with the subset property, one_set→standard can never orphan (the key
+   space only grows), but standard→one_set orphans exactly as before, since
+   that direction shrinks it. That is still worth having, because it
+   guarantees a revert is always safe, which is currently true only by
+   accident. **(b) It is not free: Casual's own config violates it today** —
+   Casual's `oneset` defines `second_song` and `cover1`, neither of which
+   appears in its `slots` set (`opener`/`closer`/`encore` + 3 flats). So
+   this needs a config migration or a grandfather clause, not just a
+   validator. (Moot for Casual specifically while it runs ranked, but the
+   constraint would have to hold for every bracket, and Casual's config
+   still carries the violating section underneath.)
+3. **Stop deleting rows absent from the payload in `submit_picks`.** The
+   biggest fix and the real one: the trailing catch-all delete is precisely
+   what turns "orphaned" into "destroyed," and without it a format toggle
+   is fully reversible with no data loss in either direction. **There is a
+   clean implementation path, and the deletion capability does not have to
+   be lost with it**: `submit_picks` already deletes per-slot when a slot is
+   submitted with a blank songname, so clearing a pick has a mechanism that
+   does not depend on the catch-all. What blocks it is the client —
+   `savePicks` (`picks.js:342`) filters blank rows out of the payload
+   before sending, so today the catch-all is the *only* thing that clears a
+   cleared row. The change is therefore: send every rendered row including
+   blanks, and drop the catch-all.
+   - **Deploy ordering is not optional here, and GitHub Pages caching is
+     why.** Ship the client change first and a stale cached bundle still
+     works (it just relies on a catch-all that's still present); ship the
+     SQL first and any client still filtering blanks silently loses the
+     ability to clear a pick — a save that should empty a slot leaves the
+     old value in place. Server tolerant of both shapes first, client
+     second, catch-all removed last.
+
 **Deferred, small, and worth doing: a unit test for `activateSeasons()`'s
 ERROR path.** Test 3's activation on 2026-08-14 exercised the success path
 under heavy conflict (13 of 14 rows collided and were skipped, 1 inserted,
