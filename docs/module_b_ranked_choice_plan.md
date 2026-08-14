@@ -639,36 +639,63 @@ instance constants.
 
 ## STATUS as of 2026-08-13 (durability checkpoint — read this first)
 
-**The edge-function half is DONE and committed. The entire frontend half is
-NOT STARTED. Nothing is deployed.**
+**The scorer and the admin panel are DONE and committed. `picks.js` — the
+entire player-facing half — is NOT STARTED. Nothing is deployed.**
 
 Done:
-- `scoreRankedPicks()` in `supabase/functions/carton-sync/scoring.js`.
-- The mode dispatch as the **first line** of `scorePicks()`, before any
-  slot logic runs.
-- Non-finite ladder-rung coercion (`Number.isFinite` guard → 0).
-- Test blocks **7a–7p** in `test/scoring.test.mjs`, mutation-verified (see
-  below). `node test/scoring.test.mjs` passes.
+- `scoreRankedPicks()` in `supabase/functions/carton-sync/scoring.js`, the
+  mode dispatch as the **first line** of `scorePicks()`, and non-finite
+  ladder-rung coercion. Test blocks **7a–7p**, mutation-verified.
+- `src/core/config.js` — `RANKED_CHOICE_ENABLED` (false; gates the admin
+  option until the edge function is deployed).
+- `src/features/admin.js` — scoring-mode `<select>`; perfect-sheet moved to
+  Master switch; both Game rules sections and the new ranked section
+  extracted into `rulesRegionHtml(cfg, mode)`; `onModeChange()` re-rendering
+  that region in place without touching `state.cfg`; ladder editor
+  (`rankRow`/`addRankRow`/`renumberRanks`); `readLadder()` rejecting empty
+  rows and returning null; `saveConfig()` read-through-to-`state.cfg`
+  guards plus the zero-rank guard.
+- `src/main.js` — `onModeChange`/`addRankRow`/`renumberRanks` on `window`
+  (inline handlers can't see module scope).
+- `test/fixtures.mjs` + `test/harness.mjs` + `test/scenario.test.mjs` —
+  `makeRankedFixtures()` and `runRankedChoiceScenario`, run twice per mode.
+  Six mutations verified the guards (tables below).
 
 Not started:
-- `src/core/config.js` — `RANKED_CHOICE_ENABLED` **does not exist yet**.
-- `src/features/admin.js` — scoring-mode `<select>`; moving the
-  perfect-sheet field out of the standard section; making the two Game
-  rules sections conditional; the ranked collapsible + ladder editor
-  (`rankRow`/`addRankRow`/`readLadder`); the `saveConfig()`
-  read-through-to-`state.cfg` guards.
 - `src/features/picks.js` — `slotDefs()`, `ruleDefs`, `breakdownSlotInfo()`
-  ranked branches.
-- `test/fixtures.mjs` + `test/harness.mjs` — ranked bracket fixture and
-  `runRankedChoiceScenario`.
-- `node build.mjs` + committing the bundle; the manual smoke test; the
-  config round-trip check.
+  ranked branches, plus tracing where "Any Debut" enters the autocomplete.
+  **A ranked bracket today has a working admin panel and a working scorer
+  but would still render a slots pick sheet to players.**
+- **Nothing has been looked at in a browser.** The harness is structurally
+  blind to CSS (a documented limitation in CLAUDE.md), so the ladder rows'
+  actual appearance — label alignment, input width, the ✕ button — is
+  unverified. Worth doing with `RANKED_CHOICE_ENABLED` flipped locally,
+  reverted before committing.
 - **Deploy** — `supabase functions deploy carton-sync` has NOT been run, so
   ranked scoring does not execute against real shows. Deploy is a separate,
-  explicitly-approved step.
+  explicitly-approved step, and shouldn't happen before `picks.js` lands.
 
-**NEXT STEP, concretely, in this order**: `src/core/config.js` →
-`src/features/admin.js` → `src/features/picks.js`.
+**NEXT STEP**: `src/features/picks.js`.
+
+## Later work — after `picks.js`, no correctness stake
+
+**Master switch section needs reorganizing** (presentation only; confirmed
+by looking at the panel in a browser, not inferred from the source). It now
+holds three unrelated things under a single shared muted paragraph:
+- **Voting override** — a bracket-wide switch.
+- **Scoring mode** — also bracket-wide, but it shows/hides two-thirds of the
+  panel, which is a much larger consequence than its neighbours.
+- **Bonus: perfect sheet** — a point value, sitting here only because it's
+  the one bonus that applies in both modes (see 2.2 in this plan).
+
+The shared paragraph tries to explain voting enforcement *and* perfect-sheet
+placement at once, with the mode selector wedged between them.
+
+Direction, deliberately not a decision: per-field explanatory lines rather
+than one shared paragraph, and **Scoring mode probably warrants its own
+copy — nothing currently tells an admin that changing it governs which rule
+sections exist at all.** Whether perfect-sheet belongs in Master switch or
+wants its own small section is open.
 
 ## Mutation-testing results (which fix is protected by which test)
 
