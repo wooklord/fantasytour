@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runForcedPinChangeScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -265,6 +265,66 @@ async function runMode(mode){
   check("appointing via the Global console makes Wanderer an admin of the new league",
     globalAdmin.wandererIsAdminOfNewLeague === true,
     `wandererIsAdminOfNewLeague: ${globalAdmin.wandererIsAdminOfNewLeague}`);
+
+  // Module B — ranked-choice scoring on Casual, slots still on Official.
+  const ranked = await runRankedChoiceScenario({ html, scripts, mode });
+  check("ranked bracket renders the ladder editor with the stored ladder",
+    JSON.stringify(ranked.ladderValues) === JSON.stringify(["5","4","3","2","1"]),
+    `ladderValues: ${JSON.stringify(ranked.ladderValues)}`);
+  check("ladder rows are labelled by position",
+    JSON.stringify(ranked.rankLabels) === JSON.stringify(["Rank 1","Rank 2","Rank 3","Rank 4","Rank 5"]),
+    `rankLabels: ${JSON.stringify(ranked.rankLabels)}`);
+  // Absence, not invisibility: decision 1 is that cover/debut/wildcard cannot
+  // be turned on for a ranked bracket, and a hidden-but-present input is not that.
+  check("slots-mode fields are absent from the DOM in ranked mode",
+    ranked.leakedSlotsFields.length === 0,
+    `leaked: ${JSON.stringify(ranked.leakedSlotsFields)}`);
+  check("perfect-sheet field is still present in ranked mode (it moved to Master switch)",
+    ranked.perfectPresent === true,
+    `perfectPresent: ${ranked.perfectPresent}`);
+  check("switching the mode select to slots swaps the rules region in place",
+    ranked.afterSwitchToSlots.hasSlots && !ranked.afterSwitchToSlots.hasLadder && ranked.afterSwitchToSlots.hasCover,
+    `afterSwitchToSlots: ${JSON.stringify(ranked.afterSwitchToSlots)}`);
+  check("switching back to ranked restores the ladder editor",
+    ranked.backToRanked.hasLadder && !ranked.backToRanked.hasSlots,
+    `backToRanked: ${JSON.stringify(ranked.backToRanked)}`);
+  check("saving from ranked mode writes mode and ladder",
+    ranked.savedMode === "ranked_choice" && JSON.stringify(ranked.savedLadder) === JSON.stringify([5,4,3,2,1]),
+    `savedMode: ${ranked.savedMode}, savedLadder: ${JSON.stringify(ranked.savedLadder)}`);
+  // The data-loss guard. None of these fields has an input on screen in
+  // ranked mode, so they survive a save only through saveConfig()'s
+  // read-through-to-state.cfg fallbacks. Expectations are HARDCODED to what
+  // makeRankedFixtures sets — deriving them from the fixture would let a
+  // corrupted fixture corrupt the expectation to match, passing while
+  // proving nothing. Each value is one a regressed guard's literal fallback
+  // would visibly differ from; see makeRankedFixtures for why these specific
+  // numbers (five of the plain defaults coincide with their own fallback).
+  check("saving from ranked mode preserves slots array contents",
+    ranked.slotsAfter === ranked.slotsBefore,
+    `before: ${ranked.slotsBefore}\n    after:  ${ranked.slotsAfter}`);
+  check("saving from ranked mode preserves oneset.slots array contents",
+    ranked.onesetSlotsAfter === ranked.onesetSlotsBefore,
+    `before: ${ranked.onesetSlotsBefore}\n    after:  ${ranked.onesetSlotsAfter}`);
+  check("saving from ranked mode preserves every scalar slots-mode field",
+    JSON.stringify(ranked.preserved) === JSON.stringify({
+      flat_picks: 2, flat_points: 3,
+      partial_credit: true, partial_points: 2,
+      allow_duplicates: true,
+      cover: 1, debut: 2, perfect: 5,
+      wildcardDebut: false,
+      onesetFlatPicks: 1, onesetFlatPoints: 2,
+    }),
+    `actual: ${JSON.stringify(ranked.preserved)}`);
+  // Second run, wildcard flipped. wildcards.debut is the one config boolean
+  // no single fixture value can cover: dropping its guard yields false when
+  // the input is absent, keeping it with a literal fallback yields true, so
+  // false catches one shape and true catches the other. The run above (false)
+  // covers the literal-fallback regression; this one covers guard-dropped.
+  // Only the wildcard is re-asserted — everything else is already proven above.
+  const rankedWildcardOn = await runRankedChoiceScenario({ html, scripts, mode, wildcardDebut: true });
+  check("saving from ranked mode preserves wildcards.debut when it is ON",
+    rankedWildcardOn.preserved.wildcardDebut === true,
+    `wildcardDebut: ${rankedWildcardOn.preserved.wildcardDebut}`);
 
   // Session 4 step 2: must_change_pin:true must block the normal tabs
   // behind a forced interstitial, and submitting a matching new PIN must

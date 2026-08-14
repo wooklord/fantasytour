@@ -11,6 +11,7 @@ import { currentBracket } from "../core/switcher.js";
 import { TIEBREAK_LABELS } from "../core/tiebreak.js";
 import { SLOT_LABELS, SLOT_TOOLTIPS, ONE_SET_EXCLUDED_TYPES, slotLabelFor } from "../core/slotTypes.js";
 import { venueLocalInputValue, venueLocalToUTC, venueLongName, hasDstTransition } from "../core/venueTime.js";
+import { RANKED_CHOICE_ENABLED } from "../core/config.js";
 
 // Seasons only ever belong to a league's Official bracket, and the season
 // editor has to keep working regardless of which bracket the switcher
@@ -168,16 +169,118 @@ export async function globalResetPin(id, name){
   }catch(e){ toast(esc(e.message)); }
 }
 
-export async function renderAdmin(){
-  clearTimersFor("admin"); state.tab = "admin"; markTab();
-  await loadConfig();
-  const cfg = state.cfg;
+// Starting ladder offered when a bracket is switched to ranked mode without
+// one. An empty editor with a lone "+ add rank" button reads as a broken
+// feature, and an admin choosing ranked choice almost certainly wants a
+// ladder — but note this is DISPLAY ONLY until they press Save. Nothing
+// writes it to brackets.config on its own, so switching mode and navigating
+// away persists nothing.
+const DEFAULT_RANKED_LADDER = [5, 4, 3, 2, 1];
+
+// Row position IS the rank, so the label is derived from position at render
+// time rather than stored on the row — see renumberRanks() for why that
+// matters after a deletion.
+function rankRow(pts, i){
+  return `<div class="admin-slot">
+    <label style="min-width:4.2rem;opacity:.75">Rank ${i+1}</label>
+    <input class="rank-pts" type="number" min="0" value="${pts ?? ""}">
+    <button class="btn ghost small" onclick="this.parentElement.remove(); renumberRanks()">✕</button></div>`;
+}
+export function addRankRow(){
+  const box = $("#rankladder");
+  box.insertAdjacentHTML("beforeend", rankRow("", box.children.length));
+}
+// Deleting a middle row would otherwise leave labels reading "Rank 1, Rank 3,
+// Rank 4" while position — the thing that actually determines the rank, both
+// here and in readLadder() — says otherwise. Relabel from position so the
+// visible label can't disagree with the real ordering.
+export function renumberRanks(){
+  [...document.querySelectorAll("#rankladder .admin-slot")].forEach((row, i) => {
+    row.querySelector("label").textContent = `Rank ${i+1}`;
+  });
+}
+
+// The mode-dependent slice of the admin panel, extracted so onModeChange()
+// can re-render just this region when the scoring-mode select changes,
+// without disturbing Master switch / Seasons / House rules (a full
+// renderAdmin() would discard unsaved edits in those).
+//
+// `mode` is a parameter rather than read from state.cfg on purpose:
+// state.cfg must stay a faithful copy of what's in the database, because
+// saveConfig()'s fallbacks read it to preserve fields whose inputs aren't
+// currently rendered. A locally-mutated state.cfg would corrupt that, and
+// would also let a mode switch leak into the pick sheet before it's saved.
+function rulesRegionHtml(cfg, mode){
   const b = cfg.bonuses || {};
+  if (mode === "ranked_choice") {
+    const stored = cfg.ranked?.ladder ?? [];
+    const ladder = stored.length ? stored : DEFAULT_RANKED_LADDER;
+    return collapsible("rules-ranked", "Game rules — ranked choice", `
+      <p class="muted">Players pick one song per rank. A pick scores its rank's value if that
+        song is played anywhere in the show — position doesn't matter, so a single ladder
+        covers every show regardless of format. There's no separate one-set section here.</p>
+      <div id="rankladder">${ladder.map(rankRow).join("")}</div>
+      <button class="btn ghost small" onclick="addRankRow()">+ add rank</button>
+      <p class="muted" style="margin-top:6px">Row order is the rank — the first row is Rank 1.
+        Blank rows are dropped when you save. Cover, debut, and "Any Debut" don't apply in
+        this mode; perfect sheet still does and lives under Master switch.</p>
+    `);
+  }
   const os = cfg.oneset || { slots:[
       {key:"opener",type:"opener",label:"Opener",points:2},
       {key:"closer",type:"closer",label:"Closer",points:2},
       {key:"cover1",type:"cover_pick",label:"Cover Pick",points:2}
     ], flat_picks:3, flat_points:1 };
+  return `
+    ${collapsible("rules-standard", "Game rules — standard shows", `
+      <p class="muted">Slotted picks (position matters):</p>
+      <div id="slots">${(cfg.slots||[]).map(sl => adminSlotRow(sl, "standard")).join("")}</div>
+      <button class="btn ghost small" onclick="addSlot('slots')">+ add slot</button>
+      <div class="grid2" style="margin-top:14px">
+        <div class="field"><label>Flat picks (count)</label><input id="c-flat" type="number" min="0" value="${cfg.flat_picks}"></div>
+        <div class="field"><label>Points per flat pick</label><input id="c-flatpts" type="number" min="0" value="${cfg.flat_points}"></div>
+        <div class="field"><label>Partial credit (slot song played elsewhere)</label>
+          <select id="c-partial"><option value="true" ${cfg.partial_credit?"selected":""}>On</option><option value="false" ${!cfg.partial_credit?"selected":""}>Off</option></select></div>
+        <div class="field"><label>Partial points</label><input id="c-partpts" type="number" min="0" value="${cfg.partial_points}"></div>
+        <div class="field"><label>Bonus: cover</label><input id="c-bcover" type="number" min="0" value="${b.cover||0}"></div>
+        <div class="field"><label>Bonus: debut</label><input id="c-bdebut" type="number" min="0" value="${b.debut||0}"></div>
+        <div class="field"><label>Allow duplicate songs across picks</label>
+          <select id="c-dupes"><option value="false" ${!cfg.allow_duplicates?"selected":""}>No</option><option value="true" ${cfg.allow_duplicates?"selected":""}>Yes</option></select></div>
+        <div class="field"><label>Wildcard: "Any Debut" (hits if any debut is played)</label>
+          <select id="c-wcdebut"><option value="true" ${(cfg.wildcards?.debut ?? true)?"selected":""}>Players may pick it</option><option value="false" ${(cfg.wildcards?.debut ?? true)?"":"selected"}>Off</option></select></div>
+      </div>
+    `)}
+    ${collapsible("rules-oneset", "Game rules — one-set shows", `
+      <p class="muted">Used for shows toggled to "1 set" below. Festival-tagged shows sync in as 1 set automatically.</p>
+      <div id="slots1">${(os.slots||[]).map(sl => adminSlotRow(sl, "one_set")).join("")}</div>
+      <button class="btn ghost small" onclick="addSlot('slots1')">+ add slot</button>
+      <div class="grid2" style="margin-top:14px">
+        <div class="field"><label>Flat picks (count)</label><input id="c1-flat" type="number" min="0" value="${os.flat_picks}"></div>
+        <div class="field"><label>Points per flat pick</label><input id="c1-flatpts" type="number" min="0" value="${os.flat_points}"></div>
+      </div>
+    `)}`;
+}
+
+// Re-render only the mode-dependent region when the scoring-mode select
+// changes. Reads the new mode from the select; does not touch state.cfg.
+export function onModeChange(){
+  $("#rules-region").innerHTML = rulesRegionHtml(state.cfg, $("#c-mode").value);
+}
+
+export async function renderAdmin(){
+  clearTimersFor("admin"); state.tab = "admin"; markTab();
+  await loadConfig();
+  const cfg = state.cfg;
+  const b = cfg.bonuses || {};
+  // A config with no `mode` key is slot mode — that's every bracket that
+  // existed before ranked choice, so absence must keep working untouched.
+  const mode = cfg.mode || "slots";
+  // The ranked option is withheld until the scorer is deployed (see
+  // RANKED_CHOICE_ENABLED), but it's still offered when this bracket is
+  // ALREADY ranked — otherwise the select couldn't represent the state it
+  // just loaded, would display "Slots", and the next save would silently
+  // rewrite the bracket's real mode.
+  const showRanked = RANKED_CHOICE_ENABLED || mode === "ranked_choice";
   const [shows, seasonsA] = await Promise.all([
     fetchShows(q => q.gte("showdate", new Date(Date.now()-7*864e5).toISOString().slice(0,10)).order("showdate")),
     rpc("get_bracket_seasons", { p_bracket_id: officialBracketId() }),
@@ -219,7 +322,16 @@ export async function renderAdmin(){
           <option value="locked" ${cfg.voting_override==="locked"?"selected":""}>Locked — nobody can vote</option>
           <option value="open" ${cfg.voting_override==="open"?"selected":""}>Open — voting open for today + future shows</option>
         </select></div>
-      <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.</p>
+      <div class="field"><label>Scoring mode</label>
+        <select id="c-mode" onchange="onModeChange()">
+          <option value="slots" ${mode!=="ranked_choice"?"selected":""}>Slots — position matters (opener, closers, encore)</option>
+          ${showRanked ? `<option value="ranked_choice" ${mode==="ranked_choice"?"selected":""}>Ranked choice — N picks against a fixed ladder</option>` : ""}
+        </select></div>
+      <div class="field"><label>Bonus: perfect sheet (every pick hits)</label><input id="c-bperfect" type="number" min="0" value="${b.perfect||0}"></div>
+      <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.
+        Perfect sheet lives here rather than with the other bonuses because it's the one
+        bonus that applies in every scoring mode — it scores the whole sheet being right,
+        not any individual song.</p>
     `)}
     ${collapsible("seasons", "Seasons", `
       <p class="muted">Named date ranges — shows sort themselves in by date.</p>
@@ -242,34 +354,7 @@ export async function renderAdmin(){
       <button class="btn ghost small" id="add-rule-btn" onclick="addCustomRule()"
         ${(cfg.custom_rules||[]).length >= CUSTOM_RULES_MAX ? "disabled" : ""}>+ add rule</button>
     `)}
-    ${collapsible("rules-standard", "Game rules — standard shows", `
-      <p class="muted">Slotted picks (position matters):</p>
-      <div id="slots">${(cfg.slots||[]).map(sl => adminSlotRow(sl, "standard")).join("")}</div>
-      <button class="btn ghost small" onclick="addSlot('slots')">+ add slot</button>
-      <div class="grid2" style="margin-top:14px">
-        <div class="field"><label>Flat picks (count)</label><input id="c-flat" type="number" min="0" value="${cfg.flat_picks}"></div>
-        <div class="field"><label>Points per flat pick</label><input id="c-flatpts" type="number" min="0" value="${cfg.flat_points}"></div>
-        <div class="field"><label>Partial credit (slot song played elsewhere)</label>
-          <select id="c-partial"><option value="true" ${cfg.partial_credit?"selected":""}>On</option><option value="false" ${!cfg.partial_credit?"selected":""}>Off</option></select></div>
-        <div class="field"><label>Partial points</label><input id="c-partpts" type="number" min="0" value="${cfg.partial_points}"></div>
-        <div class="field"><label>Bonus: cover</label><input id="c-bcover" type="number" min="0" value="${b.cover||0}"></div>
-        <div class="field"><label>Bonus: debut</label><input id="c-bdebut" type="number" min="0" value="${b.debut||0}"></div>
-        <div class="field"><label>Bonus: perfect sheet (every pick hits)</label><input id="c-bperfect" type="number" min="0" value="${b.perfect||0}"></div>
-        <div class="field"><label>Allow duplicate songs across picks</label>
-          <select id="c-dupes"><option value="false" ${!cfg.allow_duplicates?"selected":""}>No</option><option value="true" ${cfg.allow_duplicates?"selected":""}>Yes</option></select></div>
-        <div class="field"><label>Wildcard: "Any Debut" (hits if any debut is played)</label>
-          <select id="c-wcdebut"><option value="true" ${(cfg.wildcards?.debut ?? true)?"selected":""}>Players may pick it</option><option value="false" ${(cfg.wildcards?.debut ?? true)?"":"selected"}>Off</option></select></div>
-      </div>
-    `)}
-    ${collapsible("rules-oneset", "Game rules — one-set shows", `
-      <p class="muted">Used for shows toggled to "1 set" below. Festival-tagged shows sync in as 1 set automatically.</p>
-      <div id="slots1">${(os.slots||[]).map(sl => adminSlotRow(sl, "one_set")).join("")}</div>
-      <button class="btn ghost small" onclick="addSlot('slots1')">+ add slot</button>
-      <div class="grid2" style="margin-top:14px">
-        <div class="field"><label>Flat picks (count)</label><input id="c1-flat" type="number" min="0" value="${os.flat_picks}"></div>
-        <div class="field"><label>Points per flat pick</label><input id="c1-flatpts" type="number" min="0" value="${os.flat_points}"></div>
-      </div>
-    `)}
+    <div id="rules-region">${rulesRegionHtml(cfg, mode)}</div>
     <div class="panel">
       <button class="btn" onclick="saveConfig()">Save all rules</button>
       <div class="err" id="cfg-err"></div>
@@ -558,30 +643,109 @@ function readTiebreakers(){
 }
 export async function saveConfig(){
   $("#cfg-err").textContent = "";
-  const slots = readSlots('slots'), slots1 = readSlots('slots1');
+  const mode = $("#c-mode").value;
+  // Only one mode's rule sections are on screen at a time, so every read
+  // below has to tolerate its input being absent — and must fall back to
+  // the value ALREADY IN state.cfg, never to a literal like 0/false/[].
+  // A literal fallback is a data-loss path, not a harmless default: switch
+  // to ranked, save, switch back, and every slot, bonus and flag the admin
+  // had configured would have been overwritten with zeros by the save that
+  // happened while their inputs weren't rendered. Symmetric in both
+  // directions — a slots-mode save has to preserve the ladder the same way.
+  const slots  = $("#slots")  ? readSlots("slots")  : (state.cfg.slots ?? []);
+  const slots1 = $("#slots1") ? readSlots("slots1") : (state.cfg.oneset?.slots ?? []);
   for (const arr of [slots, slots1]){
     const types = arr.filter(sl => sl.type !== "cover_pick").map(sl => sl.type);
     if (new Set(types).size !== types.length){
       $("#cfg-err").textContent = "Each slot type (except Cover pick) can only be used once per section."; return;
     }
   }
+  // readLadder() signals invalid input with null (distinct from a legitimately
+  // empty []), having already written the reason to #cfg-err. Checked here,
+  // before the data object is assembled and before the RPC — a ternary that
+  // let a failed read fall through as [] would silently wipe the ladder on a
+  // single stray character, which is the same data-loss shape the fallbacks
+  // above exist to prevent.
+  let ladder;
+  if ($("#rankladder")) {
+    ladder = readLadder();
+    if (ladder === null) return;
+    if (mode === "ranked_choice" && !ladder.length){
+      $("#cfg-err").textContent = "A ranked-choice bracket needs at least one rank. Add a rank, or switch back to slots."; return;
+    }
+  } else {
+    ladder = state.cfg.ranked?.ladder ?? [];
+  }
   const tiebreakers = readTiebreakers();
   const data = {
     slots,
+    mode,
+    ranked: { ladder },
     custom_rules: readCustomRules(),
-    flat_picks: Number($("#c-flat").value), flat_points: Number($("#c-flatpts").value),
-    partial_credit: $("#c-partial").value === "true", partial_points: Number($("#c-partpts").value),
-    allow_duplicates: $("#c-dupes").value === "true",
+    flat_picks: Number($("#c-flat")?.value ?? state.cfg.flat_picks ?? 0),
+    flat_points: Number($("#c-flatpts")?.value ?? state.cfg.flat_points ?? 1),
+    partial_credit: $("#c-partial") ? $("#c-partial").value === "true" : !!state.cfg.partial_credit,
+    partial_points: Number($("#c-partpts")?.value ?? state.cfg.partial_points ?? 1),
+    allow_duplicates: $("#c-dupes") ? $("#c-dupes").value === "true" : !!state.cfg.allow_duplicates,
     voting_override: $("#c-override").value,
-    bonuses: { cover: Number($("#c-bcover").value), debut: Number($("#c-bdebut").value), perfect: Number($("#c-bperfect").value), jamchart: 0 },
-    wildcards: { debut: $("#c-wcdebut").value === "true" },
-    oneset: { slots: slots1, flat_picks: Number($("#c1-flat").value), flat_points: Number($("#c1-flatpts").value) },
+    bonuses: {
+      cover: Number($("#c-bcover")?.value ?? state.cfg.bonuses?.cover ?? 0),
+      debut: Number($("#c-bdebut")?.value ?? state.cfg.bonuses?.debut ?? 0),
+      // Always rendered (Master switch), in every mode — no guard needed.
+      perfect: Number($("#c-bperfect").value),
+      jamchart: 0,
+    },
+    wildcards: { debut: $("#c-wcdebut") ? $("#c-wcdebut").value === "true" : (state.cfg.wildcards?.debut ?? true) },
+    oneset: {
+      slots: slots1,
+      flat_picks: Number($("#c1-flat")?.value ?? state.cfg.oneset?.flat_picks ?? 0),
+      flat_points: Number($("#c1-flatpts")?.value ?? state.cfg.oneset?.flat_points ?? 1),
+    },
     ...(tiebreakers !== undefined ? { tiebreakers } : {}),
   };
   try{
     await rpc("admin_update_config", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_data:data });
     state.cfg = data; toast("Rules saved ✔", "score");
+    // Re-render the rules region from what was actually SAVED, not from what
+    // was typed. Both readers normalize: readLadder() drops blank rows and
+    // readSlots() drops rows with no type, so a blank left in the middle of
+    // the ladder shifts every rank below it up one. Without this the panel
+    // would keep showing five rows while the database holds four, and the
+    // admin would have no way to see which rank a pick now scores.
+    const region = $("#rules-region");
+    if (region) region.innerHTML = rulesRegionHtml(data, data.mode);
   }catch(e){ $("#cfg-err").textContent = e.message; }
+}
+
+// Row position is the rank, so order here is load-bearing: querySelectorAll
+// returns document order, which is the visual order of the rows.
+//
+// Returns null (NOT []) on invalid input, after writing the reason to
+// #cfg-err — saveConfig aborts on null, so nothing partial is ever written.
+// The two rejections are deliberately different:
+//   - blank rows are DROPPED, not rejected. Number("") is 0, so a blank kept
+//     as-is would become a real rank worth nothing that still counts toward
+//     perfect-sheet coverage — a player fills it, hits it, scores 0, and the
+//     sheet still reads complete.
+//   - non-numeric text is REJECTED. Number("abc") is NaN; the scorer floors
+//     that to 0 defensively, but a silently-zeroed rank is still a broken
+//     config the admin should be told about rather than shipped.
+// Survivors are coerced with Number() so the stored jsonb is numeric — a DOM
+// scrape yields strings, and leaving them would make the scorer fix types on
+// every scoring pass.
+function readLadder(){
+  const out = [];
+  for (const inp of document.querySelectorAll("#rankladder .rank-pts")){
+    const raw = inp.value.trim();
+    if (raw === "") continue;
+    const n = Number(raw);
+    if (!Number.isFinite(n)){
+      $("#cfg-err").textContent = `"${raw}" isn't a number — every rank needs a point value, or leave the row blank to drop it.`;
+      return null;
+    }
+    out.push(n);
+  }
+  return out;
 }
 export async function saveCutoff(showId, btn){
   const input = document.querySelector(`input[data-show="${showId}"]`);

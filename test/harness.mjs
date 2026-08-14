@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { makeFixtures, makeCatalogWhitespaceFixtures } from "./fixtures.mjs";
+import { makeFixtures, makeCatalogWhitespaceFixtures, makeRankedFixtures } from "./fixtures.mjs";
 import { createFakeSupabase } from "./fakeSupabase.mjs";
 
 // Strips every <script>...</script> and <script .../> tag so we can control
@@ -121,7 +121,15 @@ const RPC_HANDLERS = {
       added_at: sr.added_at,
     })),
   admin_pick_status: async () => [{ player_name: "Wooklord", picks_count: 1, last_saved: "2026-07-26T00:00:00Z" }],
-  admin_update_config: async () => ({ ok: true }),
+  // Persists p_data into the fixture's brackets row instead of discarding it.
+  // A handler that swallows the payload can't prove anything about
+  // saveConfig(): the read-through fallbacks that preserve fields whose
+  // inputs aren't rendered are only observable in what actually got written.
+  admin_update_config: async (args, tables) => {
+    const br = (tables.brackets || []).find(b => b.id === args.p_bracket_id);
+    if (br) br.config = args.p_data;
+    return { ok: true };
+  },
   admin_set_cutoff: async () => ({ ok: true }),
   // Session 4 step 2 — flips must_change_pin on the matching players_public
   // row, mirroring the real RPC's effect (real join, not a fixed stub, same
@@ -339,6 +347,94 @@ export async function runGlobalAdminScenario({ html, scripts, mode }){
 // here — this doesn't need the login RPC's own must_change_pin return value
 // to be realistic, since every scenario in this file already bypasses login()
 // entirely by presetting ft_session.
+// Module B: a bracket running ranked-choice scoring alongside a slots-mode
+// sibling. Reaches the ranked branch the way the app reaches it — a real
+// renderAdmin() against a fixture whose Casual config carries
+// mode:"ranked_choice" — rather than by injecting markup, because the render
+// path is the part most likely to break.
+//
+// Three things it exists to prove, none covered elsewhere:
+//   1. The ranked branch renders a ladder editor.
+//   2. Slots-mode fields are ABSENT FROM THE DOM in ranked mode, not merely
+//      hidden — decision 1 is that cover/debut/wildcard cannot be turned on
+//      for a ranked bracket, and "you can't see it" is not that.
+//   3. Saving FROM ranked mode preserves every slots-mode field. Those
+//      fields have no inputs on screen, so they survive only via
+//      saveConfig()'s read-through-to-state.cfg fallbacks — the one piece of
+//      this work with a real data-loss failure mode.
+export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDebut = false }){
+  const { tables } = makeRankedFixtures({ wildcardDebut });
+  const casualId = tables.brackets.find(b => b.kind === "casual").id;
+  const before = JSON.parse(JSON.stringify(tables.brackets.find(b => b.id === casualId).config));
+  const calls = [];
+  const dbHolder = {};
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, dbHolder);
+  window.localStorage.setItem("ft_session", JSON.stringify({ id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+  // Land on the ranked bracket specifically — the remembered-bracket key, so
+  // the switcher doesn't pick Official and render the slots panel instead.
+  window.localStorage.setItem("ft_bracket_id", String(casualId));
+
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+
+  clickTab(window, "admin");
+  await tick(); await tick();
+
+  const q = (id) => window.document.getElementById(id);
+  const ladderValues = [...window.document.querySelectorAll("#rankladder .rank-pts")].map(i => i.value);
+  const rankLabels = [...window.document.querySelectorAll("#rankladder label")].map(l => l.textContent);
+  // Absence is the assertion, so this collects anything that leaked through
+  // rather than checking a single id — a new slots-mode field added to the
+  // standard section later should fail this too.
+  const leakedSlotsFields = ["c-bcover","c-bdebut","c-wcdebut","c-dupes","c-flat","c-flatpts","c-partial","c-partpts","slots","slots1","c1-flat","c1-flatpts"]
+    .filter(id => q(id) !== null);
+  const perfectPresent = q("c-bperfect") !== null;
+
+  // Mode switch, in-place, without a reload (admin.js's onModeChange).
+  q("c-mode").value = "slots";
+  window.onModeChange();
+  await tick();
+  const afterSwitchToSlots = { hasSlots: q("slots") !== null, hasLadder: q("rankladder") !== null, hasCover: q("c-bcover") !== null };
+  // Back to ranked, so the save below happens from ranked mode.
+  q("c-mode").value = "ranked_choice";
+  window.onModeChange();
+  await tick();
+  const backToRanked = { hasLadder: q("rankladder") !== null, hasSlots: q("slots") !== null };
+
+  await window.saveConfig();
+  await tick(); await tick();
+  const after = tables.brackets.find(b => b.id === casualId).config;
+
+  return {
+    ladderValues, rankLabels, leakedSlotsFields, perfectPresent,
+    afterSwitchToSlots, backToRanked,
+    savedMode: after.mode,
+    savedLadder: after.ranked?.ladder,
+    // Deep contents, not lengths — a regressed guard returning a different
+    // non-empty array would pass a length check.
+    slotsBefore: JSON.stringify(before.slots),
+    slotsAfter: JSON.stringify(after.slots),
+    onesetSlotsBefore: JSON.stringify(before.oneset?.slots),
+    onesetSlotsAfter: JSON.stringify(after.oneset?.slots),
+    preserved: {
+      flat_picks: after.flat_picks, flat_points: after.flat_points,
+      partial_credit: after.partial_credit, partial_points: after.partial_points,
+      allow_duplicates: after.allow_duplicates,
+      cover: after.bonuses?.cover, debut: after.bonuses?.debut,
+      perfect: after.bonuses?.perfect,
+      wildcardDebut: after.wildcards?.debut,
+      onesetFlatPicks: after.oneset?.flat_picks, onesetFlatPoints: after.oneset?.flat_points,
+    },
+    // Deliberately NOT returning an `expected` derived from `before`: an
+    // expectation computed from the fixture moves with the fixture, so a
+    // corrupted fixture would silently corrupt the expectation to match and
+    // the comparison would pass while proving nothing. scenario.test.mjs
+    // hardcodes the literals instead.
+  };
+}
+
 export async function runForcedPinChangeScenario({ html, scripts, mode }){
   const { tables } = makeFixtures();
   const calls = [];

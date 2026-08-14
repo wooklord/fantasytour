@@ -665,9 +665,32 @@ numbering (7a–7p); mutations were run before the 7j-gap renumber, so old
 
 | Fix | Mutation applied | Blocks that failed | Guardians |
 |---|---|---|---|
-| Canonical index (`rankIndex`) vs string surgery | `ladder[Number(slot.replace("rank",""))-1]` | 7h (3 checks) | **7h**, plus the hitting zero-padded row in **7n(a)** |
-| Coverage vs count | `complete = picks.length === ladder.length` | 7d, 7f, 7h, 7i, 7m (9 checks) | 7d, 7f, 7h, 7i, 7m |
-| In-ladder hit scoping | `breakdown.every(hit)` | 7f (2 checks) | **7f** and **7n(b)** |
+| Canonical index (`rankIndex`) vs string surgery | `ladder[Number(slot.replace("rank",""))-1]` | **7h (3 checks), 7n(a) (2 checks)** | 7h, 7n(a) — both demonstrated |
+| Coverage vs count | `complete = picks.length === ladder.length` | 7d, 7f, 7h, 7i, 7m (9 checks) | 7d, 7f, 7h, 7i, 7m — demonstrated |
+| In-ladder hit scoping | `breakdown.every(hit)` | **7f (2 checks), 7n(b) (2 checks)** | 7f, 7n(b) — both demonstrated |
+
+Every guardian above is demonstrated by an observed failure rather than
+inferred from reasoning — but the runs are from two different dates, and
+the distinction matters:
+- **Mutations 1 (canonical index) and 3 (in-ladder scoping) were re-run
+  2026-08-13**, specifically because 7n(a) and 7n(b) were written *after*
+  the original runs and were therefore claimed rather than demonstrated.
+  Both now fail as predicted; the failure lists below are from that re-run.
+- **The coverage mutation's failure list is from the original 2026-08-12
+  run and was not re-executed.** That's sufficient here and not a gap: all
+  five of its guardians (7d, 7f, 7h, 7i, 7m) predate the 7n additions and
+  were observed failing in that run, so nothing about it is inferred. It
+  would need re-running only if a *new* test were later claimed to guard it.
+
+Exact failing checks from the 2026-08-13 re-run:
+- **Canonical index**: `7h: "rank02" is hit but scores 0` (`[true,0]` →
+  `[true,4]`), `7h: " rank2" is hit but scores 0` (same), `7h: total …no
+  leaked points` (20 → 28), `7n(a): hitting zero-padded key scores 0, not
+  rank1's value` (0 → 5), `7n(a): and does not inflate the total` (20 → 25).
+- **In-ladder hit scoping**: `7f: orphan does not block perfect` (1 → 0),
+  `7f: total unchanged by orphan` (20 → 15), `7n(b): missed non-canonical
+  row does not block perfect` (1 → 0), `7n(b): total 15 + 5 bonus`
+  (20 → 15).
 
 Notes worth keeping:
 - The coverage mutation failed in **both directions** — 7d caught it firing
@@ -705,21 +728,20 @@ Notes worth keeping:
    no duplicate prevention in the UI or at the DB level today, same as slot
    mode. Pinned so a later edit can't move it silently — but whether that
    behavior is *desired* was never decided.
-3. **Whether any of the 13 current players have already installed the app
-   to a home screen.** The dev will ask them. Affects domain-move timing —
-   installed PWAs eat a reinstall and lose local storage when the origin
-   changes (see the domain-move roadmap bullet in CLAUDE.md).
-4. **7n(a) and 7n(b) are CLAIMED guardians, not demonstrated ones.** Both
-   appear in the guardian column of the table above but in neither failure
-   list, because both were written *after* mutations 1 and 3 had already
-   run and been reverted. The reasoning for why they should catch those
-   mutations is sound and is recorded beside each test — but reasoning is
-   what mutation testing exists to replace, so listing them as guardians on
-   that basis is exactly the proxy-for-the-condition substitution
-   discipline item 5 warns about. **Resolve by re-running mutation 1
-   (`ladder[Number(slot.replace("rank",""))-1]`) and mutation 3
-   (`breakdown.every(hit)`) and updating the failure columns with what
-   actually fails** — or, if that's not done, demote both to "expected to
-   guard, unverified" in the table. Deferred deliberately to the next
-   session rather than done at the end of this one; it is a ~5-minute job
-   with the run-report-revert discipline.
+3. ~~**Whether any of the 13 current players have already installed the app
+   to a home screen.**~~ **ANSWERED 2026-08-13: several have.** The domain
+   move is therefore no longer free — affected players get logged out, lose
+   in-progress pick drafts, and must re-add the app and log in again. Full
+   consequences and the two new scheduling constraints are recorded in the
+   domain-move bullet in CLAUDE.md; the trigger is unchanged and the
+   argument for acting before recruitment is now stronger, not weaker.
+4. ~~**7n(a) and 7n(b) are CLAIMED guardians, not demonstrated ones.**~~
+   **RESOLVED 2026-08-13.** Both were written after mutations 1 and 3 had
+   already run, so they appeared in the guardian column without appearing
+   in any failure list — guardianship asserted from reasoning, which is the
+   very thing mutation testing exists to replace (discipline item 5). Both
+   mutations were re-run and **both tests failed as predicted**: 7n(a)'s
+   hitting zero-padded row scored 5 instead of 0 under string surgery, and
+   7n(b)'s missed non-canonical row suppressed the bonus under a
+   breakdown-wide hit check. The guardian table above now carries the
+   observed failures for both. No follow-up needed.

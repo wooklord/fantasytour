@@ -124,6 +124,63 @@ export function makeFixtures(){
 // a real catalog entry with trailing whitespace (e.g. "Time Escaping ")
 // passes autocomplete's substring filter but used to fail the save-time
 // exact-match check, because the input value got trimmed before comparing
+// Ranked-choice variant: the Casual bracket runs Module B, Official stays on
+// slots. Layered onto makeFixtures() so the two brackets differ ONLY by
+// scoring mode, which is the arrangement that has to work — ranked and slots
+// coexisting in one league.
+//
+// Every slots-mode field is overridden below with a value chosen so that a
+// REGRESSED guard would visibly change it. Those fields have no inputs on
+// screen in ranked mode, so saveConfig()'s read-through-to-state.cfg
+// fallbacks are the only thing preserving them; if one regressed to a bare
+// literal, the save would silently rewrite that field. The values are picked
+// against the literals actually used in saveConfig, not against "looks
+// non-default" — five of makeFixtures()'s defaults coincide exactly with
+// their fallback literal and would make the regression invisible:
+//   flat_points 1, partial_points 1, oneset.flat_points 1  (literal is ?? 1)
+//   allow_duplicates false                                  (literal is false)
+//   wildcards.debut true                                    (literal is ?? true)
+// Hence the deliberately odd-looking values here — debut:false and
+// flat_points:3 are not arbitrary, they're the ones a literal can't fake.
+//
+// `wildcardDebut` is a parameter because that ONE field cannot be covered by
+// any single fixture value. Two regression shapes exist for a boolean guard —
+// dropping it entirely (`$("#c-wcdebut")?.value === "true"`, which yields
+// false when the input is absent) and keeping it with a literal fallback
+// (`… : true`, which yields true). `false` catches the second, `true` catches
+// the first, and there is no third boolean. So the scenario runs twice.
+// wildcards.debut is the only config boolean with this problem, because it's
+// the only one whose natural default is ON: partial_credit and
+// allow_duplicates have falsy literal fallbacks, so setting them TRUE here
+// differs from both regression outcomes and covers both shapes at once.
+// **Do not "tidy" those two to false — that silently removes their coverage.**
+export function makeRankedFixtures({ wildcardDebut = false } = {}){
+  const f = makeFixtures();
+  const casual = f.tables.brackets.find(b => b.kind === "casual");
+  casual.config = {
+    ...casual.config,
+    mode: "ranked_choice",
+    ranked: { ladder: [5, 4, 3, 2, 1] },
+    // slots stays as makeFixtures set it (3 entries) — non-empty, so a []
+    // fallback is visible. Listed here rather than spread silently because
+    // the round-trip assertion depends on it being non-empty.
+    slots: casual.config.slots,
+    flat_picks: 2,          // literal 0
+    flat_points: 3,         // literal 1
+    partial_credit: true,   // literal false
+    partial_points: 2,      // literal 1
+    allow_duplicates: true, // literal false
+    bonuses: { cover: 1, debut: 2, perfect: 5, jamchart: 0 }, // cover/debut literals are 0
+    wildcards: { debut: wildcardDebut }, // see the two-run note above
+    oneset: {
+      slots: casual.config.oneset.slots, // 1 entry, non-empty
+      flat_picks: 1,   // literal 0
+      flat_points: 2,  // literal 1
+    },
+  };
+  return f;
+}
+
 // while the catalog string didn't — see normSong in picks.js. Deliberately
 // NOT layered onto makeFixtures() above: that fixture's slot count/target
 // numbers are load-bearing for several other assertions, and this scenario

@@ -32,6 +32,7 @@
   // src/core/config.js
   var SUPABASE_URL = "https://zdfhglvjxquvkjyvophz.supabase.co";
   var SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
+  var RANKED_CHOICE_ENABLED = false;
   var APP_NAME = "Fantasy Eggy";
   var THEME_COLOR_LIGHT = "#F4ECD9";
   var THEME_COLOR_DARK = "#171233";
@@ -1338,19 +1339,86 @@ Relay this to them now \u2014 it will not be shown again.`);
       toast(esc(e.message));
     }
   }
+  var DEFAULT_RANKED_LADDER = [5, 4, 3, 2, 1];
+  function rankRow(pts, i) {
+    return `<div class="admin-slot">
+    <label style="min-width:4.2rem;opacity:.75">Rank ${i + 1}</label>
+    <input class="rank-pts" type="number" min="0" value="${pts != null ? pts : ""}">
+    <button class="btn ghost small" onclick="this.parentElement.remove(); renumberRanks()">\u2715</button></div>`;
+  }
+  function addRankRow() {
+    const box = $("#rankladder");
+    box.insertAdjacentHTML("beforeend", rankRow("", box.children.length));
+  }
+  function renumberRanks() {
+    [...document.querySelectorAll("#rankladder .admin-slot")].forEach((row, i) => {
+      row.querySelector("label").textContent = `Rank ${i + 1}`;
+    });
+  }
+  function rulesRegionHtml(cfg, mode) {
+    var _a, _b, _c, _d, _e, _f;
+    const b = cfg.bonuses || {};
+    if (mode === "ranked_choice") {
+      const stored = (_b = (_a = cfg.ranked) == null ? void 0 : _a.ladder) != null ? _b : [];
+      const ladder = stored.length ? stored : DEFAULT_RANKED_LADDER;
+      return collapsible("rules-ranked", "Game rules \u2014 ranked choice", `
+      <p class="muted">Players pick one song per rank. A pick scores its rank's value if that
+        song is played anywhere in the show \u2014 position doesn't matter, so a single ladder
+        covers every show regardless of format. There's no separate one-set section here.</p>
+      <div id="rankladder">${ladder.map(rankRow).join("")}</div>
+      <button class="btn ghost small" onclick="addRankRow()">+ add rank</button>
+      <p class="muted" style="margin-top:6px">Row order is the rank \u2014 the first row is Rank 1.
+        Blank rows are dropped when you save. Cover, debut, and "Any Debut" don't apply in
+        this mode; perfect sheet still does and lives under Master switch.</p>
+    `);
+    }
+    const os = cfg.oneset || { slots: [
+      { key: "opener", type: "opener", label: "Opener", points: 2 },
+      { key: "closer", type: "closer", label: "Closer", points: 2 },
+      { key: "cover1", type: "cover_pick", label: "Cover Pick", points: 2 }
+    ], flat_picks: 3, flat_points: 1 };
+    return `
+    ${collapsible("rules-standard", "Game rules \u2014 standard shows", `
+      <p class="muted">Slotted picks (position matters):</p>
+      <div id="slots">${(cfg.slots || []).map((sl) => adminSlotRow(sl, "standard")).join("")}</div>
+      <button class="btn ghost small" onclick="addSlot('slots')">+ add slot</button>
+      <div class="grid2" style="margin-top:14px">
+        <div class="field"><label>Flat picks (count)</label><input id="c-flat" type="number" min="0" value="${cfg.flat_picks}"></div>
+        <div class="field"><label>Points per flat pick</label><input id="c-flatpts" type="number" min="0" value="${cfg.flat_points}"></div>
+        <div class="field"><label>Partial credit (slot song played elsewhere)</label>
+          <select id="c-partial"><option value="true" ${cfg.partial_credit ? "selected" : ""}>On</option><option value="false" ${!cfg.partial_credit ? "selected" : ""}>Off</option></select></div>
+        <div class="field"><label>Partial points</label><input id="c-partpts" type="number" min="0" value="${cfg.partial_points}"></div>
+        <div class="field"><label>Bonus: cover</label><input id="c-bcover" type="number" min="0" value="${b.cover || 0}"></div>
+        <div class="field"><label>Bonus: debut</label><input id="c-bdebut" type="number" min="0" value="${b.debut || 0}"></div>
+        <div class="field"><label>Allow duplicate songs across picks</label>
+          <select id="c-dupes"><option value="false" ${!cfg.allow_duplicates ? "selected" : ""}>No</option><option value="true" ${cfg.allow_duplicates ? "selected" : ""}>Yes</option></select></div>
+        <div class="field"><label>Wildcard: "Any Debut" (hits if any debut is played)</label>
+          <select id="c-wcdebut"><option value="true" ${((_d = (_c = cfg.wildcards) == null ? void 0 : _c.debut) != null ? _d : true) ? "selected" : ""}>Players may pick it</option><option value="false" ${((_f = (_e = cfg.wildcards) == null ? void 0 : _e.debut) != null ? _f : true) ? "" : "selected"}>Off</option></select></div>
+      </div>
+    `)}
+    ${collapsible("rules-oneset", "Game rules \u2014 one-set shows", `
+      <p class="muted">Used for shows toggled to "1 set" below. Festival-tagged shows sync in as 1 set automatically.</p>
+      <div id="slots1">${(os.slots || []).map((sl) => adminSlotRow(sl, "one_set")).join("")}</div>
+      <button class="btn ghost small" onclick="addSlot('slots1')">+ add slot</button>
+      <div class="grid2" style="margin-top:14px">
+        <div class="field"><label>Flat picks (count)</label><input id="c1-flat" type="number" min="0" value="${os.flat_picks}"></div>
+        <div class="field"><label>Points per flat pick</label><input id="c1-flatpts" type="number" min="0" value="${os.flat_points}"></div>
+      </div>
+    `)}`;
+  }
+  function onModeChange() {
+    $("#rules-region").innerHTML = rulesRegionHtml(state.cfg, $("#c-mode").value);
+  }
   async function renderAdmin() {
-    var _a, _b, _c, _d, _e;
+    var _a;
     clearTimersFor("admin");
     state.tab = "admin";
     markTab();
     await loadConfig();
     const cfg = state.cfg;
     const b = cfg.bonuses || {};
-    const os = cfg.oneset || { slots: [
-      { key: "opener", type: "opener", label: "Opener", points: 2 },
-      { key: "closer", type: "closer", label: "Closer", points: 2 },
-      { key: "cover1", type: "cover_pick", label: "Cover Pick", points: 2 }
-    ], flat_picks: 3, flat_points: 1 };
+    const mode = cfg.mode || "slots";
+    const showRanked = RANKED_CHOICE_ENABLED || mode === "ranked_choice";
     const [shows, seasonsA] = await Promise.all([
       fetchShows((q) => q.gte("showdate", new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10)).order("showdate")),
       rpc("get_bracket_seasons", { p_bracket_id: officialBracketId() })
@@ -1380,7 +1448,16 @@ Relay this to them now \u2014 it will not be shown again.`);
           <option value="locked" ${cfg.voting_override === "locked" ? "selected" : ""}>Locked \u2014 nobody can vote</option>
           <option value="open" ${cfg.voting_override === "open" ? "selected" : ""}>Open \u2014 voting open for today + future shows</option>
         </select></div>
-      <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.</p>
+      <div class="field"><label>Scoring mode</label>
+        <select id="c-mode" onchange="onModeChange()">
+          <option value="slots" ${mode !== "ranked_choice" ? "selected" : ""}>Slots \u2014 position matters (opener, closers, encore)</option>
+          ${showRanked ? `<option value="ranked_choice" ${mode === "ranked_choice" ? "selected" : ""}>Ranked choice \u2014 N picks against a fixed ladder</option>` : ""}
+        </select></div>
+      <div class="field"><label>Bonus: perfect sheet (every pick hits)</label><input id="c-bperfect" type="number" min="0" value="${b.perfect || 0}"></div>
+      <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.
+        Perfect sheet lives here rather than with the other bonuses because it's the one
+        bonus that applies in every scoring mode \u2014 it scores the whole sheet being right,
+        not any individual song.</p>
     `)}
     ${collapsible("seasons", "Seasons", `
       <p class="muted">Named date ranges \u2014 shows sort themselves in by date.</p>
@@ -1403,34 +1480,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       <button class="btn ghost small" id="add-rule-btn" onclick="addCustomRule()"
         ${(cfg.custom_rules || []).length >= CUSTOM_RULES_MAX ? "disabled" : ""}>+ add rule</button>
     `)}
-    ${collapsible("rules-standard", "Game rules \u2014 standard shows", `
-      <p class="muted">Slotted picks (position matters):</p>
-      <div id="slots">${(cfg.slots || []).map((sl) => adminSlotRow(sl, "standard")).join("")}</div>
-      <button class="btn ghost small" onclick="addSlot('slots')">+ add slot</button>
-      <div class="grid2" style="margin-top:14px">
-        <div class="field"><label>Flat picks (count)</label><input id="c-flat" type="number" min="0" value="${cfg.flat_picks}"></div>
-        <div class="field"><label>Points per flat pick</label><input id="c-flatpts" type="number" min="0" value="${cfg.flat_points}"></div>
-        <div class="field"><label>Partial credit (slot song played elsewhere)</label>
-          <select id="c-partial"><option value="true" ${cfg.partial_credit ? "selected" : ""}>On</option><option value="false" ${!cfg.partial_credit ? "selected" : ""}>Off</option></select></div>
-        <div class="field"><label>Partial points</label><input id="c-partpts" type="number" min="0" value="${cfg.partial_points}"></div>
-        <div class="field"><label>Bonus: cover</label><input id="c-bcover" type="number" min="0" value="${b.cover || 0}"></div>
-        <div class="field"><label>Bonus: debut</label><input id="c-bdebut" type="number" min="0" value="${b.debut || 0}"></div>
-        <div class="field"><label>Bonus: perfect sheet (every pick hits)</label><input id="c-bperfect" type="number" min="0" value="${b.perfect || 0}"></div>
-        <div class="field"><label>Allow duplicate songs across picks</label>
-          <select id="c-dupes"><option value="false" ${!cfg.allow_duplicates ? "selected" : ""}>No</option><option value="true" ${cfg.allow_duplicates ? "selected" : ""}>Yes</option></select></div>
-        <div class="field"><label>Wildcard: "Any Debut" (hits if any debut is played)</label>
-          <select id="c-wcdebut"><option value="true" ${((_c = (_b = cfg.wildcards) == null ? void 0 : _b.debut) != null ? _c : true) ? "selected" : ""}>Players may pick it</option><option value="false" ${((_e = (_d = cfg.wildcards) == null ? void 0 : _d.debut) != null ? _e : true) ? "" : "selected"}>Off</option></select></div>
-      </div>
-    `)}
-    ${collapsible("rules-oneset", "Game rules \u2014 one-set shows", `
-      <p class="muted">Used for shows toggled to "1 set" below. Festival-tagged shows sync in as 1 set automatically.</p>
-      <div id="slots1">${(os.slots || []).map((sl) => adminSlotRow(sl, "one_set")).join("")}</div>
-      <button class="btn ghost small" onclick="addSlot('slots1')">+ add slot</button>
-      <div class="grid2" style="margin-top:14px">
-        <div class="field"><label>Flat picks (count)</label><input id="c1-flat" type="number" min="0" value="${os.flat_picks}"></div>
-        <div class="field"><label>Points per flat pick</label><input id="c1-flatpts" type="number" min="0" value="${os.flat_points}"></div>
-      </div>
-    `)}
+    <div id="rules-region">${rulesRegionHtml(cfg, mode)}</div>
     <div class="panel">
       <button class="btn" onclick="saveConfig()">Save all rules</button>
       <div class="err" id="cfg-err"></div>
@@ -1713,8 +1763,11 @@ OK = remove + ban \xB7 Cancel = remove only`);
     return list;
   }
   async function saveConfig() {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F;
     $("#cfg-err").textContent = "";
-    const slots = readSlots("slots"), slots1 = readSlots("slots1");
+    const mode = $("#c-mode").value;
+    const slots = $("#slots") ? readSlots("slots") : (_a = state.cfg.slots) != null ? _a : [];
+    const slots1 = $("#slots1") ? readSlots("slots1") : (_c = (_b = state.cfg.oneset) == null ? void 0 : _b.slots) != null ? _c : [];
     for (const arr of [slots, slots1]) {
       const types = arr.filter((sl) => sl.type !== "cover_pick").map((sl) => sl.type);
       if (new Set(types).size !== types.length) {
@@ -1722,28 +1775,67 @@ OK = remove + ban \xB7 Cancel = remove only`);
         return;
       }
     }
+    let ladder;
+    if ($("#rankladder")) {
+      ladder = readLadder();
+      if (ladder === null) return;
+      if (mode === "ranked_choice" && !ladder.length) {
+        $("#cfg-err").textContent = "A ranked-choice bracket needs at least one rank. Add a rank, or switch back to slots.";
+        return;
+      }
+    } else {
+      ladder = (_e = (_d = state.cfg.ranked) == null ? void 0 : _d.ladder) != null ? _e : [];
+    }
     const tiebreakers = readTiebreakers();
     const data = {
       slots,
+      mode,
+      ranked: { ladder },
       custom_rules: readCustomRules(),
-      flat_picks: Number($("#c-flat").value),
-      flat_points: Number($("#c-flatpts").value),
-      partial_credit: $("#c-partial").value === "true",
-      partial_points: Number($("#c-partpts").value),
-      allow_duplicates: $("#c-dupes").value === "true",
+      flat_picks: Number((_h = (_g = (_f = $("#c-flat")) == null ? void 0 : _f.value) != null ? _g : state.cfg.flat_picks) != null ? _h : 0),
+      flat_points: Number((_k = (_j = (_i = $("#c-flatpts")) == null ? void 0 : _i.value) != null ? _j : state.cfg.flat_points) != null ? _k : 1),
+      partial_credit: $("#c-partial") ? $("#c-partial").value === "true" : !!state.cfg.partial_credit,
+      partial_points: Number((_n = (_m = (_l = $("#c-partpts")) == null ? void 0 : _l.value) != null ? _m : state.cfg.partial_points) != null ? _n : 1),
+      allow_duplicates: $("#c-dupes") ? $("#c-dupes").value === "true" : !!state.cfg.allow_duplicates,
       voting_override: $("#c-override").value,
-      bonuses: { cover: Number($("#c-bcover").value), debut: Number($("#c-bdebut").value), perfect: Number($("#c-bperfect").value), jamchart: 0 },
-      wildcards: { debut: $("#c-wcdebut").value === "true" },
-      oneset: { slots: slots1, flat_picks: Number($("#c1-flat").value), flat_points: Number($("#c1-flatpts").value) },
+      bonuses: {
+        cover: Number((_r = (_q = (_o = $("#c-bcover")) == null ? void 0 : _o.value) != null ? _q : (_p = state.cfg.bonuses) == null ? void 0 : _p.cover) != null ? _r : 0),
+        debut: Number((_v = (_u = (_s = $("#c-bdebut")) == null ? void 0 : _s.value) != null ? _u : (_t = state.cfg.bonuses) == null ? void 0 : _t.debut) != null ? _v : 0),
+        // Always rendered (Master switch), in every mode — no guard needed.
+        perfect: Number($("#c-bperfect").value),
+        jamchart: 0
+      },
+      wildcards: { debut: $("#c-wcdebut") ? $("#c-wcdebut").value === "true" : (_x = (_w = state.cfg.wildcards) == null ? void 0 : _w.debut) != null ? _x : true },
+      oneset: {
+        slots: slots1,
+        flat_picks: Number((_B = (_A = (_y = $("#c1-flat")) == null ? void 0 : _y.value) != null ? _A : (_z = state.cfg.oneset) == null ? void 0 : _z.flat_picks) != null ? _B : 0),
+        flat_points: Number((_F = (_E = (_C = $("#c1-flatpts")) == null ? void 0 : _C.value) != null ? _E : (_D = state.cfg.oneset) == null ? void 0 : _D.flat_points) != null ? _F : 1)
+      },
       ...tiebreakers !== void 0 ? { tiebreakers } : {}
     };
     try {
       await rpc("admin_update_config", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_data: data });
       state.cfg = data;
       toast("Rules saved \u2714", "score");
+      const region = $("#rules-region");
+      if (region) region.innerHTML = rulesRegionHtml(data, data.mode);
     } catch (e) {
       $("#cfg-err").textContent = e.message;
     }
+  }
+  function readLadder() {
+    const out = [];
+    for (const inp of document.querySelectorAll("#rankladder .rank-pts")) {
+      const raw = inp.value.trim();
+      if (raw === "") continue;
+      const n = Number(raw);
+      if (!Number.isFinite(n)) {
+        $("#cfg-err").textContent = `"${raw}" isn't a number \u2014 every rank needs a point value, or leave the row blank to drop it.`;
+        return null;
+      }
+      out.push(n);
+    }
+    return out;
   }
   async function saveCutoff(showId, btn) {
     const input = document.querySelector(`input[data-show="${showId}"]`);
@@ -2017,6 +2109,9 @@ OK = remove + ban \xB7 Cancel = remove only`);
     addCustomRule,
     checkRuleCap,
     resetMemberPin,
+    onModeChange,
+    addRankRow,
+    renumberRanks,
     globalCreateLeague,
     globalSearchPlayers,
     globalAppointAdmin,

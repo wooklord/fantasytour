@@ -502,11 +502,32 @@ before assuming a change is covered just because the suite is green:
   - **Why the trigger is recruitment specifically, not "eventually":** the
     manifest's `scope` and `start_url` are origin-bound, so moving *after*
     players install to home screens forces reinstalls and drops their local
-    storage (including in-progress pick drafts). Recruitment hasn't
-    started, so this is nearly free today and stops being free the moment
-    it does. **Worth asking the current 13 players whether any have already
-    installed to home screen** — if some have, they eat a reinstall
-    whenever this happens.
+    storage (including in-progress pick drafts).
+  - **Confirmed 2026-08-13: several of the current players already have the
+    app on their home screen, so this move is NOT free anymore.** What
+    those players actually experience: **logged out** (`ft_session` is
+    origin-scoped), **in-progress pick drafts lost** (`ft_draft_*`), and
+    they must **re-add the app and log in again**. Two scheduling
+    constraints follow, neither optional:
+    1. **Do it in a gap between shows, never while picks are open.**
+       `ft_draft_*` holds partially-filled sheets that vanish with the
+       origin — losing those mid-week is a self-inflicted support problem.
+    2. **Warn players several days ahead that they'll need their PIN.**
+       `ft_session` has kept them signed in continuously, so some have not
+       typed their PIN since they set it. **Expect to run
+       `admin_reset_player_pin` a few times** on the other side; that's a
+       normal outcome here, not a sign anything went wrong.
+  - **The trigger is unchanged and the argument for it is now stronger,
+    not weaker.** The cost scales with player count, so paying it for
+    several of thirteen beats paying it for most of fifty. Waiting makes
+    this monotonically worse.
+  - **The old URL won't break.** Adding a custom domain writes a `CNAME`
+    file and GitHub Pages redirects the `github.io` URL to it, so nothing
+    404s. The likely failure mode for an already-installed app is milder
+    than a break: following a cross-origin redirect typically pops it out
+    of standalone display into an ordinary browser tab, rather than
+    failing outright. Stated as likely rather than certain — worth
+    verifying on one device before announcing anything to players.
   - **Implementation, recorded so it isn't re-derived**: a `CNAME` file in
     the repo containing the subdomain, a DNS `CNAME` record pointing at
     `wooklord.github.io`, then enable HTTPS in the repo's Pages settings.
