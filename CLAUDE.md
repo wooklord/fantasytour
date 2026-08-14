@@ -693,7 +693,13 @@ before assuming a change is covered just because the suite is green:
     switched to a mode the live scorer doesn't run — Casual is already
     switched, deliberately, so the gate had nothing left to guard. Plain
     feature flag now.)
-  - **The show**: 2026-08-14, The Pines Music Park, cutoff `23:00 UTC`.
+  - **The show**: 2026-08-14, The Pines Music Park, cutoff
+    `2026-08-15T03:00:00Z`. (This line read "cutoff `23:00 UTC`" until
+    2026-08-14; corrected against the live `league_shows` row. 23:00 was
+    Eastern, not UTC — the real cutoff is 03:00 UTC the following day, i.e.
+    23:00 ET / 22:00 at the venue, which is Central. Nothing downstream
+    depended on the wrong value, but the ranked-run check below is timed
+    off it, so it's fixed rather than annotated in place.)
     Nothing scores until it goes live (a show only scores once setlist rows
     appear or it's finalized), so this could sit overnight — the deadline is
     showtime, not the cron, which runs every minute regardless.
@@ -721,7 +727,193 @@ before assuming a change is covered just because the suite is green:
     mode; they'd need re-keying back too.
   - This was the **second** item with a 2026-08-14 deadline, alongside the
     Test 3 roster check immediately below. Both landed that day and both are
-    closed — see the DATED DEADLINES table, which now has no open entries.
+    closed — see the DATED DEADLINES table. **A third 2026-08-14 item opened
+    the same evening and is still open: the first-production-run check
+    immediately below.**
+- **⏳ OPEN — FIRST PRODUCTION RUN OF `scoreRankedPicks`, 2026-08-14, The
+  Pines Music Park (Eau Claire, WI), Casual bracket. Verify after the show
+  scores; do not assume it ran correctly.** The deploy batch above proved the
+  scorer *accepts* ranked picks and that a save round-trips. It did not prove
+  a real setlist scores correctly against a real sheet — nothing has scored in
+  ranked mode yet, ever. Written 2026-08-14 ~21:15Z, before the show, while
+  the dev is at it and not thinking about this.
+  - **Resolved identifiers, so nothing has to be re-derived under time
+    pressure**: show id `1765912122` (`showdate 2026-08-14`, venue
+    `The Pines Music Park`, `Eau Claire`/`WI`, `timezone America/Chicago`);
+    Casual is bracket id `2`, league id `1`; `league_shows.cutoff_at` =
+    `2026-08-15T03:00:00Z`; `league_shows.format` = **`one_set`** — **set by
+    hand by the dev minutes before this entry was written; the show was
+    `standard` until then.** Recorded as provenance, not trivia: "tonight
+    happens to be a one-set show" and "the format was toggled immediately
+    before the check was written" license different conclusions if something
+    looks wrong. The first invites treating one-set as a given; the second
+    makes the toggle the first thing to suspect. It also has a real
+    consequence for the OTHER bracket on this show — see the Official
+    orphaned-slots bullet immediately below, which this toggle created. Live
+    Casual config at write time: `mode: "ranked_choice"`,
+    `ranked.ladder: [6,5,4,3,2,1]`, `bonuses.perfect: 10`,
+    `bonuses.cover: 0`, `bonuses.debut: 0`, `wildcards.debut: true`,
+    `allow_duplicates: false`, `partial_credit: true`.
+  - **The checks, and what each one actually discriminates.** Listed with
+    their tells because two of the five look diagnostic and aren't:
+    1. **Breakdown rows pay ladder values (6/5/4/3/2/1), not 1s.** A hit
+       paying `1` where the ladder says `6` is the flat-pick-fallback
+       signature — the deployed scorer isn't dispatching on mode. **Read
+       this per-row, not as "is there a 1 anywhere"**: Rank 6 legitimately
+       pays 1, so a lone 1 on Rank 6 is correct. The tell is **Rank 1
+       paying 1**, or every hit paying the same value regardless of rank.
+       Misses pay 0 in both modes, so only HIT rows carry any signal here.
+    2. **Rows display Rank 1..N in order, not DB order.** This is a
+       **render-time** property, not a stored one — `scoreRankedPicks`
+       emits rows in whatever order `picks` came back from Postgres, and
+       `breakdownSlotInfo()`'s ranked branch (`src/features/picks.js:104`)
+       is what supplies the order at display time. So this check tests the
+       frontend, not the scorer, and it reads `state.cfg` live: it would
+       silently regress if Casual's `mode` were ever flipped back to
+       `slots` with ranked rows still stored. The perfect-sheet `bonus` row
+       isn't in the order list and correctly sorts last.
+    3. **No "Any Debut" row anywhere in a ranked breakdown.** This one is
+       the real mode-dispatch tell of the three bonus-related checks,
+       because **`wildcards.debut` is still `true` in Casual's live
+       config** — it's suppressed at code level by the ranked branch
+       (`scorePicks`, `scoring.js:220`), not by config. If mode dispatch
+       fails, the wildcard comes back. **By contrast, "no cover/debut bonus
+       lines" proves nothing tonight**: `bonuses.cover` and `bonuses.debut`
+       are both already `0` in Casual's config, so those lines would be
+       absent even from a fully broken slots-mode fallback. Don't read
+       their absence as evidence the mode dispatched.
+    4. **Perfect sheet (10 pts) only if every rank was filled AND hit.**
+       Gate is coverage of the distinct positions `rank1..rank6`, not a
+       pick count, and the hit test is scoped to in-ladder rows only — so a
+       stale out-of-ladder row can't block it, and a 3-pick sheet that goes
+       3-for-3 must NOT collect it.
+    5. **Total = sum of hit ladder values + perfect-sheet if earned.**
+  - **`format` is `one_set` tonight, and that must NOT change anything.**
+    Ranked mode ignores the `oneset` config section entirely (locked
+    decision 3: fixed row count regardless of show format; the ladder lives
+    at config top level). Verified in the source at write time — both
+    `slotDefs()` (`picks.js:150`) and `breakdownSlotInfo()` (`picks.js:104`)
+    return from the ranked branch *before* the
+    `format === "one_set" ? cfg.oneset : cfg` selection, and `scorePicks`
+    dispatches to `scoreRankedPicks` before any format logic. Worth
+    knowing because Casual's `oneset` section still carries a stale 3-slot
+    slots-mode config: if a 3-row sheet or opener/cover-shaped breakdown
+    rows appear tonight, that section leaking through is the thing to look
+    at first.
+  - **Recovery if any of it is wrong**: unchanged from the batch above —
+    `reopen` the show (wipes that league's scores, resets status to `live`),
+    fix, `finalize` again.
+  - **How many Casual sheets are in, and are any partial — UNANSWERED as of
+    2026-08-14 21:15Z, with the method recorded.** Could not be read at
+    write time: `get_show_picks` is the only public (anon-grantable) pick
+    read and it returns nothing until `now() >= cutoff_at`, which was still
+    ~5h45m out; `picks` has no public SELECT policy by design. Both
+    confirmed empty by direct call, not assumed. **After 03:00Z the anon key
+    can count it** — `rpc/get_show_picks` with
+    `{"p_bracket_id":2,"p_show_id":1765912122}`. Before then it needs the
+    dev's admin PIN (`admin_pick_status`) or the SQL editor.
+    - **Count distinct rank positions per player, NOT `count(*)`** —
+      discipline item 5, and this is the exact shape it warns about. A
+      player with 6 rows is not necessarily a full sheet: these picks were
+      re-keyed from slot keys to `rank1..rank6` on 2026-08-13, so a stale
+      `opener`/`flat2` row left behind would inflate a count while leaving
+      a real rank position unfilled — and `scoreRankedPicks` scores exactly
+      the coverage condition, not the count, so a count-based expectation
+      would disagree with the scorer precisely in the partial-sheet case
+      the dev flagged as most likely to surprise. Group by
+      `slot in ('rank1'..'rank6')` and list which are missing.
+  - **Casual's stored picks cannot have been disturbed by the format toggle
+    — structural, but NOT empirically confirmed, and the difference
+    matters.** `admin_set_show_format`
+    (`sql/stage_n_reject_pending_pin_change_writes.sql`) is a single
+    `update league_shows set format = ...` — it does not read or write
+    `picks` in any branch, so no `updated_at` can have moved through that
+    path. Ranked mode is separately format-independent at all three layers
+    that could care: `submit_picks`'s ranked branch derives `valid_slots`
+    from `cfg->'ranked'->'ladder'` and never reads `ls.format`,
+    `slotDefs()`/`breakdownSlotInfo()` return before the
+    `one_set ? cfg.oneset : cfg` selection, and `scorePicks` dispatches to
+    `scoreRankedPicks` ahead of any format logic. **What was NOT done: the
+    timestamps were not actually read.** Public pick reads are cutoff-gated
+    (below) and `picks` has no public SELECT policy, so "unchanged" here is
+    an argument from the only writer in that path, not an observation. If
+    that distinction ever matters, read `updated_at` directly.
+- **⚠️ OPEN 2026-08-14 — the standard→one_set toggle ORPHANS two Official
+  slot keys on show `1765912122`, and any Official save after the toggle
+  makes it permanent. Undecided pending a read of the live picks.** Found
+  while recording the entry above; the toggle was made minutes earlier.
+  Casual is unaffected (ranked mode is format-independent); **Official is
+  the exposed bracket, and Test 3 (season id 8, `start_date = end_date =
+  2026-08-14`, roster 14) covers this show, so Official picks are live and
+  scoreable tonight.**
+  - **The two sections do NOT define the same keys** — read from the live
+    `brackets.config` at write time, not from the spec:
+    - `slots` (standard): `opener` 2, `closer` 2, `encore` 2, `cover1` 2,
+      plus `flat_picks: 2` @ `flat_points: 1` → keys `opener, closer,
+      encore, cover1, flat1, flat2` (6 rows, 10 pts + 2 perfect).
+    - `oneset`: `opener` 5, `closer` 5, `cover1` 5, plus `flat_picks: 1` @
+      `flat_points: 2` → keys `opener, closer, cover1, flat1` (4 rows,
+      17 pts + 2 perfect).
+    - **Orphaned by the toggle: `encore` and `flat2`.** The other four keys
+      are common to both sections and still render and prefill normally.
+  - **The toggle also re-prices the whole Official sheet** — slots 2 → 5,
+    flat 1 → 2 — which lands on all 13-14 members regardless of whether
+    they hold an orphaned key. Worth separating from the orphaning when
+    deciding: the re-pricing is arguably intended (a one-set show is
+    supposed to score differently), the orphaning almost certainly isn't.
+  - **`submit_picks` does NOT wipe-then-insert — it upserts per slot, so
+    untouched rows survive and a revert to `standard` restores them.** The
+    writes are `insert ... on conflict (player_id, bracket_id, show_id,
+    slot) do update`. **But there is a trailing catch-all delete** —
+    `delete from picks where player_id/bracket_id/show_id and not (slot =
+    any(select jsonb_array_elements(p_picks)->>'slot'))` — which removes
+    every stored slot absent from the submitted payload. For an orphaned
+    key that is the same destructive outcome by a different route: the
+    one-set sheet has no `encore`/`flat2` input, so any save drops them
+    from the payload and the catch-all deletes them. `submit_picks` would
+    also now reject them on the way back in (`Invalid slot: encore`),
+    since slot mode derives `valid_slots` from `ls.format`.
+  - **Blank rows are filtered client-side before the payload is built**
+    (`savePicks`, `picks.js:342` — `.filter(p => p.songname)`), with no
+    guard on an empty result, so a player who clears every row sends
+    `p_picks: []` and the catch-all deletes ALL their rows for that
+    bracket/show. Not the likely case tonight (the four surviving keys
+    still prefill, so the sheet does not open blank), but it is the worst
+    case and it is reachable.
+  - **Perverse interaction worth knowing before deciding**: perfect-sheet
+    in slot mode gates on `picks.length === expected` (a raw count — the
+    same count-vs-coverage substitution flagged elsewhere in this file),
+    and `expected` is now `3 + 1 = 4`. A player still holding 6 rows can
+    therefore **never** earn Official's perfect bonus for this show, even
+    going 6-for-6 — while a player who re-saves (dropping to 4 rows)
+    becomes eligible again by destroying two picks. The incentive points
+    the wrong way.
+  - **Not a scoring loss for the orphans themselves, if left alone**: an
+    `encore` or `flat2` row with `format = one_set` fails `p.slot in
+    slotPoints`, falls to the flat branch, and pays `flat_points` (2) if
+    the song played anywhere — same or better than the 2 it would have
+    earned as an exact encore, on an easier condition. The harm is the
+    deletion risk and the perfect-sheet lockout, not the per-row value.
+  - **No warning covers this.** The orphan confirm added in `e266a40` is
+    scoped to scoring-MODE changes (`admin.js:679-724`); `toggleFormat`
+    (`admin.js:566`) fires `admin_set_show_format` immediately with no
+    confirm and no orphan check, and toasts success. A format toggle is one
+    click from the Shows & cutoffs panel.
+  - **UNRESOLVED, and it decides the response: whether Official actually
+    has picks for tonight, how many players, and whether anyone has saved
+    since the toggle.** Could not be read at write time — `get_show_picks`
+    is cutoff-gated until `03:00Z` and `picks` has no public SELECT policy.
+    **Note `[]` from PostgREST on a policy-less table is a DENIAL, not an
+    empty result** — verified by reading `picks?select=id&limit=1`
+    unfiltered, which also returned `[]`; don't read either as "no picks."
+    Needs the SQL editor or an admin PIN (`admin_pick_status` returns
+    `picks_count` + `last_saved` per player, which answers both halves).
+  - **Revert is non-destructive and the window is what matters**: setting
+    `format` back to `standard` restores the 6-row sheet and the original
+    point values, and every row not yet deleted by a post-toggle save comes
+    back with it. Damage is confined to Official players who saved between
+    the toggle and the revert. Cutoff is `03:00Z`, so players can still be
+    saving — the window is open until the format is settled either way.
 - **✅ VERIFIED 2026-08-14: Test 3 activated cleanly — the roster fix works
   under a real conflict.** Result of the checkpoint below, which is kept for
   its method. `roster_locked_at = 04:00:04.757Z` (first cron tick after
@@ -1656,12 +1848,15 @@ them.
 |---|---|---|---|
 | **2026-08-14** | ✅ **DONE** | **Ranked-choice deploy batch** — carton-sync deployed, Stage O applied, verified end to end (ranked save accepted, duplicate rejected, slots-mode save unaffected) | "✅ RESOLVED 2026-08-14 — ranked-choice deploy batch…" in Postgres/Supabase gotchas |
 | **2026-08-14** | ✅ **DONE** | **Test 3 roster check** — activated 04:00:04Z, 14 rows, all 13 originals kept their timestamps, the new row landed 0.1s before the stamp | "✅ VERIFIED 2026-08-14: Test 3 activated cleanly…" in Postgres/Supabase gotchas |
+| **2026-08-14** (after the show scores) | ⏳ **OPEN** | **First production run of `scoreRankedPicks`** — Casual bracket, show `1765912122`. Verify ladder values (not 1s), rank ordering, no Any Debut row, perfect-sheet gate, totals. Also: count sheets in / partial sheets, by distinct rank position | "⏳ OPEN — FIRST PRODUCTION RUN OF `scoreRankedPicks`…" in Postgres/Supabase gotchas |
 
-**Both 2026-08-14 items are closed.** The ranked-choice deploy batch met its
-hard showtime cutoff (deployed and applied, verified end to end), and the
-Test 3 roster check was verified at `04:00:04Z`. **No open dated deadlines
-remain in this table** — it is retained as a record and as the place to add
-the next one.
+**Two of the three 2026-08-14 items are closed; one is still open.** The
+ranked-choice deploy batch met its hard showtime cutoff (deployed and applied,
+verified end to end), and the Test 3 roster check was verified at
+`04:00:04Z`. **The open one is the first production run of
+`scoreRankedPicks`** — added the evening of 2026-08-14, after the other two
+closed, and it cannot be resolved until the show actually scores. Nothing
+else in this table is outstanding.
 
 ### PRE-SESSION-5 GATE (walk this list before launching the Facebook League)
 
