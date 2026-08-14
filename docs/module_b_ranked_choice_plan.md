@@ -675,6 +675,25 @@ Not started:
   ranked scoring does not execute against real shows. Deploy is a separate,
   explicitly-approved step, and shouldn't happen before `picks.js` lands.
 
+**Written but NOT applied — `sql/stage_o_ranked_submit_picks.sql`.** The
+presence of that file in `sql/` does not mean it has been run; it is the
+only pending stage file in the directory. `submit_picks` builds its
+`valid_slots` whitelist from `cfg->'slots'`, and a ranked bracket's config
+still carries slots-mode slots (preserved deliberately by admin.js's
+read-through guards), so **every ranked save raises `Invalid slot: rank1`
+today**. Stage O fixes that and additionally forces duplicates off in
+ranked mode (a design decision, not a fix — see the file header for the
+reasoning and the dominant-strategy arithmetic behind it).
+
+It is held rather than applied because applying it alone opens a window
+where `submit_picks` accepts rank slots that no UI can produce and no
+deployed scorer can score. **Deploy it as one batch**: Stage O + `picks.js`
++ `supabase functions deploy carton-sync` + flipping
+`RANKED_CHOICE_ENABLED` to `true`. It is a no-op for every bracket that
+exists today (all slot mode), so there is no benefit to running it early
+and a real cost — the ranked half would sit unverified in production for
+however long `picks.js` takes.
+
 **NEXT STEP**: `src/features/picks.js`.
 
 ## Later work — after `picks.js`, no correctness stake
@@ -784,6 +803,78 @@ their literal fallbacks are falsy — **do not "tidy" those fixture values to
 
 S2 has the worst blast radius of the four: it wipes an entire bracket's slot
 configuration on one save, versus one wrong number for the others.
+
+Two more, covering the ladder validation added when the unreachable
+non-numeric rejection was replaced by empty-row rejection:
+
+| # | Mutation applied | Failing checks | Artifact |
+|---|---|---|---|
+| L1 | `readLadder()` skips empty rows (`if (raw === "") continue;`) — the original behavior | `a blank rank row is rejected with a message naming the rank` (`cfg-err: ""`), `…aborts before any admin_update_config call` (`rpcCalls: 1`), `…leaves the stored config untouched` (`false`), plus knock-on `saving from ranked mode writes mode and ladder` | **`savedLadder: [5,4,2,1]`** |
+| L2 | `saveConfig()`'s `mode === "ranked_choice" && !ladder.length` guard removed | `a ranked bracket with zero ranks is rejected with a message` (`cfg-err: ""`), `…aborts before any admin_update_config call` (`rpcCalls: 1`), `…leaves the stored config untouched` (`false`), plus the same knock-on | **`savedLadder: []`** |
+
+**L1's `savedLadder: [5,4,2,1]` is the clearest artifact in this whole
+document of what silent rank-dropping actually does** — Rank 3 vanished and
+Ranks 4 and 5 shifted up into its place, so a pick submitted for Rank 4 now
+scores Rank 3's value. Nothing tells the player or the admin. Worth keeping
+verbatim: it's far more legible than the prose argument for why blank rows
+must be rejected rather than dropped.
+
+`containerPresent` deliberately stayed green under L2 — it asserts a DOM
+fact (`#rankladder` survives removal of its `.admin-slot` children), which
+is what proves `saveConfig` reached the guard via the `if ($("#rankladder"))`
+branch rather than falling through to the `state.cfg` else-branch. A check
+that failed under L2 would not have distinguished those.
+
+## Server-side trace: what assumes slot mode (2026-08-13)
+
+Run because "no SQL changes needed" was asserted and proved false twice for
+Module B — first for the edge function, then for `submit_picks`. Both claims
+were right about the schema and wrong about the code paths. This is the
+exhaustive version: every `.sql` file in `sql/` (24 of them; an earlier pass
+covered only 7) plus the edge function.
+
+**`submit_picks` is the only server-side function that reads slot-shaped
+config** — `sect->'slots'`, `flat_picks`, `oneset`, `allow_duplicates`. Live
+definition: `sql/stage_n_reject_pending_pin_change_writes.sql`.
+
+Everything else is genuinely mode-agnostic, and for a structural reason
+worth stating: the read RPCs operate on `picks`/`scores` rows, not on
+config. `get_show_picks`, `get_my_picks`, `get_bracket_scores`,
+`get_league_shows`, `get_bracket_seasons`, `can_submit_picks`,
+`_official_gate` and `admin_pick_status` contain **no cfg reads at all**.
+`global_create_league` writes a slots-mode default into new brackets but
+never reads slot shape at runtime; `admin_update_config` writes `p_data`
+verbatim. `index.ts` has zero `cfg.` reads — it passes `bracket.config`
+straight to `scorePicks`, which dispatches on mode before any slot logic,
+so `resolveConfigSection` is unreachable for a ranked bracket.
+
+**Method note, because it's what made the first pass wrong: the live
+definition of a SQL function is the last file that defines it, not the file
+you'd expect.** `admin_pick_status` is defined in `stage_c1_rpcs.sql` AND
+redefined in `stage_i_pick_status_alpha.sql`; only the latter is live, and
+only the latter is clean. Checking `stage_c1`'s copy would have produced a
+false positive. Any future trace has to resolve overrides before drawing
+conclusions.
+
+This proves no *current* function assumes slot mode. It cannot prove a
+future one won't.
+
+## Open question — `lower()` vs `norm()` in the duplicate-pick check (pre-existing, slots mode)
+
+Found while tracing `allow_duplicates`; **out of scope for the ranked-mode
+work and deliberately not fixed there.** `submit_picks` compares songs for
+duplicate detection with `lower(item->>'songname')`, while the scorer
+matches songs with `norm()` (`scoring.js`), which additionally strips
+diacritics and collapses non-alphanumerics. The two disagree: `"voice of
+them all"` is caught as a duplicate of `"Voice of Them All"`, but
+`"Voice Of Them All!"` is not — it saves as a second pick, and the scorer
+then treats both as the same song and pays both.
+
+This is a real bug in **slots mode today**, independent of Module B, and
+the reason it hasn't bitten is presumably that players don't usually add
+punctuation. Fixing it means either teaching the SQL a `norm()` equivalent
+or moving duplicate detection to a place that already has one — a decision
+with its own scope, not a line change.
 
 ## Open questions — recorded as open, not dropped
 
