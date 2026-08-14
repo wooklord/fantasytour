@@ -398,6 +398,38 @@ async function runMode(mode){
     JSON.stringify(ranked.pickBoardLabels) === JSON.stringify(["Rank 1","Rank 2","Rank 3"]),
     `pickBoardLabels: ${JSON.stringify(ranked.pickBoardLabels)}`);
 
+  // Mode-change orphan warning, BOTH directions. Only testing "doesn't
+  // fire" would let a broken picks lookup pass — a query returning [] for
+  // the wrong reason looks identical to a bracket with nothing at risk.
+  check("changing scoring mode warns that existing picks will be orphaned",
+    ranked.modeWarning.fired === true,
+    `confirms seen: ${JSON.stringify(ranked.modeWarning.message)}`);
+  // Matched on structure, not the full string — the copy embeds live counts
+  // and venue names, so asserting the whole message would break on every
+  // wording change and on any fixture edit.
+  check("the warning names how many picks across how many open shows",
+    /\d+ pick(s)? across \d+ open show(s)?/.test(ranked.modeWarning.message),
+    `message: ${JSON.stringify(ranked.modeWarning.message)}`);
+  check("cancelling the warning leaves the stored mode unchanged",
+    ranked.modeWarning.modeAfterCancel === "ranked_choice",
+    `modeAfterCancel: ${ranked.modeWarning.modeAfterCancel}`);
+  check("a routine save that does NOT change mode raises no orphan warning",
+    ranked.confirmsOnUnchangedSave.every(m => !/orphan/i.test(m)),
+    `confirms: ${JSON.stringify(ranked.confirmsOnUnchangedSave)}`);
+
+  // Failed-lookup branch. A save that can't determine the risk must still
+  // present a decision — silently proceeding would make "nothing at risk"
+  // and "couldn't find out" indistinguishable to the admin.
+  check("a failed picks lookup still warns before switching mode",
+    ranked.lookupFailWarning.fired === true,
+    `confirms: ${JSON.stringify(ranked.lookupFailWarning)}`);
+  check("the failed-lookup warning does not invent a pick count",
+    ranked.lookupFailWarning.claimedACount === false,
+    `claimedACount: ${ranked.lookupFailWarning.claimedACount}`);
+  check("cancelling the failed-lookup warning leaves the stored mode unchanged",
+    ranked.lookupFailWarning.modeAfterCancel === "ranked_choice",
+    `modeAfterCancel: ${ranked.lookupFailWarning.modeAfterCancel}`);
+
   // Second run, wildcard flipped. wildcards.debut is the one config boolean
   // no single fixture value can cover: dropping its guard yields false when
   // the input is absent, keeping it with a literal fallback yields true, so

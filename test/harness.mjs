@@ -465,8 +465,14 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
   savedValues.forEach(() => window.addRankRow());
   [...window.document.querySelectorAll("#rankladder .rank-pts")].forEach((inp, i) => { inp.value = savedValues[i]; });
 
+  // Recorded across the good save below, which does NOT change mode — the
+  // orphan warning must stay silent here, or it would fire on every routine
+  // rules edit.
+  const confirmsOnUnchangedSave = [];
+  window.confirm = (m) => { confirmsOnUnchangedSave.push(m); return true; };
   await window.saveConfig();
   await tick(); await tick();
+  window.confirm = () => true;
   const after = tables.brackets.find(b => b.id === casualId).config;
 
   // ---- player-facing side: the ranked pick sheet ----
@@ -561,10 +567,59 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
   const pickBoardHtml = mainHTML(window, mode);
   const pickBoardLabels = [...window.document.querySelectorAll(".pickres .sl")].map(e => e.textContent.trim());
 
+  // Mode-change orphan warning, positive case. The fixture's Casual bracket
+  // has picks on show 1, which is still open — so switching away from
+  // ranked must warn, and cancelling must leave the config untouched.
+  // Tested LAST because it mutates mode; answering false keeps it from
+  // actually landing.
+  clickTab(window, "admin");
+  await tick(); await tick();
+  const modeChangeConfirms = [];
+  window.confirm = (m) => { modeChangeConfirms.push(m); return false; }; // cancel
+  q("c-mode").value = "slots";
+  window.onModeChange();
+  await tick();
+  await window.saveConfig();
+  await tick(); await tick();
+  window.confirm = () => true;
+  const modeWarning = {
+    fired: modeChangeConfirms.some(m => /orphan/i.test(m)),
+    message: modeChangeConfirms.find(m => /orphan/i.test(m)) || "",
+    // Cancelling must not write. Proves the early return, not just the dialog.
+    modeAfterCancel: tables.brackets.find(b => b.id === casualId).config.mode,
+  };
+
+  // Failed-lookup branch: when the pick count can't be fetched, the admin
+  // gets a DIFFERENT confirm rather than a silent pass — "no picks at risk"
+  // and "couldn't check" must not look the same. Exercised by making the
+  // handler throw (the fake turns that into an rpc error, and rpc() throws),
+  // then restoring it. The previous block cancelled, so mode is still
+  // ranked_choice and this can attempt the same switch again.
+  const origShowPicks = RPC_HANDLERS.get_show_picks;
+  RPC_HANDLERS.get_show_picks = async () => { throw new Error("simulated lookup failure"); };
+  const failedLookupConfirms = [];
+  window.confirm = (m) => { failedLookupConfirms.push(m); return false; }; // cancel
+  q("c-mode").value = "slots";
+  window.onModeChange();
+  await tick();
+  await window.saveConfig();
+  await tick(); await tick();
+  window.confirm = () => true;
+  RPC_HANDLERS.get_show_picks = origShowPicks;
+  const lookupFailWarning = {
+    fired: failedLookupConfirms.some(m => /Couldn't check/i.test(m)),
+    // Must be the couldn't-check wording, NOT the orphan one — a lookup
+    // that failed cannot know how many picks are at risk, so claiming a
+    // count would be inventing one.
+    claimedACount: failedLookupConfirms.some(m => /\d+ pick(s)? across/.test(m)),
+    modeAfterCancel: tables.brackets.find(b => b.id === casualId).config.mode,
+  };
+
   return {
     ladderValues, rankLabels, leakedSlotsFields, perfectPresent,
     afterSwitchToSlots, backToRanked, blankRowReject, emptyLadderReject,
     sheet, breakdownLabels, pickBoardLabels, pickBoardHtml,
+    confirmsOnUnchangedSave, modeWarning, lookupFailWarning,
     savedMode: after.mode,
     savedLadder: after.ranked?.ladder,
     // Deep contents, not lengths — a regressed guard returning a different

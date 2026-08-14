@@ -1810,6 +1810,43 @@ OK = remove + ban \xB7 Cancel = remove only`);
     } else {
       ladder = (_e = (_d = state.cfg.ranked) == null ? void 0 : _d.ladder) != null ? _e : [];
     }
+    if (mode !== (state.cfg.mode || "slots")) {
+      let atRisk = [];
+      let lookupFailed = false;
+      try {
+        const shows = await fetchShows((q) => q.gte("showdate", new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10)));
+        const open = (shows || []).filter((sh) => showState(sh) === "open");
+        const counts = await Promise.all(open.map((sh) => rpc("get_show_picks", { p_bracket_id: state.currentBracketId, p_show_id: sh.id }).then((rows) => ({ show: sh, n: (rows || []).length }))));
+        atRisk = counts.filter((c) => c.n > 0);
+      } catch (e) {
+        lookupFailed = true;
+      }
+      if (lookupFailed) {
+        const ok = confirm(
+          `Couldn't check whether existing picks would be orphaned.
+
+Switching mode may erase picks players have already entered for open shows.
+
+Switch anyway?`
+        );
+        if (!ok) return;
+      } else if (atRisk.length) {
+        const nPicks = atRisk.reduce((sum, c) => sum + c.n, 0);
+        const venues = atRisk.map((c) => c.show.venue || "TBA").join(", ");
+        const ok = confirm(
+          `Switching scoring mode will orphan existing picks.
+
+Saved picks are keyed to the current mode \u2014 opener/closer/\u2026 in slots mode, rank1/rank2/\u2026 in ranked. After the switch those keys stop matching, so anyone who has already picked for an open show sees a blank sheet and loses what they entered.
+
+This affects ${nPicks} pick${nPicks === 1 ? "" : "s"} across ${atRisk.length} open show${atRisk.length === 1 ? "" : "s"} (${venues}).
+
+Nothing in the app re-keys them; it has to be done directly in the database.
+
+Switch anyway?`
+        );
+        if (!ok) return;
+      }
+    }
     const tiebreakers = readTiebreakers();
     const data = {
       slots,

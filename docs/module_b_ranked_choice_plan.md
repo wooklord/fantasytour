@@ -694,7 +694,28 @@ exists today (all slot mode), so there is no benefit to running it early
 and a real cost — the ranked half would sit unverified in production for
 however long `picks.js` takes.
 
-**NEXT STEP**: `src/features/picks.js`.
+**Landed after "picks.js done" — new scope, not in the original plan:**
+- **Mode-change orphan warning** (`saveConfig`). Prompted by a live
+  incident on 2026-08-13: Casual was switched to `ranked_choice` while a
+  player had six slot-keyed picks on an open show, the sheet went blank,
+  and the picks were re-keyed by hand with direct SQL. Confirms before
+  writing a mode change when picks exist for open shows, with a separate
+  confirm when the lookup itself fails. Mutation-verified (M1–M4 below).
+  Deliberately on `saveConfig` rather than the select's `onchange` — the
+  select only re-renders locally and writes nothing, so a confirm there
+  would warn about a non-event.
+- **Casual migrated to ranked in production**: ladder `[6,5,4,3,2,1]`, the
+  six picks re-keyed `rank1..rank6`, `mode` flipped last. Slots-mode config
+  left intact underneath, so a revert is one field (though the re-keyed
+  picks would need reversing too).
+- **`RANKED_CHOICE_ENABLED` is now `true` and committed** — it was a deploy
+  gate against switching a bracket to a mode the live scorer doesn't run;
+  that switch has happened deliberately, so it is a plain feature flag now.
+
+**NEXT STEP**: the deploy batch, before the 2026-08-14 show goes live —
+`supabase functions deploy carton-sync`, then run
+`sql/stage_o_ranked_submit_picks.sql`. See the dated-deadline entry in
+CLAUDE.md for what goes wrong if the show scores first.
 
 ## Later work — after `picks.js`, no correctness stake
 
@@ -971,6 +992,42 @@ choosing a query (`"d"`) that both triggers the wildcard condition AND
 matches real fixture songs — `"debut"` matches nothing in the catalog, so
 the dropdown would not have rendered at all and the assertion would have
 been trivially true.
+
+## Mutation-testing results — mode-change orphan warning (2026-08-13)
+
+Added after a live incident: Casual was switched to `ranked_choice` while a
+player already had six slot-keyed picks on an open show. Those keys match
+nothing a ranked sheet renders, so the sheet went blank and the picks had to
+be re-keyed by hand with direct SQL. The warning exists so that is a
+decision rather than a discovery.
+
+| # | Mutation applied | Failing checks | Note |
+|---|---|---|---|
+| M1 | mode-changed gate removed (`if (true)`) | `a routine save that does NOT change mode raises no orphan warning` | Without it every rules edit nags |
+| M2 | picks lookup yields nothing (`atRisk = []`) | `…warns that existing picks will be orphaned` (`confirms seen: ""`), `…names how many picks across how many open shows`, **and** `cancelling…leaves the stored mode unchanged` (`modeAfterCancel: slots`) | **The silent-failure case.** The third failure is the knock-on that matters: with no dialog there is nothing to cancel, so the mode change lands silently — exactly the damage |
+| M3 | `if (!ok) return;` removed after the orphan confirm | `cancelling the warning leaves the stored mode unchanged` only | Dialog checks stayed green, so that check protects the early return independently rather than only as M2's knock-on |
+| M4 | failed-lookup branch removed | `a failed picks lookup still warns…` (`fired: false`), `cancelling the failed-lookup warning…` | Orphan checks stayed green — that path genuinely unaffected |
+
+**Both directions are tested on purpose.** Asserting only "no dialog when
+nothing is at risk" would pass with a completely broken picks lookup, since
+a query returning `[]` for the wrong reason is indistinguishable from a
+bracket with nothing to lose. M2 is what proves it isn't.
+
+**The failed-lookup branch is covered rather than documented as a gap.** It
+was cheap to exercise: `test/fakeSupabase.mjs` converts a throwing handler
+into an rpc error, and `rpc()` throws on error, so temporarily swapping
+`RPC_HANDLERS.get_show_picks` for one that throws reaches the catch. The
+branch exists because a failed lookup and "nothing at risk" would otherwise
+look identical to the admin — the same silent-pass shape this file keeps
+running into. `claimedACount` asserts the couldn't-check wording never
+invents a number, since a failed lookup cannot know one; it is not
+independently mutation-protected, and can only fail if the wrong dialog
+fires, which is the right shape for that check.
+
+**Assertions match on structure, not the full string** (`/\d+ pick(s)?
+across \d+ open show(s)?/`) — the copy embeds live counts and venue names,
+so a whole-string match would break on every wording change and on any
+fixture edit.
 
 ## Open questions — recorded as open, not dropped
 

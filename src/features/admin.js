@@ -2,7 +2,7 @@ import { $, esc, footerHtml } from "../core/dom.js";
 import { db, rpc, edgeFn } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
 import { fetchShows } from "../core/leagueShows.js";
-import { fmtDate, clearTimersFor } from "../core/format.js";
+import { fmtDate, clearTimersFor, showState } from "../core/format.js";
 import { toast } from "../core/toast.js";
 import { loadConfig, loadSongs } from "../core/session.js";
 import { markTab } from "../core/layout.js";
@@ -675,6 +675,62 @@ export async function saveConfig(){
     }
   } else {
     ladder = state.cfg.ranked?.ladder ?? [];
+  }
+  // Changing scoring mode orphans existing picks: they're stored keyed by
+  // slot ("opener"/"closer"/… in slots mode, "rank1"/"rank2"/… in ranked),
+  // and after a switch those keys match nothing the new sheet renders. The
+  // player opens a blank sheet and their entries are simply gone. This is
+  // not hypothetical — it happened on 2026-08-13, and one player's six
+  // picks had to be re-keyed by hand with direct SQL.
+  //
+  // The confirm lives HERE rather than on the select's onchange, on purpose.
+  // onModeChange only re-renders the rules region locally; nothing a player
+  // can see has changed and nothing is written, so a confirm there would
+  // warn about a non-event and would fight an admin merely browsing the
+  // dropdown. It would also contradict onModeChange's deliberate refusal to
+  // touch state.cfg. Writing the config is the moment of consequence, and
+  // cancelling here is clean: return early, nothing persisted, the select
+  // keeps the admin's choice so they can simply change it back.
+  //
+  // Only asks when there is something to lose — a bracket whose open shows
+  // have no picks yet shouldn't nag. The lookup is gated on the mode
+  // actually changing, so it stays off the normal save path entirely.
+  if (mode !== (state.cfg.mode || "slots")){
+    let atRisk = [];
+    let lookupFailed = false;
+    try{
+      const shows = await fetchShows(q => q.gte("showdate", new Date(Date.now()-2*864e5).toISOString().slice(0,10)));
+      const open = (shows||[]).filter(sh => showState(sh) === "open");
+      const counts = await Promise.all(open.map(sh =>
+        rpc("get_show_picks", { p_bracket_id: state.currentBracketId, p_show_id: sh.id })
+          .then(rows => ({ show: sh, n: (rows||[]).length }))));
+      atRisk = counts.filter(c => c.n > 0);
+    }catch(e){ lookupFailed = true; }
+    // A failed lookup gets its own confirm rather than falling through
+    // silently. Not blocking the save on a network hiccup is the right
+    // default, but "no picks are at risk" and "couldn't find out" must not
+    // look the same to the admin — that's the difference between an
+    // informed decision and an invisible pass.
+    if (lookupFailed){
+      const ok = confirm(
+        `Couldn't check whether existing picks would be orphaned.\n\n` +
+        `Switching mode may erase picks players have already entered for open shows.\n\n` +
+        `Switch anyway?`);
+      if (!ok) return;
+    } else if (atRisk.length){
+      const nPicks = atRisk.reduce((sum, c) => sum + c.n, 0);
+      const venues = atRisk.map(c => c.show.venue || "TBA").join(", ");
+      const ok = confirm(
+        `Switching scoring mode will orphan existing picks.\n\n` +
+        `Saved picks are keyed to the current mode — opener/closer/… in slots mode, ` +
+        `rank1/rank2/… in ranked. After the switch those keys stop matching, so anyone ` +
+        `who has already picked for an open show sees a blank sheet and loses what they entered.\n\n` +
+        `This affects ${nPicks} pick${nPicks === 1 ? "" : "s"} across ` +
+        `${atRisk.length} open show${atRisk.length === 1 ? "" : "s"} (${venues}).\n\n` +
+        `Nothing in the app re-keys them; it has to be done directly in the database.\n\n` +
+        `Switch anyway?`);
+      if (!ok) return;
+    }
   }
   const tiebreakers = readTiebreakers();
   const data = {
