@@ -889,12 +889,53 @@ before assuming a change is covered just because the suite is green:
     going 6-for-6 — while a player who re-saves (dropping to 4 rows)
     becomes eligible again by destroying two picks. The incentive points
     the wrong way.
-  - **Not a scoring loss for the orphans themselves, if left alone**: an
-    `encore` or `flat2` row with `format = one_set` fails `p.slot in
-    slotPoints`, falls to the flat branch, and pays `flat_points` (2) if
-    the song played anywhere — same or better than the 2 it would have
-    earned as an exact encore, on an easier condition. The harm is the
-    deletion risk and the perfect-sheet lockout, not the per-row value.
+  - **The orphans are an EQUITY problem, not a scoring loss — and that
+    framing is the whole decision.** An `encore` or `flat2` row with
+    `format = one_set` fails `p.slot in slotPoints`, falls to the flat
+    branch, and pays `flat_points` (2) if the song played anywhere. So the
+    two players holding 6 rows have a **21-point ceiling against everyone
+    else's 19**, on the easiest condition in the game — no position
+    required — purely because of when they last saved relative to an admin
+    toggle. **An earlier draft of this file got this backwards**, reasoning
+    from those two players' individual ceilings (21 > 19, so leave them
+    alone) and concluding the right advice was "don't touch your sheet."
+    That optimises the wrong axis: the question is not whether the accident
+    helps its beneficiaries, it's that four other players cannot earn those
+    points at all. **Resolution: drop the orphans.** The dev — one of the
+    two affected — made the call to level the ceiling rather than keep the
+    advantage.
+  - **A re-save DOES delete the orphans, and it will not error. Verified at
+    both ends 2026-08-14 before two players were asked to do it, rather
+    than assumed from the catch-all's wording.**
+    - **Client**: `renderPickSheet` builds rows from `slotDefs(show.format)`
+      (`picks.js:169`), which under one_set returns only
+      `opener/closer/cover1/flat1` — so **no input element exists** for
+      `encore`/`flat2`, and `savePicks`' `querySelectorAll(".slotline
+      input")` cannot pick them up.
+    - **Server**: the payload therefore carries 4 slots; the catch-all
+      `delete ... and not (slot = any(select jsonb_array_elements(p_picks)
+      ->>'slot'))` matches `encore`/`flat2` and removes them.
+    - **The failure mode worth ruling out was the opposite one**: if the
+      sheet had rendered rows for stored-but-invalid slots, the payload
+      would have included `encore` and `submit_picks` would have raised
+      `Invalid slot: encore`, failing the whole save. It doesn't — the key
+      never reaches the server, so the validation never fires.
+    - **The Save button is not gated on dirty state** (`picks.js:236` — no
+      `disabled` attribute), so "open it and press Lock 'em in without
+      changing anything" genuinely works.
+    - **Preconditions that would make it fail, all checkable by the player
+      in one glance**: picks must still be open (cutoff `03:00Z`), and the
+      player must pass `_official_gate` for season 8. Both collapse to a
+      single self-check — `openShow()` renders `renderIneligible` instead
+      of the sheet when the gate fails, so **if they can see the sheet,
+      the save will go through.**
+    - **Equivalent alternative, more reliable under time pressure**: a
+      direct `delete from picks where bracket_id = 1 and show_id =
+      1765912122 and slot in ('encore','flat2')` reaches the identical end
+      state (4 rows, `expected = 4`, perfect-sheet eligible) without
+      depending on two people acting before cutoff. The only difference is
+      cosmetic — a re-save also bumps `updated_at` on the four surviving
+      rows.
   - **No warning covers this.** The orphan confirm added in `e266a40` is
     scoped to scoring-MODE changes (`admin.js:679-724`); `toggleFormat`
     (`admin.js:566`) fires `admin_set_show_format` immediately with no
@@ -2022,12 +2063,14 @@ key sets differ.
 remembering.** Two Official players held 6 rows against everyone else's 4,
 purely because of when they last saved relative to an admin toggle. Their
 two stranded rows fall to the flat branch and pay `flat_points` (2) each on
-the *easiest* condition in the game — played anywhere, no position required
-— while the perfect-sheet bonus they forfeit is only +2. So the accident was
-worth **up to 4 extra points**, and the correct advice to those two players
-was "don't touch your sheet," which is not a rule anyone designed. Full
-detail in the "⚠️ OPEN 2026-08-14" bullet in the Postgres/Supabase gotchas
-section.
+the *easiest* condition in the game — played anywhere, no position required.
+So two players had a **21-point ceiling against the other four's 19**, worth
+up to 4 points nobody else could earn, from nothing but save timing against
+an admin toggle. **Resolved by deleting the stranded rows** — the ceiling was
+levelled rather than left standing, a call made by the dev, who was one of
+the two beneficiaries. Full detail in the "⚠️ OPEN 2026-08-14" bullet in the
+Postgres/Supabase gotchas section, including the verification that a re-save
+really does drop them.
 
 **Three candidate shapes for slot mode, not mutually exclusive. Read the
 caveats — two of the three do less than they look like they do:**
