@@ -222,8 +222,8 @@ function rulesRegionHtml(cfg, mode){
       <div id="rankladder">${ladder.map(rankRow).join("")}</div>
       <button class="btn ghost small" onclick="addRankRow()">+ add rank</button>
       <p class="muted" style="margin-top:6px">Row order is the rank — the first row is Rank 1.
-        Blank rows are dropped when you save. Cover, debut, and "Any Debut" don't apply in
-        this mode; perfect sheet still does and lives under Master switch.</p>
+        Every rank needs a value — use ✕ to remove a rank. Cover, debut, and "Any Debut"
+        don't apply in this mode; perfect sheet still does and lives under Master switch.</p>
     `);
   }
   const os = cfg.oneset || { slots:[
@@ -720,27 +720,42 @@ export async function saveConfig(){
 // Row position is the rank, so order here is load-bearing: querySelectorAll
 // returns document order, which is the visual order of the rows.
 //
-// Returns null (NOT []) on invalid input, after writing the reason to
-// #cfg-err — saveConfig aborts on null, so nothing partial is ever written.
-// The two rejections are deliberately different:
-//   - blank rows are DROPPED, not rejected. Number("") is 0, so a blank kept
-//     as-is would become a real rank worth nothing that still counts toward
-//     perfect-sheet coverage — a player fills it, hits it, scores 0, and the
-//     sheet still reads complete.
-//   - non-numeric text is REJECTED. Number("abc") is NaN; the scorer floors
-//     that to 0 defensively, but a silently-zeroed rank is still a broken
-//     config the admin should be told about rather than shipped.
-// Survivors are coerced with Number() so the stored jsonb is numeric — a DOM
+// EVERY RENDERED ROW MUST CARRY A VALUE. Removing a rank means clicking the
+// row's ✕, not clearing its field — a rank's position is meaningful, so a
+// blank row in the middle was never a coherent way to express deletion.
+//
+// Why empty and garbage produce the same message, which looks lazy and
+// isn't: the input is type="number", and both real browsers and JSDOM
+// coerce unparseable content to "" at `.value` (verified directly — setting
+// .value = "abc", and even setAttribute("value","abc"), both read back as
+// ""). So "empty because the admin cleared it" and "empty because the admin
+// typed 1.2.3" are literally indistinguishable here, and `!Number.isFinite`
+// is unreachable through the UI for that reason. `validity.badInput` is the
+// standard way to tell them apart, but JSDOM reports it false
+// unconditionally, so anything built on it would be untestable. Rejecting
+// empty covers both causes with a message that's correct either way, which
+// is strictly better than the alternative it replaced: silently dropping
+// the row, leaving the admin to notice a rank had vanished.
+//
+// Returns null (NOT []) on rejection, after writing the reason to #cfg-err —
+// saveConfig aborts on null, so nothing partial is ever written. Accepted
+// values are coerced with Number() so the stored jsonb is numeric; a DOM
 // scrape yields strings, and leaving them would make the scorer fix types on
 // every scoring pass.
 function readLadder(){
   const out = [];
-  for (const inp of document.querySelectorAll("#rankladder .rank-pts")){
-    const raw = inp.value.trim();
-    if (raw === "") continue;
+  const rows = [...document.querySelectorAll("#rankladder .rank-pts")];
+  for (let i = 0; i < rows.length; i++){
+    const raw = rows[i].value.trim();
+    if (raw === ""){
+      $("#cfg-err").textContent = `Rank ${i+1} has no value — enter a number or remove the row.`;
+      return null;
+    }
     const n = Number(raw);
+    // Unreachable from the UI (see above) but kept for a value that arrives
+    // some other way — a devtools edit, or a future input type change.
     if (!Number.isFinite(n)){
-      $("#cfg-err").textContent = `"${raw}" isn't a number — every rank needs a point value, or leave the row blank to drop it.`;
+      $("#cfg-err").textContent = `Rank ${i+1} isn't a number — enter a number or remove the row.`;
       return null;
     }
     out.push(n);

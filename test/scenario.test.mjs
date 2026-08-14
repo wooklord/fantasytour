@@ -288,6 +288,35 @@ async function runMode(mode){
   check("switching back to ranked restores the ladder editor",
     ranked.backToRanked.hasLadder && !ranked.backToRanked.hasSlots,
     `backToRanked: ${JSON.stringify(ranked.backToRanked)}`);
+  // Blank rank rejection. Every rendered row must carry a value — clearing a
+  // field is not how a rank is removed (that's the ✕), and dropping it
+  // silently would shift every rank beneath it up one with nothing telling
+  // the admin. Same path covers browser-mangled input, since type="number"
+  // coerces unparseable content to "" before readLadder ever sees it.
+  check("a blank rank row is rejected with a message naming the rank",
+    /Rank 3 has no value/.test(ranked.blankRowReject.err),
+    `cfg-err: "${ranked.blankRowReject.err}"`);
+  check("a blank rank row aborts before any admin_update_config call",
+    ranked.blankRowReject.rpcCalls === 0,
+    `rpcCalls: ${ranked.blankRowReject.rpcCalls}`);
+  check("a blank rank row leaves the stored config untouched",
+    ranked.blankRowReject.configUnchanged === true,
+    `configUnchanged: ${ranked.blankRowReject.configUnchanged}`);
+  // Removing every rank via ✕ is reachable, and hits saveConfig's own guard
+  // rather than readLadder's per-row one. containerPresent proves which
+  // branch ran — see the comment in the harness.
+  check("emptying the ladder still leaves #rankladder in the DOM (so the empty guard runs)",
+    ranked.emptyLadderReject.containerPresent === true,
+    `containerPresent: ${ranked.emptyLadderReject.containerPresent}`);
+  check("a ranked bracket with zero ranks is rejected with a message",
+    /at least one rank/.test(ranked.emptyLadderReject.err),
+    `cfg-err: "${ranked.emptyLadderReject.err}"`);
+  check("a zero-rank ladder aborts before any admin_update_config call",
+    ranked.emptyLadderReject.rpcCalls === 0,
+    `rpcCalls: ${ranked.emptyLadderReject.rpcCalls}`);
+  check("a zero-rank ladder leaves the stored config untouched",
+    ranked.emptyLadderReject.configUnchanged === true,
+    `configUnchanged: ${ranked.emptyLadderReject.configUnchanged}`);
   check("saving from ranked mode writes mode and ladder",
     ranked.savedMode === "ranked_choice" && JSON.stringify(ranked.savedLadder) === JSON.stringify([5,4,3,2,1]),
     `savedMode: ${ranked.savedMode}, savedLadder: ${JSON.stringify(ranked.savedLadder)}`);

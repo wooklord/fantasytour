@@ -137,6 +137,16 @@ export function scoreRankedPicks({ picks, songs, cfg }) {
   // docs/module_b_ranked_choice_plan.md. Coercing to 0 rather than dropping
   // the rung is also deliberate: dropping would shorten the ladder and
   // silently renumber every position beneath it.
+  //
+  // NOT DEAD CODE, despite the admin UI no longer being able to produce a
+  // non-finite rung: the ladder editor's inputs are type="number", which
+  // coerces unparseable content to "" before it is ever read, and
+  // readLadder() now rejects empty rows outright. This coercion defends the
+  // other way in — a hand-crafted RPC call, since admin_update_config takes
+  // arbitrary JSON with no schema validation, or a config written before
+  // that validation existed. Reaching a NaN here would put a NaN in
+  // scores.points and poison every standings sum for that player, so the
+  // floor stays regardless of what the UI can or can't emit.
   const ladder = (cfg.ranked?.ladder ?? []).map((v) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;

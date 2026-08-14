@@ -1368,8 +1368,8 @@ Relay this to them now \u2014 it will not be shown again.`);
       <div id="rankladder">${ladder.map(rankRow).join("")}</div>
       <button class="btn ghost small" onclick="addRankRow()">+ add rank</button>
       <p class="muted" style="margin-top:6px">Row order is the rank \u2014 the first row is Rank 1.
-        Blank rows are dropped when you save. Cover, debut, and "Any Debut" don't apply in
-        this mode; perfect sheet still does and lives under Master switch.</p>
+        Every rank needs a value \u2014 use \u2715 to remove a rank. Cover, debut, and "Any Debut"
+        don't apply in this mode; perfect sheet still does and lives under Master switch.</p>
     `);
     }
     const os = cfg.oneset || { slots: [
@@ -1825,12 +1825,16 @@ OK = remove + ban \xB7 Cancel = remove only`);
   }
   function readLadder() {
     const out = [];
-    for (const inp of document.querySelectorAll("#rankladder .rank-pts")) {
-      const raw = inp.value.trim();
-      if (raw === "") continue;
+    const rows = [...document.querySelectorAll("#rankladder .rank-pts")];
+    for (let i = 0; i < rows.length; i++) {
+      const raw = rows[i].value.trim();
+      if (raw === "") {
+        $("#cfg-err").textContent = `Rank ${i + 1} has no value \u2014 enter a number or remove the row.`;
+        return null;
+      }
       const n = Number(raw);
       if (!Number.isFinite(n)) {
-        $("#cfg-err").textContent = `"${raw}" isn't a number \u2014 every rank needs a point value, or leave the row blank to drop it.`;
+        $("#cfg-err").textContent = `Rank ${i + 1} isn't a number \u2014 enter a number or remove the row.`;
         return null;
       }
       out.push(n);

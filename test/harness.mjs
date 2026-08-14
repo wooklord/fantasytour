@@ -403,13 +403,63 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
   await tick();
   const backToRanked = { hasLadder: q("rankladder") !== null, hasSlots: q("slots") !== null };
 
+  // Blank-row rejection, before the good save below (so the "unchanged"
+  // assertion compares against the pre-save fixture, not a saved copy).
+  // Every rendered row must carry a value — clearing one is not how a rank
+  // gets removed, and silently dropping it would shift every rank beneath it
+  // up one with nothing telling the admin. Also covers the browser-mangled
+  // case: type="number" coerces unparseable input to "" before readLadder
+  // ever sees it, so this is the same code path.
+  const rowsNow = window.document.querySelectorAll("#rankladder .rank-pts");
+  // Captured, not hardcoded — the test shouldn't know what the fixture ladder
+  // contains, or it breaks the day makeRankedFixtures changes.
+  const clearedOriginal = rowsNow[2].value;
+  rowsNow[2].value = "";
+  const callsBeforeBlankSave = calls.filter(c => c.type === "rpc" && c.fn === "admin_update_config").length;
+  await window.saveConfig();
+  await tick(); await tick();
+  const blankRowReject = {
+    err: q("cfg-err")?.textContent || "",
+    rpcCalls: calls.filter(c => c.type === "rpc" && c.fn === "admin_update_config").length - callsBeforeBlankSave,
+    configUnchanged: JSON.stringify(tables.brackets.find(b => b.id === casualId).config) === JSON.stringify(before),
+  };
+  // Restore the cleared row so the round-trip save below is a clean one.
+  rowsNow[2].value = clearedOriginal;
+
+  // Zero rows: the ✕ button can empty the ladder entirely, and saveConfig
+  // has its own guard for that separate from readLadder's per-row check.
+  // Confirmed rather than assumed — a ranked bracket with no ranks would be
+  // silently unusable, players filling a sheet that scores nothing.
+  const savedRows = [...window.document.querySelectorAll("#rankladder .admin-slot")];
+  const savedValues = [...window.document.querySelectorAll("#rankladder .rank-pts")].map(i => i.value);
+  savedRows.forEach(r => r.remove());
+  const callsBeforeEmptySave = calls.filter(c => c.type === "rpc" && c.fn === "admin_update_config").length;
+  await window.saveConfig();
+  await tick(); await tick();
+  const emptyLadderReject = {
+    err: q("cfg-err")?.textContent || "",
+    rpcCalls: calls.filter(c => c.type === "rpc" && c.fn === "admin_update_config").length - callsBeforeEmptySave,
+    configUnchanged: JSON.stringify(tables.brackets.find(b => b.id === casualId).config) === JSON.stringify(before),
+    // Which branch saveConfig takes here is asserted, not inferred. Only the
+    // .admin-slot children were removed, so #rankladder should still exist
+    // with zero rows — that keeps saveConfig on the `if ($("#rankladder"))`
+    // branch, where readLadder returns [] and the "needs at least one rank"
+    // guard fires. If the container were gone instead, saveConfig would take
+    // the else branch, fall back to state.cfg's ladder, save successfully,
+    // and this whole case would prove nothing while still looking green.
+    containerPresent: q("rankladder") !== null,
+  };
+  // Rebuild the ladder for the real save below.
+  savedValues.forEach(() => window.addRankRow());
+  [...window.document.querySelectorAll("#rankladder .rank-pts")].forEach((inp, i) => { inp.value = savedValues[i]; });
+
   await window.saveConfig();
   await tick(); await tick();
   const after = tables.brackets.find(b => b.id === casualId).config;
 
   return {
     ladderValues, rankLabels, leakedSlotsFields, perfectPresent,
-    afterSwitchToSlots, backToRanked,
+    afterSwitchToSlots, backToRanked, blankRowReject, emptyLadderReject,
     savedMode: after.mode,
     savedLadder: after.ranked?.ladder,
     // Deep contents, not lengths — a regressed guard returning a different

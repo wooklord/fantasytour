@@ -441,16 +441,31 @@ existing shape) with `mode:"ranked_choice"`, `ranked:{ladder:[5,4,3,2,1]}`,
 and its comment points here for the half a scorer structurally cannot do.
 When `readLadder()` is built in `admin.js`, it must:
 
-1. **Drop blank rows entirely** rather than saving them. `Number("")` is
-   `0`, not `NaN`, so a blank row silently becomes a real ladder position
-   worth nothing that still counts toward perfect-sheet coverage — a player
-   fills it, hits it, scores 0, and the sheet still reads complete.
-2. **Reject non-numeric input** with a message in `#cfg-err` instead of
-   saving. `Number("abc")` is `NaN`; before the scorer's coercion that
-   produced a `NaN` `total`, which reaches `scores.points` and poisons every
-   standings sum for that player for the season. The scorer now floors that
-   to 0, but a silently-zeroed rung is still a broken config an admin should
-   be told about rather than shipped.
+1. **Reject any row with no value** — do not drop it. (This requirement was
+   originally written as "drop blank rows" and is corrected here; see the
+   note below for why the original was both wrong and unimplementable.)
+   `Number("")` is `0`, so a blank row saved as-is would become a real
+   ladder position worth nothing that still counts toward perfect-sheet
+   coverage — a player fills it, hits it, scores 0, and the sheet still
+   reads complete. Dropping it instead is no better: the row silently
+   vanishes on save and every rank below it shifts up one, with nothing
+   telling the admin. So every rendered row must carry a value, and
+   removing a rank is done with the row's ✕ button.
+2. **Folded into #1, not a separate rule.** This was originally "reject
+   non-numeric input with a message" — but that is **impossible to
+   implement as written** on a `type="number"` input, which is what the
+   ladder editor uses. Both real browsers and JSDOM coerce unparseable
+   content to `""` at `.value` (verified: `.value = "abc"` and
+   `setAttribute("value","abc")` both read back `""`), so `readLadder()`
+   can never observe non-numeric text and a `!Number.isFinite` branch is
+   unreachable from the UI. "Empty because cleared" and "empty because the
+   admin typed `1.2.3`" are indistinguishable at `.value`.
+   `validity.badInput` distinguishes them in a real browser but JSDOM
+   reports it `false` unconditionally, so code built on it could not be
+   tested here. Rejecting empty covers both causes with a message that is
+   correct either way. The non-finite branch is kept in `readLadder()` only
+   as a guard against a value arriving some other way (a devtools edit, a
+   future input-type change) — not as a UI path.
 3. **Coerce survivors with `Number()`** so the stored jsonb is numeric.
    `readLadder()` scrapes DOM input values, which are strings, so without
    this the stored config is `["5","4","3","2","1"]` and the scorer is left
@@ -714,6 +729,34 @@ Notes worth keeping:
   the 1- and 2-pick cases. (Derived from the observed failure lists rather
   than separately re-verified after the renumber — if this matters, re-run
   the mutation rather than trusting this line.)
+
+## Mutation-testing results — admin frontend (2026-08-13)
+
+Same discipline as the scoring-engine table above: each guard was reverted in
+turn and `npm test` re-run, so every entry is an observed failure rather than
+reasoning. All four reverted cleanly afterwards.
+
+| # | Mutation applied | Failing check | Caught by |
+|---|---|---|---|
+| S1 | scalar guard → literal: `Number($("#c-bcover")?.value ?? 0)` | `preserves every scalar slots-mode field` (`cover: 1→0`) | run 1 |
+| S2 | array guard → unconditional: `readSlots("slots")` | `preserves slots array contents` (3 slots → `[]`) | run 1 |
+| S3 | boolean guard dropped: `$("#c-wcdebut")?.value === "true"` | `preserves wildcards.debut when it is ON` (`true→false`) | **run 2 only** |
+| S4 | boolean literal fallback: `… : true` | `preserves every scalar slots-mode field` (`wildcardDebut false→true`) | **run 1 only** |
+
+**The S3/S4 split is the point, and it's expensive to reconstruct**, so it's
+recorded rather than left in a transcript. They fail in *opposite* directions
+and each is invisible to the other's run — which is the evidence that running
+`runRankedChoiceScenario` twice with `wildcardDebut` flipped actually does
+what its comment claims, rather than merely looking thorough. `wildcards.debut`
+is the only config boolean needing this: it's the only one whose natural
+default is ON, so `false` distinguishes the literal-fallback regression while
+`true` distinguishes the guard-dropped one, and no third boolean exists.
+`partial_credit` and `allow_duplicates` are covered by a single run because
+their literal fallbacks are falsy — **do not "tidy" those fixture values to
+`false`, it silently removes their coverage.**
+
+S2 has the worst blast radius of the four: it wipes an entire bracket's slot
+configuration on one save, versus one wrong number for the others.
 
 ## Open questions — recorded as open, not dropped
 
