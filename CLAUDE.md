@@ -651,15 +651,48 @@ before assuming a change is covered just because the suite is green:
   intentional there — a dead Discord webhook correctly shouldn't retry-storm
   forever, unlike a roster real players get scored against. Nothing else in
   the file currently matches the dangerous version of this shape.
-- **⚠ DEADLINE 2026-08-14: Casual is in `ranked_choice` mode with the OLD
-  scorer deployed. The deploy batch MUST complete before that night's show
-  goes live.** Set 2026-08-13. The batch is TWO things, in this order:
-  1. `supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz`
-  2. run `sql/stage_o_ranked_submit_picks.sql`
-  (`RANKED_CHOICE_ENABLED` was a third step until 2026-08-13, when it was set
-  `true` and committed. It existed to stop a bracket being switched to a mode
-  the live scorer doesn't run — Casual is already switched, deliberately, so
-  the gate had nothing left to guard. It is a plain feature flag now.)
+- **✅ RESOLVED 2026-08-14 — ranked-choice deploy batch is complete and
+  verified end to end. No action outstanding.** Kept rather than deleted
+  because the failure mode it describes is the thing to check first if
+  ranked scores ever look wrong.
+  - **What was done**: `supabase functions deploy carton-sync
+    --project-ref zdfhglvjxquvkjyvophz`, then
+    `sql/stage_o_ranked_submit_picks.sql`. In that order, deliberately —
+    deploying the scorer first is inert (`submit_picks` still rejected rank
+    slots, so no ranked picks could exist for the new path to see, and
+    slots-mode output is byte-identical), whereas applying Stage O first
+    would have let ranked picks accumulate against a scorer that scored
+    them wrong.
+  - **Deploy verified against the real condition, not a proxy**: the
+    deployed source was pulled back with `supabase functions download` and
+    diffed — byte-identical to the committed files, with
+    `scoreRankedPicks` and the mode dispatch present. (An earlier plan to
+    check for `season_activation_failures` in the response would NOT have
+    worked: that key was introduced by the *previous* deploy and was
+    already live, so it discriminates the wrong thing. Also note
+    `supabase functions invoke` does not exist in CLI 2.109.1 — call the
+    function over HTTP the way the cron does.)
+  - **Verified end to end against the live database**, all three paths:
+    a ranked save accepted (`rank1` = "Graceless" written, where the same
+    call previously raised `Invalid slot: rank1`); the duplicate guard
+    fired on a second "Graceless"; and a slots-mode Official save landed
+    normally, confirming that path is unaffected.
+  - **The hazard this entry originally recorded** (kept for diagnosis): a
+    deployed scorer with no mode dispatch treats `rank1` as an unknown slot
+    and falls through to the flat-pick branch, so **every hit pays
+    `flat_points` (1) instead of its ladder value** — three hits scoring 3
+    instead of 15, with no error raised and nothing visibly wrong. If
+    ranked scores ever come out suspiciously uniform and low, check whether
+    the deployed `scoring.js` actually contains `scoreRankedPicks` before
+    looking anywhere else.
+  - **Recovery if that ever happens**: `reopen` the show (wipes that
+    league's scores, resets status to live), fix the deploy, then finalize
+    again. Same repair path as the Boston 7/31 incident.
+  - (`RANKED_CHOICE_ENABLED` was a third batch step until 2026-08-13, when
+    it was set `true` and committed. It existed to stop a bracket being
+    switched to a mode the live scorer doesn't run — Casual is already
+    switched, deliberately, so the gate had nothing left to guard. Plain
+    feature flag now.)
   - **The show**: 2026-08-14, The Pines Music Park, cutoff `23:00 UTC`.
     Nothing scores until it goes live (a show only scores once setlist rows
     appear or it's finalized), so this could sit overnight — the deadline is
@@ -1590,13 +1623,15 @@ being actionable once it passes. Indexed here because both previously lived
 only inside the Postgres/Supabase gotchas section, where nothing pointed at
 them.
 
-| Date | Item | Full bullet |
-|---|---|---|
-| **2026-08-14** | **Deploy batch must complete before that night's show goes live** — Casual is in `ranked_choice` mode with the old scorer deployed; if the show scores first, every hit pays `flat_points` (1) instead of its ladder value, silently | "⚠ DEADLINE 2026-08-14: Casual is in `ranked_choice` mode…" in Postgres/Supabase gotchas |
-| **2026-08-14** | **Test 3 roster check** — confirm the activation cluster's `added_at` values against `roster_locked_at`, and that the 13 hand-added rows kept their original timestamps | "Open checkpoint, not yet verified: Test 3 season activation" in the same section |
+| Date | Status | Item | Full bullet |
+|---|---|---|---|
+| **2026-08-14** | ✅ **DONE** | **Ranked-choice deploy batch** — carton-sync deployed, Stage O applied, verified end to end (ranked save accepted, duplicate rejected, slots-mode save unaffected) | "✅ RESOLVED 2026-08-14 — ranked-choice deploy batch…" in Postgres/Supabase gotchas |
+| **2026-08-14** | ⏳ **OPEN** | **Test 3 roster check** — confirm the activation cluster's `added_at` values against `roster_locked_at`, and that the 13 hand-added rows kept their original timestamps | "Open checkpoint, not yet verified: Test 3 season activation" in the same section |
 
-Both land the same day. The deploy batch is the one with a hard cutoff
-(showtime); the roster check can be done any time after activation.
+The deploy batch had the hard cutoff (showtime) and is closed. **The roster
+check is the one still live** — it can be done any time after Test 3
+activates, but it gets harder to interpret the longer it's left, since the
+distinguishing signal is a timestamp cluster.
 
 ### PRE-SESSION-5 GATE (walk this list before launching the Facebook League)
 
