@@ -1132,20 +1132,48 @@ before assuming a change is covered just because the suite is green:
   `official_opt_in = true`, `banned = false` → 14 of 14 total members.
   Compared both directions against the roster: **0 roster rows fall outside
   that set**, and **exactly 1 member of the set is not on the roster** — an
-  unused test account (resolve which one with the not-exists query above
-  rather than recording a name or player UUID here — this repo is public).
+  unused test account. **Do not record which one here** — resolve it with
+  the not-exists query above when you need it; see the standing rule in
+  Conventions.
   So activation will attempt 14 rows against 13 existing ones: 13 conflict
   and are skipped with their original `added_at` preserved, and that 1
   inserts fresh at activation time.
-  **That 14th member is deliberately left off the roster, and should stay
-  off until after 2026-08-14 — this is intent, not an oversight to tidy
-  up.** It's a test account: nobody is waiting to vote with it and nothing
-  depends on it being rostered, whereas its absence is the *only* thing
-  giving this run any coverage of the insert path at all. Add it (or
-  "complete" the roster for neatness) and activation becomes 14-of-14
-  duplicates, which silently deletes the insert-path and
-  `added_at`-on-fresh-insert coverage described below while still looking
-  like a tidier roster. Leave it alone until the checkpoint is resolved. **Friday therefore exercises the conflict branch at near-maximum
+
+  **⚠️ CORRECTED 2026-08-15 UTC — the paragraph that followed here is now
+  HISTORICAL. Do not act on it.** It read: *"That 14th member is
+  deliberately left off the roster, and should stay off until after
+  2026-08-14 — this is intent, not an oversight to tidy up… Leave it alone
+  until the checkpoint is resolved."* **The checkpoint IS resolved**:
+  activation inserted that row at `04:00:04.682` exactly as predicted, and
+  the account is on the roster now (`official_opt_in: true`,
+  `banned: false`, roster total 14 — confirmed by direct query
+  2026-08-15 UTC). The reasoning is preserved rather than deleted because it
+  still explains *why* a 14th row was expected rather than anomalous — which
+  is what makes the VERIFIED entry's "13 conflicts, 1 insert" readable at
+  all. It is marked because, left unmarked, it reads as a live instruction
+  to maintain a state activation already changed. **The substance of the
+  reasoning, still true:** its absence was the only thing giving that run
+  any coverage of the insert path; adding it early would have made
+  activation 14-of-14 duplicates and silently deleted the insert-path and
+  `added_at`-on-fresh-insert coverage while looking like a tidier roster.
+
+  **What caused the correction, because the shape recurs and no existing
+  discipline item covers it.** The account's *purpose* — "it's a test
+  account, nobody is waiting to vote with it" — was **inferred from its
+  absence from the roster**, then written with the same confidence as the
+  timestamps beside it, which were **measured**. Only one of those was an
+  observation. The inference happened to be correct, but the identical
+  reasoning applied to a *different* account produced a wrong answer within
+  minutes: a real player who had just submitted a partial sheet was floated
+  as "probably the test account" on exactly the same grounds — absence from
+  a set they were expected to be in. **Absence is evidence about a set,
+  never about intent.** Discipline item 5 covers a count standing in for
+  coverage; this is its sibling — an inference standing in for an
+  observation. The defense is the same one item 6 prescribes: attribute each
+  claim to its source at the moment of writing, as the VERIFIED entry above
+  now does explicitly.
+
+  **Friday therefore exercises the conflict branch at near-maximum
   (13 of 14 duplicates), the insert path (1 row), and the
   stamp-only-on-success ordering — all three in one pass**, which is a
   strictly better test than either a clean all-insert run or an
