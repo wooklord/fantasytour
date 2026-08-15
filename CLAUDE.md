@@ -2071,6 +2071,46 @@ player who never filled it are indistinguishable in `picks`).
   not a guarantee — a bracket with a one-set-only slot type would orphan on
   the way back. Check the actual key sets, don't assume a direction is safe.
 
+**FIX CANDIDATE (small, and the correct implementation already exists ten
+lines away): slot mode's perfect-sheet gate is a count where it should be a
+coverage check.** `scorePicks` (`supabase/functions/carton-sync/scoring.js`)
+fires the bonus on `picks.length === expected`, where `expected` is
+`sect.slots.length + sect.flat_picks`. `scoreRankedPicks`, in the same file,
+already does this correctly — it gates on whether every distinct ladder
+position `rank1..rankN` is filled — **and carries a comment explaining
+precisely why the count version is wrong.** So this file contains both the
+bug and its fix, side by side. Porting the coverage check to slot mode is
+small; it needs a test fixture in `test/scoring.test.mjs` alongside the
+existing ranked 7a-7p blocks.
+- **This is the shape discipline item 5 names by name** ("a count standing
+  in for coverage"), which makes it a live contradiction between the code
+  and this file rather than an ordinary latent bug.
+- **Tonight (2026-08-14) is the concrete case, and the earlier write-up
+  understated it.** It was recorded as a consequence of the format toggle:
+  two Official players held 6 rows against an `expected` of 4, so the bonus
+  became unreachable for them. That framing is accurate but shallow — **the
+  toggle only EXPOSED the bug; the count check IS the bug.** Any route that
+  leaves a stale slot key on a sheet reaches it, and a format change is
+  merely the easiest such route.
+- **It fails in BOTH directions, and only the under-earn direction has been
+  seen so far.** Under-earn is tonight's case (extra stale rows push the
+  count past `expected`, so a genuinely complete sheet is denied the bonus).
+  **Over-earn is equally reachable**: a player holding 3 valid rows plus 1
+  stale row hits `picks.length === expected` at 4 while leaving a real slot
+  unfilled, and collects the bonus for an incomplete sheet. That is exactly
+  the case the ranked comment describes — picks that satisfy a count without
+  covering the board — and nothing structural prevents it in slot mode
+  today.
+- **ACUTE, RIGHT NOW, not just deferred: the same incident can recur before
+  tonight's 03:00Z cutoff.** Deleting the orphaned rows levelled the sheets
+  as they stood; it did not close the hole. `toggleFormat` remains one
+  unconfirmed click from the Shows & cutoffs panel (`admin.js:566`, no
+  `confirm`, no orphan check), picks stay open until 03:00Z, and a second
+  toggle — or a mis-click on the wrong show — reproduces the whole thing,
+  this time against players who saved AFTER the levelling. **The only
+  mitigation in place is "don't touch it."** Worth stating plainly rather
+  than letting the delete read as having closed the exposure.
+
 **Open DESIGN QUESTION, not a task — format changes are transparent to
 players in ranked mode and destructive in slot mode, and the asymmetry is
 structural.** Recorded alongside the mechanical `toggleFormat` item above
