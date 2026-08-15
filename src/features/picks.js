@@ -204,7 +204,7 @@ export async function renderPickSheet(show){
     const perfectPts = Number((state.cfg.bonuses ?? {}).perfect ?? 0);
     // Perfect-sheet row, appended to whichever mode's list below. Two
     // conditions, both load-bearing:
-    //   - `perfectPts > 0` — a "Perfect sheet: +0" row is worse than no
+    //   - `perfectPts > 0` — a "Perfect: +0" row is worse than no
     //     row, since it advertises a bonus that cannot be earned.
     //   - `defs.length` — a bracket with no ladder/slots configured renders
     //     no pick rows at all, so a lone bonus row would describe a sheet
@@ -213,7 +213,7 @@ export async function renderPickSheet(show){
     // so an admin changing the bonus can't leave the copy claiming the old
     // number.
     const withPerfect = (defs, desc) =>
-      (defs.length && perfectPts > 0) ? [...defs, { term: "Perfect sheet", desc }] : defs;
+      (defs.length && perfectPts > 0) ? [...defs, { term: "Perfect", desc }] : defs;
 
     // Ranked mode gets ONE ladder row, not one per rank. The dedup below is
     // by label, and every rank has a distinct one ("Rank 1", "Rank 2", ...),

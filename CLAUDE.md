@@ -803,8 +803,31 @@ before assuming a change is covered just because the suite is green:
   - **Recovery if any of it is wrong**: unchanged from the batch above —
     `reopen` the show (wipes that league's scores, resets status to `live`),
     fix, `finalize` again.
-  - **How many Casual sheets are in, and are any partial — UNANSWERED as of
-    2026-08-14 21:15Z, with the method recorded.** Could not be read at
+  - **✅ ANSWERED 2026-08-15 — 3 Casual sheets, all complete, none partial.**
+    Read after cutoff via the anon path described below (`get_show_picks`,
+    `p_bracket_id: 2`), exactly as the method anticipated. All three players
+    hold 6 rows, and the distinct slot keys across all 18 rows are exactly
+    `rank1..rank6` — so this is the coverage check the bullet below insists
+    on, not a row count that happens to equal 6: no stale pre-rekey
+    `opener`/`flat*` key survives anywhere in the bracket, and every rank
+    position is filled for every player. Official (bracket 1) read the same
+    way at the same time: 8 players, 31 rows, keys exactly
+    `closer/cover1/flat1/opener` — confirming the orphan deletion held (no
+    `encore`/`flat2` anywhere) — with seven players at 4 rows and one at 3,
+    i.e. one genuinely partial sheet.
+    **What this does NOT establish: the five ladder/ordering/bonus checks
+    above are still unverified** — those need `scores.breakdown`, which is
+    not anon-readable. Only the sheet-shape question is closed here.
+  - **Perfect-sheet bonus: did NOT fire, either bracket, 2026-08-15.**
+    Established from public data rather than `scores`: every sheet's picks
+    were compared against this show's 15 `setlist_songs` rows, and **zero
+    sheets in either bracket had all of their picks played at all.** That is
+    a strictly weaker condition than the bonus requires (in both modes the
+    bonus needs every row to hit, and in slot mode `hit` is true even for a
+    played-but-wrong-slot pick), so zero all-played sheets proves zero
+    perfects without needing to read a single breakdown row.
+  - **Original entry, superseded by the two above — kept for the method,
+    which is still the right one for any future show.** Could not be read at
     write time: `get_show_picks` is the only public (anon-grantable) pick
     read and it returns nothing until `now() >= cutoff_at`, which was still
     ~5h45m out; `picks` has no public SELECT policy by design. Both
@@ -2197,6 +2220,34 @@ suite covers `.countbig`**, so either phrasing can drift without a test
 noticing. Options if it's ever worth touching: align `shows.js` to the bare
 form, restore a short word to the sheet ("in 2h 14m"), or decide the two
 contexts genuinely want different wording and note that here instead.
+
+**"Perfect sheet" was renamed to "Perfect" everywhere, 2026-08-14 — and the
+only reason it could be done cleanly is that the bonus had never once fired.**
+Two separate strings were involved, in two different layers, and the second is
+the one worth remembering:
+- The Rules card's term (`ruleDefs`'s `withPerfect`, `src/features/picks.js`) —
+  pure render-time copy, changeable at will.
+- The scoring breakdown row's `songname` (`scoring.js`, both `scorePicks` and
+  `scoreRankedPicks`) — **written into `scores.breakdown` at score time and
+  frozen thereafter** (see the frozen-breakdown gotcha above). Renaming this
+  normally splits history: already-final shows keep the old wording forever
+  while new ones get the new one, an inconsistency *inside a single list*,
+  which is worse than the cross-screen one it fixes.
+- **What made it free: zero existing rows carried the bonus.** Confirmed by
+  the dev before the rename, against the live database — the repo could only
+  show four shows' worth (`test2-scoring-comparison.html` states the bonus
+  never fired across the Test 2 season), which is not the same claim.
+- **The general rule this is an instance of**: any string `scoring.js` writes
+  into `breakdown` is a data migration, not a copy edit, the moment one real
+  score row contains it. Check for existing rows first —
+  `select count(*) from scores where breakdown @> '[{"slot":"bonus"}]'::jsonb;`
+  is the shape — and if the count is non-zero, the choice is "leave it" or
+  "backfill," never a silent rename. Render-time copy in `src/` has no such
+  constraint.
+- Assertions now pin the short form on both sides: `test/scenario.test.mjs`
+  (three checks, rules card) and `test/scoring.test.mjs:441` (breakdown row).
+  `docs/module_b_ranked_choice_plan.md:393` still quotes the old string —
+  intentionally, it's a historical design doc, not live code.
 
 **Open DESIGN QUESTION, not a task — format changes are transparent to
 players in ranked mode and destructive in slot mode, and the asymmetry is

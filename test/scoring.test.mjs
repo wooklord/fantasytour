@@ -438,7 +438,7 @@ const R = rockingDocks; // played: Laurel, Shatter, Beaming, High Noon, Smile, T
     const row = r.breakdown.find(b => b.slot === key);
     check(`ranked 7h: "${key}" is hit but scores 0`, [row.hit, row.points], [true, 0]);
   }
-  check("ranked 7h: non-canonical keys do not block perfect", r.breakdown.filter(b => b.slot === "bonus" && b.songname === "Perfect sheet").length, 1);
+  check("ranked 7h: non-canonical keys do not block perfect", r.breakdown.filter(b => b.slot === "bonus" && b.songname === "Perfect").length, 1);
   check("ranked 7h: total 15 + 5 bonus, no leaked points", r.total, 20);
 }
 

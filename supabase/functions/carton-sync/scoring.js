@@ -195,7 +195,7 @@ export function scoreRankedPicks({ picks, songs, cfg }) {
   const complete = expectedSlots.length > 0 && expectedSlots.every((k) => filledSlots.has(k));
   const perf = Number((cfg.bonuses ?? {}).perfect ?? 0);
   if (perf > 0 && complete && inLadder.every((x) => x.hit)) {
-    breakdown.push({ slot: "bonus", songname: "Perfect sheet", hit: true, points: perf, reason: "every pick hit" });
+    breakdown.push({ slot: "bonus", songname: "Perfect", hit: true, points: perf, reason: "every pick hit" });
   }
   const total = breakdown.reduce((sum, b) => sum + b.points, 0);
   return { breakdown, total };
@@ -277,7 +277,7 @@ export function scorePicks({ picks, songs, slotFacts, cfg, format }) {
   const expected = (sect.slots?.length ?? 0) + Number(sect.flat_picks ?? 0);
   const perf = Number((cfg.bonuses ?? {}).perfect ?? 0);
   if (perf > 0 && expected > 0 && picks.length === expected && breakdown.every((x) => x.hit)) {
-    breakdown.push({ slot: "bonus", songname: "Perfect sheet", hit: true, points: perf, reason: "every pick hit" });
+    breakdown.push({ slot: "bonus", songname: "Perfect", hit: true, points: perf, reason: "every pick hit" });
   }
   const total = breakdown.reduce((sum, b) => sum + b.points, 0);
   return { breakdown, total };

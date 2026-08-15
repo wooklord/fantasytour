@@ -520,7 +520,7 @@
     const ruleDefs = (() => {
       var _a2, _b, _c, _d;
       const perfectPts = Number((_b = ((_a2 = state.cfg.bonuses) != null ? _a2 : {}).perfect) != null ? _b : 0);
-      const withPerfect = (defs2, desc) => defs2.length && perfectPts > 0 ? [...defs2, { term: "Perfect sheet", desc }] : defs2;
+      const withPerfect = (defs2, desc) => defs2.length && perfectPts > 0 ? [...defs2, { term: "Perfect", desc }] : defs2;
       if (state.cfg.mode === "ranked_choice") {
         const ladder = (_d = (_c = state.cfg.ranked) == null ? void 0 : _c.ladder) != null ? _d : [];
         if (!ladder.length) return [];

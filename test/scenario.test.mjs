@@ -103,7 +103,7 @@ async function runMode(mode){
   // Perfect sheet in slot mode: the fixture sets perfect:3, so the row must
   // render with that value read from config.
   check("slot mode renders the perfect-sheet row with the configured value",
-    res.slotsRules.terms.includes("Perfect sheet")
+    res.slotsRules.terms.includes("Perfect")
       && /\+3\./.test(res.slotsRules.descs.find(d => /Fill every row/.test(d)) ?? ""),
     `terms: ${JSON.stringify(res.slotsRules.terms)} descs: ${JSON.stringify(res.slotsRules.descs)}`);
   // The explicit half of that copy. Slot mode's perfect bonus fires on
@@ -425,7 +425,7 @@ async function runMode(mode){
   // the row must render AND must carry that value from config rather than a
   // hardcoded number.
   check("perfect-sheet row renders when the bonus is non-zero",
-    ranked.sheet.ruleTerms.includes("Perfect sheet"),
+    ranked.sheet.ruleTerms.includes("Perfect"),
     `ruleTerms: ${JSON.stringify(ranked.sheet.ruleTerms)}`);
   check("perfect-sheet row reads its value from config, not a literal",
     /\+7\./.test(ranked.sheet.ruleDescs.find(d => /Fill all/.test(d)) ?? ""),
@@ -526,7 +526,7 @@ async function runMode(mode){
   // absence is a real requirement rather than a cosmetic one.
   const rankedNoPerfect = await runRankedChoiceScenario({ html, scripts, mode, perfect: 0 });
   check("perfect-sheet row does NOT render when the bonus is zero",
-    !rankedNoPerfect.sheet.ruleTerms.includes("Perfect sheet"),
+    !rankedNoPerfect.sheet.ruleTerms.includes("Perfect"),
     `ruleTerms: ${JSON.stringify(rankedNoPerfect.sheet.ruleTerms)}`);
   // Positive control for the check immediately above. Without it, a bug that
   // dropped EVERY rules row (an exception in ruleDefs, a broken selector, a
