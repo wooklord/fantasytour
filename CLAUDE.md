@@ -730,13 +730,63 @@ before assuming a change is covered just because the suite is green:
     closed — see the DATED DEADLINES table. **A third 2026-08-14 item opened
     the same evening and is still open: the first-production-run check
     immediately below.**
-- **⏳ OPEN — FIRST PRODUCTION RUN OF `scoreRankedPicks`, 2026-08-14, The
-  Pines Music Park (Eau Claire, WI), Casual bracket. Verify after the show
-  scores; do not assume it ran correctly.** The deploy batch above proved the
-  scorer *accepts* ranked picks and that a save round-trips. It did not prove
-  a real setlist scores correctly against a real sheet — nothing has scored in
-  ranked mode yet, ever. Written 2026-08-14 ~21:15Z, before the show, while
-  the dev is at it and not thinking about this.
+- **✅ VERIFIED 2026-08-15 — FIRST PRODUCTION RUN OF `scoreRankedPicks` IS
+  CORRECT. Show finalized 12:00:04Z; all five checks pass; no reopen needed.**
+  Read from `scores.breakdown` directly, not inferred by comparing picks
+  against the setlist. **3 players, 18 breakdown rows (3 × 6 — all three
+  submitted complete sheets), 5 hits, 17 points across the bracket.**
+  1. **Ladder values, per row — PASS, decisively.** Hits paid `rank1→6,
+     rank2→5, rank4→3, rank5→2, rank6→1`: five hits, five *different*
+     payouts, each its own rung. The flat-fallback signature would have been
+     five rows all paying 1, so **`rank1` paying 6 is the specific
+     observation that rules it out.**
+  2. **Row order — PASS, but see the caveat below; it proves less than it
+     looks.**
+  3. **No "Any Debut" row — PASS.** Zero across all 18 rows; in fact zero
+     non-`rank` rows of any kind. The mode dispatch suppressed the wildcard
+     even though `wildcards.debut` is still `true` in Casual's live config,
+     which is exactly why this (and not the absent cover/debut bonus lines,
+     both configured 0) is the real dispatch tell.
+  4. **Perfect sheet — PASS, correctly did NOT fire.** Zero bonus rows, and
+     correctly so: the gate needs all six ranks filled AND every one hit,
+     while the best sheet had 3 of 6. Confirmed from `breakdown` plus
+     per-player hit counts rather than from the setlist.
+  5. **Totals — PASS.** `scores.points` equals `sum(breakdown[].points)` for
+     all three players (14 / 2 / 1), and those reconcile to the ladder:
+     6+5+3, 2, 1.
+  - **⚠️ CHECK 2 IS VERIFIED BY TEST, UNVERIFIED IN PRODUCTION — AND THAT IS
+    LIKELY PERMANENT, NOT PENDING. Do not log it as an outstanding task.**
+    All three players' rows were *stored* in `rank1..rank6` order, so DB
+    order and rank order coincided and the run cannot distinguish a working
+    sorter from no sorter at all: `breakdownSlotInfo`'s ranked branch could
+    have been deleted entirely and the output would be identical.
+    - **What would settle it: a show where stored row order differs from
+      rank order.** That cannot be arranged — `scoreBracket` fetches picks
+      with no `ORDER BY` (`index.ts:697`), so row order is whatever Postgres
+      returns, which in practice follows insertion order, which follows
+      sheet order. **It may simply never occur naturally.** Waiting for it
+      is not a plan.
+    - **The scenario suite covers it deliberately, for exactly this reason.**
+      `test/fixtures.mjs:204-208` stores the scored show's breakdown rows
+      shuffled — `rank3, rank1, rank5, rank2, rank4` — precisely because
+      production wouldn't. Verified by mutation 2026-08-15: returning
+      `{ order: [], label }` from that branch fails `frozen breakdown
+      displays ranks in rank order, not stored order` in both modes, with
+      the failure detail showing the shuffle leaking through as
+      `["Rank 3","Rank 1","Rank 5","Rank 2","Rank 4"]`. The branch demonstrably
+      works; only the *production* evidence is unavailable.
+  - **Participation observation, not a correctness one: only 3 of Casual's
+    members submitted at all.** First real data on whether ranked choice is
+    something people actually fill in, and worth watching rather than acting
+    on — one show, and the same evening carried a format toggle, an orphaned-
+    pick incident and a mid-evening levelling, none of which make it a clean
+    baseline. Note the three who did submit all filed **complete 6-row
+    sheets**, so the partial-sheet case flagged as most likely to surprise
+    never arose in production; it remains covered only by the scenario suite.
+  - Original entry follows, kept for its method — the identifiers, the
+    diagnostic tells and the recovery path are what made the check runnable
+    months later without re-derivation. Written 2026-08-14 ~21:15Z, before
+    the show, while the dev was at it and not thinking about this.
   - **Resolved identifiers, so nothing has to be re-derived under time
     pressure**: show id `1765912122` (`showdate 2026-08-14`, venue
     `The Pines Music Park`, `Eau Claire`/`WI`, `timezone America/Chicago`);
@@ -2047,15 +2097,24 @@ them.
 |---|---|---|---|
 | **2026-08-14** | ✅ **DONE** | **Ranked-choice deploy batch** — carton-sync deployed, Stage O applied, verified end to end (ranked save accepted, duplicate rejected, slots-mode save unaffected) | "✅ RESOLVED 2026-08-14 — ranked-choice deploy batch…" in Postgres/Supabase gotchas |
 | **2026-08-14** | ✅ **DONE** | **Test 3 roster check** — activated 04:00:04Z, 14 rows, all 13 originals kept their timestamps, the new row landed 0.1s before the stamp | "✅ VERIFIED 2026-08-14: Test 3 activated cleanly…" in Postgres/Supabase gotchas |
-| **2026-08-14** (after the show scores) | ⏳ **OPEN** | **First production run of `scoreRankedPicks`** — Casual bracket, show `1765912122`. Verify ladder values (not 1s), rank ordering, no Any Debut row, perfect-sheet gate, totals. Also: count sheets in / partial sheets, by distinct rank position | "⏳ OPEN — FIRST PRODUCTION RUN OF `scoreRankedPicks`…" in Postgres/Supabase gotchas |
+| **2026-08-14** (checked 2026-08-15) | ✅ **DONE** | **First production run of `scoreRankedPicks`** — Casual, show `1765912122`, finalized 12:00:04Z. All five checks pass: ladder values per row (`rank1` paid 6, not 1), no Any Debut row, perfect-sheet correctly withheld, totals reconcile. Rank ordering passes but is verified by test only — see the caveat, it is not a pending task | "✅ VERIFIED 2026-08-15 — FIRST PRODUCTION RUN OF `scoreRankedPicks`…" in Postgres/Supabase gotchas |
 
-**Two of the three 2026-08-14 items are closed; one is still open.** The
-ranked-choice deploy batch met its hard showtime cutoff (deployed and applied,
-verified end to end), and the Test 3 roster check was verified at
-`04:00:04Z`. **The open one is the first production run of
-`scoreRankedPicks`** — added the evening of 2026-08-14, after the other two
-closed, and it cannot be resolved until the show actually scores. Nothing
-else in this table is outstanding.
+**All three 2026-08-14 items are closed.** The ranked-choice deploy batch met
+its hard showtime cutoff (deployed and applied, verified end to end); the
+Test 3 roster check was verified at `04:00:04Z`; and the first production run
+of `scoreRankedPicks` — added the evening of 2026-08-14, after the other two
+closed, and unresolvable until the show actually scored — was checked against
+`scores.breakdown` on 2026-08-15 and passed on all five counts. **No open
+dated deadlines remain in this table.** It is retained as a record and as the
+place to add the next one.
+
+One thing carried forward rather than closed, deliberately **not** logged as
+an open item: the rank-ordering check is verified by the scenario suite and
+cannot realistically be verified in production, because it needs stored row
+order to differ from rank order and nothing in the pipeline produces that.
+See the caveat inside the VERIFIED bullet — it is a permanent property, not
+an outstanding task, and re-opening it as one would be re-deriving a
+conclusion already reached.
 
 ### PRE-SESSION-5 GATE (walk this list before launching the Facebook League)
 
