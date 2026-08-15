@@ -444,14 +444,27 @@ before assuming a change is covered just because the suite is green:
     session isn't a token that can be invalidated server-side — it's the
     password itself, so "log this device out" and "rotate the credential"
     are the same operation.
-  - **It currently sits on a shared storage origin.** Everything served
-    from `wooklord.github.io` is ONE origin, so this app shares
-    `localStorage` with the Ambassadors app and anything else published
-    there. Key prefixing (`ft_*`) is naming, not isolation — any script on
-    any page of that origin can read `ft_session` and recover a player's
-    PIN in plaintext. A bug in a *sibling* app is therefore enough to
-    expose Fantasy Eggy credentials, which is what makes the domain move
-    below a real concern rather than architecture hygiene.
+  - **It now sits on its OWN storage origin — resolved 2026-08-15 by the
+    domain move (see below).** Until then everything served from
+    `wooklord.github.io` was one origin, so this app shared `localStorage`
+    with the Ambassadors app and anything else published there; key
+    prefixing (`ft_*`) is naming, not isolation, so any script on any page
+    of that origin could read `ft_session` and recover a player's PIN in
+    plaintext. On `fantasyeggy.wooklord.net` that specific exposure is
+    gone: a sibling app on a different subdomain is a different storage
+    origin and cannot reach these keys.
+    - **This narrowed the blast radius; it did NOT fix the underlying
+      problem.** The stored credential is still a plaintext PIN with no
+      revocation path — the token exchange below is unchanged and still
+      the actual fix. What the move removed was one *route in*, not the
+      thing being protected.
+    - **The cookie caveat is now live rather than hypothetical.**
+      Subdomains are separate storage origins, but `wooklord.net` is a
+      registrable domain, so a cookie set with `domain=.wooklord.net`
+      would be readable by every subdomain including this one. Storage
+      separates automatically; cookies don't. This app sets no cookies at
+      all today — keep it that way, or scope any future cookie to the
+      exact host with no `domain` attribute.
   - **Eventual fix, recorded so it isn't redesigned from scratch: exchange
     the PIN for an opaque server-issued session token at login, store the
     token, never store the PIN.** That gives a real revocation path and
@@ -486,61 +499,61 @@ before assuming a change is covered just because the suite is green:
     issue and store a token instead of the PIN. It does **not** require
     re-doing password storage, which is one of the few things here that's
     already right.
-- **Roadmap: move the app onto a subdomain of `wooklord.net`. Trigger —
-  before Facebook-league recruitment begins.** Same dated-trigger pattern
-  as the rate-limiting and ladder-mutability entries. The domain is already
-  owned, so there's nothing to buy. Two structural reasons:
-  - **Host portability.** The URL is currently a `github.io` path, so
-    leaving GitHub Pages later breaks every installed PWA. On a controlled
-    domain the host becomes a DNS change nobody notices.
-  - **Storage origin isolation** — and this is the half that actually
-    matters, per the `ft_session` bullet above: everything on
-    `wooklord.github.io` is ONE origin, so this app currently shares
-    `localStorage` with the Ambassadors app and anything else published
-    there, while storing a plaintext PIN in it. Key prefixing is the only
-    separation today, and prefixing is not isolation.
-  - **Why the trigger is recruitment specifically, not "eventually":** the
-    manifest's `scope` and `start_url` are origin-bound, so moving *after*
-    players install to home screens forces reinstalls and drops their local
-    storage (including in-progress pick drafts).
-  - **Confirmed 2026-08-13: several of the current players already have the
-    app on their home screen, so this move is NOT free anymore.** What
-    those players actually experience: **logged out** (`ft_session` is
-    origin-scoped), **in-progress pick drafts lost** (`ft_draft_*`), and
-    they must **re-add the app and log in again**. Two scheduling
-    constraints follow, neither optional:
-    1. **Do it in a gap between shows, never while picks are open.**
-       `ft_draft_*` holds partially-filled sheets that vanish with the
-       origin — losing those mid-week is a self-inflicted support problem.
-    2. **Warn players several days ahead that they'll need their PIN.**
-       `ft_session` has kept them signed in continuously, so some have not
-       typed their PIN since they set it. **Expect to run
-       `admin_reset_player_pin` a few times** on the other side; that's a
-       normal outcome here, not a sign anything went wrong.
-  - **The trigger is unchanged and the argument for it is now stronger,
-    not weaker.** The cost scales with player count, so paying it for
-    several of thirteen beats paying it for most of fifty. Waiting makes
-    this monotonically worse.
-  - **The old URL won't break.** Adding a custom domain writes a `CNAME`
-    file and GitHub Pages redirects the `github.io` URL to it, so nothing
-    404s. The likely failure mode for an already-installed app is milder
-    than a break: following a cross-origin redirect typically pops it out
-    of standalone display into an ordinary browser tab, rather than
-    failing outright. Stated as likely rather than certain — worth
-    verifying on one device before announcing anything to players.
-  - **Implementation, recorded so it isn't re-derived**: a `CNAME` file in
-    the repo containing the subdomain, a DNS `CNAME` record pointing at
-    `wooklord.github.io`, then enable HTTPS in the repo's Pages settings.
-    Use a **subdomain, not the apex** — GitHub Pages allows one apex/www
-    site per account but unlimited project sites, so don't spend the apex
-    here.
-  - **Caveat that survives the move**: subdomains are separate *storage*
-    origins, but `wooklord.net` is a registrable domain, so a cookie set
-    with `domain=.wooklord.net` is readable by every subdomain. Storage
-    separates automatically; cookies don't. Scope any cookie to the exact
-    host with no `domain` attribute. (Moot today — the app sets no cookies
-    at all and uses no `sessionStorage`/`indexedDB`; `localStorage` is the
-    entire client-side surface: `ft_session`, `ft_bracket_id`, `ft_theme2`,
+- **✅ DONE 2026-08-15 — the app now lives at `fantasyeggy.wooklord.net`.**
+  Was a roadmap item gated on "before Facebook-league recruitment begins";
+  shipped ahead of that, which was the point (the cost scales with player
+  count, so paying it at thirteen players beat paying it at fifty).
+  `CNAME` is committed at the repo root and the old `github.io` URL
+  redirects. **This is item #3 on the Pre-Session-5 gate — now closed.**
+  - **The codebase needed NO changes, verified before the move rather than
+    discovered during it.** `manifest.webmanifest` has `start_url: "."` and
+    **no `scope` key at all** (an absent scope defaults to the manifest's
+    own directory), so both are origin-relative and followed the app across.
+    Icons are relative. `index.html` has no `<base>` tag and no absolute
+    self-references. `src/` contains zero `location.origin`/`.host`/
+    `.href`/`.hostname`/`document.domain` uses and no absolute URL to the
+    app's own host. **There is no service worker anywhere in the repo**, so
+    there was no cached scope pinned to the old origin — one of the usual
+    ways this move breaks simply didn't apply.
+  - **Supabase needed nothing either, and that's worth stating because it
+    normally would.** Auth here is a name+PIN RPC, not Supabase Auth, so
+    there are no redirect URLs or site-URL allowlists tied to an origin.
+    The publishable key, project URL and the cron's Authorization header
+    are all origin-independent.
+  - **What it bought, precisely:** (a) **host portability** — the URL is no
+    longer a `github.io` path, so leaving GitHub Pages later is a DNS
+    change nobody notices; (b) **storage-origin isolation** — the app no
+    longer shares `localStorage` with the Ambassadors app or anything else
+    on `wooklord.github.io`, which is the half that actually mattered given
+    `ft_session` holds a plaintext PIN. See the `ft_session` bullet above
+    for why that narrows the blast radius without fixing the credential.
+  - **What it cost players, as predicted:** logged out (`ft_session` is
+    origin-scoped), in-progress drafts dropped (`ft_draft_*`), and a
+    re-add to the home screen for anyone who had installed it. **Expect to
+    run `admin_reset_player_pin` a few times** — some players hadn't typed
+    their PIN since setting it, because the stored session kept them signed
+    in. That is a normal outcome of this move, not a sign anything
+    went wrong.
+  - **Implementation, retained because it generalises to the next move:** a
+    `CNAME` file in the repo containing the subdomain, a DNS `CNAME` record
+    pointing at `wooklord.github.io`, then enable HTTPS in the repo's Pages
+    settings. Use a **subdomain, not the apex** — GitHub Pages allows one
+    apex/www site per account but unlimited project sites, so don't spend
+    the apex here.
+  - **Path prefix changed too, and it's why the storage loss was
+    unavoidable**: the app was served from a project page at
+    `wooklord.github.io/fantasytour/` and now sits at the root of its own
+    host. Every reference being relative is what made that a non-event for
+    the *code*; it's still a different origin AND path for the *browser*,
+    which is exactly what drops the storage.
+  - **Caveat that survives the move — still live, read it before adding any
+    cookie**: subdomains are separate *storage* origins, but `wooklord.net`
+    is a registrable domain, so a cookie set with `domain=.wooklord.net` is
+    readable by every subdomain. Storage separates automatically; cookies
+    don't. Scope any cookie to the exact host with no `domain` attribute.
+    (Moot today — the app sets no cookies at all and uses no
+    `sessionStorage`/`indexedDB`; `localStorage` is the entire client-side
+    surface: `ft_session`, `ft_bracket_id`, `ft_theme2`,
     `ft_admin_sections`, and the per-show `ft_draft_*` keys.)
 - **Resolved (Session 4): both halves of decision 3 now exist.** A
   league/global admin can run `admin_reset_player_pin`
@@ -2089,9 +2102,10 @@ this is the condensed, durable record so the roadmap survives a context boundary
 
 Distinct from the Pre-Session-5 gate below, which is triggered by an *event*
 (launching the Facebook League). These are triggered by a *date* and stop
-being actionable once it passes. Indexed here because both previously lived
-only inside the Postgres/Supabase gotchas section, where nothing pointed at
-them.
+being actionable once it passes. Indexed here because they otherwise live
+only inside the Postgres/Supabase gotchas section, where nothing points at
+them. **The Status column is the count** — closed rows stay as a record
+rather than being deleted.
 
 | Date | Status | Item | Full bullet |
 |---|---|---|---|
@@ -2099,14 +2113,15 @@ them.
 | **2026-08-14** | ✅ **DONE** | **Test 3 roster check** — activated 04:00:04Z, 14 rows, all 13 originals kept their timestamps, the new row landed 0.1s before the stamp | "✅ VERIFIED 2026-08-14: Test 3 activated cleanly…" in Postgres/Supabase gotchas |
 | **2026-08-14** (checked 2026-08-15) | ✅ **DONE** | **First production run of `scoreRankedPicks`** — Casual, show `1765912122`, finalized 12:00:04Z. All five checks pass: ladder values per row (`rank1` paid 6, not 1), no Any Debut row, perfect-sheet correctly withheld, totals reconcile. Rank ordering passes but is verified by test only — see the caveat, it is not a pending task | "✅ VERIFIED 2026-08-15 — FIRST PRODUCTION RUN OF `scoreRankedPicks`…" in Postgres/Supabase gotchas |
 
-**All three 2026-08-14 items are closed.** The ranked-choice deploy batch met
-its hard showtime cutoff (deployed and applied, verified end to end); the
-Test 3 roster check was verified at `04:00:04Z`; and the first production run
-of `scoreRankedPicks` — added the evening of 2026-08-14, after the other two
+**Every 2026-08-14 item closed.** The ranked-choice deploy batch met its hard
+showtime cutoff (deployed and applied, verified end to end); the Test 3
+roster check was verified at `04:00:04Z`; and the first production run of
+`scoreRankedPicks` — added the evening of 2026-08-14, after the other two
 closed, and unresolvable until the show actually scored — was checked against
-`scores.breakdown` on 2026-08-15 and passed on all five counts. **No open
-dated deadlines remain in this table.** It is retained as a record and as the
-place to add the next one.
+`scores.breakdown` on 2026-08-15 and passed every check. Read the Status
+column for what is currently outstanding rather than trusting this paragraph,
+which describes one day's batch and will not be rewritten when the next dated
+item is added.
 
 One thing carried forward rather than closed, deliberately **not** logged as
 an open item: the rank-ordering check is verified by the scenario suite and
@@ -2118,11 +2133,15 @@ conclusion already reached.
 
 ### PRE-SESSION-5 GATE (walk this list before launching the Facebook League)
 
-Seven separate items elsewhere in this file are gated on "before Session 5 /
-before the Facebook League / before a non-dev league admin exists." They were
-each recorded beside the code they concern, which is right for understanding
-them and wrong for remembering them — seven separately-buried triggers is six
-chances to miss one. This is the index; **the full reasoning stays in the
+Items elsewhere in this file are gated on "before Session 5 / before the
+Facebook League / before a non-dev league admin exists." Each was recorded
+beside the code it concerns, which is right for understanding it and wrong
+for remembering it — a trigger buried next to its own implementation is a
+trigger nobody re-reads at the moment it fires. **This table is the index;
+its Status column is the count.** Completed items keep their row and their
+number rather than being deleted, so the ordering note at the bottom
+("settle #4 before #5, and #1–#3 before either") keeps referring to the same
+things it was written about. **The full reasoning stays in the
 bullets referenced, deliberately not duplicated here**, since a duplicated
 rationale is one that drifts. (#7 is the exception to that last rule: it has
 no home bullet elsewhere, so its reasoning lives directly below the table.)
@@ -2131,7 +2150,7 @@ no home bullet elsewhere, so its reasoning lives directly below the table.)
 |---|---|---|---|
 | 1 | **Login rate-limiting** (3-part fix: progressive delay + aggregate spray throttle + weak-PIN rejection) | Postgres/Supabase gotchas — "Login rate-limiting: the top real security exposure" | ~50 semi-strangers is where enumerable nicknames + short PINs stop being theoretical |
 | 2 | **`ft_session` plaintext PIN → server-issued token** | Same section, the bullet immediately after #1 | The stored session IS the credential, with no revocation path; scope as its own session, it's real work |
-| 3 | **Domain move to a `wooklord.net` subdomain** | Same section, the roadmap bullet after #2 | Origin isolation for #2, and PWA installs become expensive to move *after* recruitment |
+| 3 | ✅ **DONE 2026-08-15** — **Domain move to a `wooklord.net` subdomain**, live at `fantasyeggy.wooklord.net` | Same section, the roadmap bullet after #2 | Origin isolation for #2, and PWA installs become expensive to move *after* recruitment. Row kept rather than deleted so the numbering and the ordering note below stay valid |
 | 4 | **Ladder-mutability revisit** (Module B) | "Alternate scoring modes" → Module B locked decisions → "Decided: mid-season ladder edits stay unguarded" | Unguarded config edits silently rewrite already-published scores; acceptable only while one trusted person can edit |
 | 5 | **Appointing any non-dev league admin** | Cross-cuts #4 and the `admin_update_config`/`admin_set_season_roster` integrity notes | This is the event that invalidates "only the dev can do damage," which several decisions currently rest on |
 | 6 | **Official opt-in default revisit** (Stage F flipped it to `true` for beta convenience) | 2.0 rebuild key decisions — the `official_opt_in` bullet | Opt-in-by-default was a closed-group convenience; a semi-public pool should choose deliberately |

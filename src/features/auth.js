@@ -7,7 +7,7 @@ export function renderAuth(){
     <div class="panel" style="margin-top:38px">
       <h2 class="display">Who's picking?</h2>
       <p class="muted">Name + PIN. That's the whole account.</p>
-      <div class="field"><label>Name</label><input id="a-name" autocomplete="username" placeholder="Wooklord"></div>
+      <div class="field"><label>Name</label><input id="a-name" autocomplete="username" placeholder="your nickname"></div>
       <div class="field"><label>PIN (4–8 digits)</label><input id="a-pin" inputmode="numeric" autocomplete="current-password" type="password" placeholder="••••"></div>
       <div class="row">
         <button class="btn" onclick="doLogin()">Log in</button>
