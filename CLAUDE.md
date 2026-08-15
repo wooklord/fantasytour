@@ -847,15 +847,19 @@ before assuming a change is covered just because the suite is green:
     league is level.** Four rows removed via a single data-modifying CTE
     (`with d as (delete ... returning player_id, slot, songname) select
     ...`), whose RETURNING output was **exactly** the four expected rows and
-    no others: Sissy's `encore` Skin It Back + `flat2` Watercolor Days
-    (both stamped 2026-08-12 12:31:13Z), WookLord's `encore` Ricky Gervais
-    + `flat2` Through the Mist (both 2026-08-14 17:24:46Z). Post-delete
+    no others: two players × two slots each (`encore` + `flat2`), one
+    player's pair stamped 2026-08-12 12:31:13Z and the other's 2026-08-14
+    17:24:46Z. (Player nicknames and the removed songnames were recorded
+    here in `caab1d6` and redacted 2026-08-15 UTC — see the standing rule
+    in Conventions. Nothing analytic depended on them: the timestamps,
+    slot keys and counts below are the whole evidentiary content.)
+    Post-delete
     verification: **7 players, every one at exactly 4 rows with the
     identical key set `{closer,cover1,flat1,opener}`**, and every player's
     `min(updated_at)` equal to their `max(updated_at)` — i.e. each sheet
     was written in one transaction and nobody has partially edited since.
-  - **Seven players, not the six counted earlier**: `The Judge` submitted a
-    fresh sheet at `2026-08-14 23:05:18Z`, after the earlier count and
+  - **Seven players, not the six counted earlier**: an eighth league member
+    submitted a fresh sheet at `2026-08-14 23:05:18Z`, after the earlier count and
     around the time of the delete. It carries no orphan keys, and could
     not have: under `one_set` the sheet renders no `encore`/`flat2` input
     (`slotDefs`), and `submit_picks` would reject those keys anyway since
@@ -864,7 +868,7 @@ before assuming a change is covered just because the suite is green:
     racy — there is no window in which a concurrent save could have
     reintroduced what it removed. The other six players' timestamps are
     unchanged from the pre-delete reading, confirming nothing else moved.
-  - **WookLord's deleted `encore` row was stamped 17:24:46Z** — direct
+  - **The later of the two deleted `encore` rows was stamped 17:24:46Z** — direct
     evidence for the reconstruction above, since an `encore` row cannot be
     written under one_set. That timestamp is the hard lower bound on when
     the format changed.
@@ -1004,8 +1008,8 @@ before assuming a change is covered just because the suite is green:
     `submit_picks` derives `valid_slots` from `ls.format` and raises
     `Invalid slot: encore`. So the existence of encore/flat2 rows stamped
     17:24Z proves the format was still standard at that moment. **The upper
-    bound is inference only**: four players (Budman, Kovajam, pooka,
-    Justin) hold exactly `opener/closer/cover1/flat1` — the one_set key set
+    bound is inference only**: four players hold exactly
+    `opener/closer/cover1/flat1` — the one_set key set
     — with last saves 20:07–21:07Z, which is strong behavioural evidence
     the format was already one_set by 20:07, since four people
     independently leaving exactly those two rows blank is not credible.
@@ -1060,8 +1064,15 @@ before assuming a change is covered just because the suite is green:
     spanning `08-13 02:55:08.612` → `02:55:23.981`. Nothing was rewritten to
     activation time — the highest-value assertion, and the specific
     regression `ignoreDuplicates` exists to prevent.
-  - **The 14th row (the deliberately un-rostered test account) inserted at
-    `04:00:04.682`, i.e. 0.1s BEFORE `roster_locked_at`.** The sign matters:
+  - **The 14th row — the one member not on the roster before activation —
+    inserted at `04:00:04.682`, i.e. 0.1s BEFORE `roster_locked_at`.**
+    Two claims here, from two different sources, deliberately attributed
+    separately: **which** account that was is a QUERY RESULT (direct query,
+    2026-08-15 UTC, against `season_rosters` for season 8); that it is an
+    unused test account and was left off the roster **deliberately** is the
+    **dev's attestation** — no query can establish an account's purpose or
+    an intent. Conflating those two is exactly how the wrong account got
+    named; see the correction below. The sign matters:
     `activateSeasons` captures `joinedAt`, writes the batch, then stamps, so
     `added_at` preceding the stamp is the correct causal order. A row
     stamped *after* would be the old bug's signature.
@@ -1997,13 +2008,14 @@ else in this table is outstanding.
 
 ### PRE-SESSION-5 GATE (walk this list before launching the Facebook League)
 
-Six separate items elsewhere in this file are gated on "before Session 5 /
+Seven separate items elsewhere in this file are gated on "before Session 5 /
 before the Facebook League / before a non-dev league admin exists." They were
 each recorded beside the code they concern, which is right for understanding
-them and wrong for remembering them — six separately-buried triggers is five
+them and wrong for remembering them — seven separately-buried triggers is six
 chances to miss one. This is the index; **the full reasoning stays in the
 bullets referenced, deliberately not duplicated here**, since a duplicated
-rationale is one that drifts.
+rationale is one that drifts. (#7 is the exception to that last rule: it has
+no home bullet elsewhere, so its reasoning lives directly below the table.)
 
 | # | Item | Where the full bullet lives | Why it's gated here |
 |---|---|---|---|
@@ -2013,6 +2025,38 @@ rationale is one that drifts.
 | 4 | **Ladder-mutability revisit** (Module B) | "Alternate scoring modes" → Module B locked decisions → "Decided: mid-season ladder edits stay unguarded" | Unguarded config edits silently rewrite already-published scores; acceptable only while one trusted person can edit |
 | 5 | **Appointing any non-dev league admin** | Cross-cuts #4 and the `admin_update_config`/`admin_set_season_roster` integrity notes | This is the event that invalidates "only the dev can do damage," which several decisions currently rest on |
 | 6 | **Official opt-in default revisit** (Stage F flipped it to `true` for beta convenience) | 2.0 rebuild key decisions — the `official_opt_in` bullet | Opt-in-by-default was a closed-group convenience; a semi-public pool should choose deliberately |
+| 7 | **`get_show_picks` is anon-readable while `get_bracket_scores` is not — OPEN QUESTION, not a fix** | The bullet immediately below this table | Anyone with the publishable key can scrape every player's nickname, UUID and full pick history; at ~50 semi-strangers that stops being a closed-group detail |
+
+**#7 in full — recorded as an open question because the original intent is
+unknown, and guessing it is how the wrong thing gets "fixed."** Two read RPCs
+covering overlapping data are gated completely differently:
+- `get_bracket_scores` — authenticated **and** membership-gated. Cross-league
+  visibility is deliberately Global-admin-only.
+- `get_show_picks` — `grant execute ... to anon`, no auth, no membership
+  check. Its only gate is `now() >= ls.cutoff_at`. It returns `player_id`,
+  `player_name`, `slot`, `songname`.
+**Verified live rather than read off the grant**: a single past show returned
+44 rows and 11 distinct player names to an unauthenticated call using only
+the publishable key that ships in the deployed frontend. So the RPC that
+exposes *more* (raw UUIDs, every individual pick) is the one with *no* gate,
+while the aggregate-scores RPC is locked down.
+- **The reveal-after-cutoff behaviour is clearly intentional** — players are
+  meant to see each other's sheets once picks lock, and that's the whole
+  point of the cutoff condition in the `where` clause. **What is NOT
+  established is whether `anon` rather than "any member of this league" was
+  a deliberate choice or an oversight** carried over from Stage C1. Nothing
+  in the SQL comments or this file says. That's why this is a question, not
+  a task.
+- **What to decide before the league is semi-public**: whether reveal-after-
+  cutoff should require league membership (matching `get_bracket_scores`),
+  and separately whether `player_id` needs to be in the payload at all —
+  the frontend joins on it, but a public caller has no legitimate use for
+  it and it's the one field that isn't already visible in-app.
+- **Do not treat this as contained by obscurity.** The publishable key is
+  public by design and documented in this file; the RPC signature is in
+  committed SQL. Everything an attacker needs is already published — same
+  structure as the login rate-limiting entry (#1), which is why they sit
+  side by side here.
 
 Note #5 is not independent — it's the *trigger* for #4 and for re-reading the
 admin-gated integrity notes, so ordering matters: settle #4 before doing #5,
@@ -2342,6 +2386,45 @@ only for brackets that keep running the positional model.
 ---
 
 ## Conventions
+
+**STANDING RULE — no player nicknames and no pick contents in tracked files,
+ever.** This repo is public: `curl` with no credentials returns 200 on both
+`github.com/wooklord/fantasytour` and `raw.githubusercontent.com/.../CLAUDE.md`
+(verified 2026-08-15 UTC). Nicknames are the login identifier — half of the
+name+PIN credential pair — so writing them into a tracked file publishes one
+factor of every account named. That covers CLAUDE.md, plan files, commit
+messages, SQL comments, test fixtures, and analysis HTML alike. Player UUIDs
+too. Refer to players by role ("the league admin", "the eighth member") or by
+the property that matters ("the one member not on the roster before
+activation"); resolve identity with a query at the time you need it.
+- **This rule was broken the day it was written, which is why it exists.**
+  `caab1d6` recorded seven nicknames and four attributed picks into
+  CLAUDE.md; redacted 2026-08-15 UTC. Forward redaction only — history was
+  deliberately NOT rewritten, see the reasoning below.
+- **Deciding factor for not rewriting history, and it cuts both ways:** the
+  app already publishes a superset of this data to anonymous callers.
+  `get_show_picks` is granted to `anon` and, for any show past cutoff,
+  returns `player_id`, `player_name`, `slot`, `songname` — verified live,
+  44 rows and 11 distinct names off a single past show using only the
+  publishable key that ships in the frontend. So a history rewrite would
+  have cost every commit SHA cited throughout this file to remove data that
+  a public endpoint hands out anyway. **Do not read that as "the rule
+  doesn't matter"** — read it as "the git leak was dominated by a bigger
+  one," which is now tracked as an open question on the Pre-Session-5 gate.
+- **`test2-scoring-comparison.html` is GRANDFATHERED, explicitly.** It
+  carries the full roster (ten nicknames, 16–26 occurrences each, with
+  per-player scoring data) and predates this rule by a long way — added in
+  `ff7a3f0`, *"Add two standalone analysis docs for sharing outside the
+  org"*, i.e. it was created deliberately for external sharing, not leaked
+  into the repo by accident. **Removing it is a separate decision, not a
+  cleanup task**, and it needs the dev's call because the sharing intent
+  was the point of the file. Recorded here so a future reader finds an
+  explanation rather than an unexplained contradiction and "fixes" it —
+  or, worse, concludes the rule is dead because the repo visibly ignores
+  it. (`test/tiebreak.test.mjs`, `src/features/standings.js` and the
+  analysis HTML also carry a few real nicknames as fixture/example data;
+  same grandfathering, lower stakes, worth swapping for invented names
+  whenever those files are next touched for another reason.)
 
 Instance-specific values (name, branding, default slots, data source) live in
 named constants (`src/core/config.js` for frontend; a top-of-file constant in
