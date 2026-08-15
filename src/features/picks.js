@@ -201,8 +201,22 @@ export async function renderPickSheet(show){
   // "House rules" divider at all when the admin hasn't written any,
   // rather than an empty header.
   const ruleDefs = (() => {
-    // Ranked mode gets ONE row, not one per rank. The dedup below is by
-    // label, and every rank has a distinct one ("Rank 1", "Rank 2", ...),
+    const perfectPts = Number((state.cfg.bonuses ?? {}).perfect ?? 0);
+    // Perfect-sheet row, appended to whichever mode's list below. Two
+    // conditions, both load-bearing:
+    //   - `perfectPts > 0` — a "Perfect sheet: +0" row is worse than no
+    //     row, since it advertises a bonus that cannot be earned.
+    //   - `defs.length` — a bracket with no ladder/slots configured renders
+    //     no pick rows at all, so a lone bonus row would describe a sheet
+    //     that isn't on screen.
+    // The value is read from config rather than written into the string,
+    // so an admin changing the bonus can't leave the copy claiming the old
+    // number.
+    const withPerfect = (defs, desc) =>
+      (defs.length && perfectPts > 0) ? [...defs, { term: "Perfect sheet", desc }] : defs;
+
+    // Ranked mode gets ONE ladder row, not one per rank. The dedup below is
+    // by label, and every rank has a distinct one ("Rank 1", "Rank 2", ...),
     // so left alone this would render N rows repeating the same sentence
     // with a different number — the opposite of what the dedup exists for.
     // What a player actually needs explained is the ladder, once.
@@ -211,18 +225,26 @@ export async function renderPickSheet(show){
       if (!ladder.length) return [];
       // Worded against what the player can actually SEE. The sheet's rows
       // are no longer labelled "Rank N" (see slotHtml), so naming ranks
-      // here would point at something off-screen, and "5 / 4 / 3 / 2 / 1
-      // respectively" would have no visible referent to be respective to.
-      // The number beside each row is the whole vocabulary now.
-      return [{
-        term: "The ladder",
-        desc: `Each row pays the number beside it if that song is played, anywhere in the show. Top row is worth most (${ladder[0]}), down to ${ladder[ladder.length-1]} — where a song lands in the setlist doesn't matter.`,
-      }];
+      // here would point at something off-screen. The number beside each
+      // row is the whole vocabulary now — which is also why this no longer
+      // spells out the ladder's top and bottom values: they're printed
+      // beside the rows, and repeating them here cost four wrapped lines
+      // on a phone to restate what's already visible.
+      return withPerfect([{
+        term: "Ladder",
+        desc: "Each row scores the number beside it if that song is played, anywhere in the show.",
+      }], `Fill all ${ladder.length} rows and have every song played: +${perfectPts}.`);
     }
     const seen = new Set();
     const defs = structured.filter(s => !seen.has(s.label) && seen.add(s.label)).map(s => ({ term: s.label, desc: s.tooltip }));
     if (flats.length) defs.push({ term: flats.length > 1 ? `Pick 1–${flats.length}` : "Pick", desc: FLAT_PICK_TOOLTIP });
-    return defs;
+    // "slots don't have to match" is not padding — slot mode's perfect
+    // bonus fires on `breakdown.every(x => x.hit)`, and a played-but-
+    // wrong-slot pick sets hit=true. So the bonus really does pay out on a
+    // sheet where every song played and every slot was wrong. Players
+    // assume the opposite, and would otherwise only learn it by losing to
+    // it.
+    return withPerfect(defs, `Fill every row and have every song played — slots don't have to match: +${perfectPts}.`);
   })();
   const customRules = state.cfg.custom_rules || [];
   $("#main").innerHTML = `
@@ -234,7 +256,7 @@ export async function renderPickSheet(show){
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
       <button class="savebtn" id="save">Lock 'em in</button>
-      <p style="font-size:.75rem;margin:8px 0 0;text-align:center;color:var(--paper-ink-soft)">You can change your picks any time until the cutoff.</p>
+      <p style="font-size:.75rem;margin:8px 0 0;text-align:center;color:var(--paper-ink-soft)">Change your picks any time until cutoff.</p>
       <div class="countbig">${state.cfg.voting_override==='open' ? 'Admin override — voting open' : `Cutoff ${fmtCutoff(show.cutoff_at)} · <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
       ${currentBracket()?.bracket_kind === "official" ? laurelSpray() : ""}
@@ -245,9 +267,8 @@ export async function renderPickSheet(show){
         ${ruleDefs.map(d => `<div class="ruledef"><span class="rd-term">${esc(d.term)}</span><span class="rd-desc">${esc(d.desc||"")}</span></div>`).join("")}
       </div>
       ${customRules.length ? `<div class="divider">House rules</div><ul class="customrules">${customRules.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
-      <p class="rulenote">${state.cfg.mode === "ranked_choice"
-        ? "Numbers on the pick sheet are what each rank pays."
-        : "Numbers on the pick sheet are points per slot."}</p>
+      ${state.cfg.mode === "ranked_choice" ? ""
+        : `<p class="rulenote">Numbers on the pick sheet are points per slot.</p>`}
     </div>
     ${footerHtml()}`;
   document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
@@ -286,7 +307,7 @@ export async function renderPickSheet(show){
   };
   if (state.cfg.voting_override !== 'open' && show.cutoff_at) state.timers.push(setInterval(() => {
     const cd = countdown(show.cutoff_at);
-    if (cd) $("#cd").textContent = cd + " left";
+    if (cd) $("#cd").textContent = cd;
     else { toast("All picks are locked — enjoy the show 🥚"); openShow(show.id); }
   }, 1000));
 }

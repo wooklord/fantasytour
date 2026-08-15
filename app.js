@@ -518,19 +518,21 @@
     </div>`;
     const structured = slots.filter((s) => !s.flat), flats = slots.filter((s) => s.flat);
     const ruleDefs = (() => {
-      var _a2, _b;
+      var _a2, _b, _c, _d;
+      const perfectPts = Number((_b = ((_a2 = state.cfg.bonuses) != null ? _a2 : {}).perfect) != null ? _b : 0);
+      const withPerfect = (defs2, desc) => defs2.length && perfectPts > 0 ? [...defs2, { term: "Perfect sheet", desc }] : defs2;
       if (state.cfg.mode === "ranked_choice") {
-        const ladder = (_b = (_a2 = state.cfg.ranked) == null ? void 0 : _a2.ladder) != null ? _b : [];
+        const ladder = (_d = (_c = state.cfg.ranked) == null ? void 0 : _c.ladder) != null ? _d : [];
         if (!ladder.length) return [];
-        return [{
-          term: "The ladder",
-          desc: `Each row pays the number beside it if that song is played, anywhere in the show. Top row is worth most (${ladder[0]}), down to ${ladder[ladder.length - 1]} \u2014 where a song lands in the setlist doesn't matter.`
-        }];
+        return withPerfect([{
+          term: "Ladder",
+          desc: "Each row scores the number beside it if that song is played, anywhere in the show."
+        }], `Fill all ${ladder.length} rows and have every song played: +${perfectPts}.`);
       }
       const seen = /* @__PURE__ */ new Set();
       const defs = structured.filter((s) => !seen.has(s.label) && seen.add(s.label)).map((s) => ({ term: s.label, desc: s.tooltip }));
       if (flats.length) defs.push({ term: flats.length > 1 ? `Pick 1\u2013${flats.length}` : "Pick", desc: FLAT_PICK_TOOLTIP });
-      return defs;
+      return withPerfect(defs, `Fill every row and have every song played \u2014 slots don't have to match: +${perfectPts}.`);
     })();
     const customRules = state.cfg.custom_rules || [];
     $("#main").innerHTML = `
@@ -542,7 +544,7 @@
       ${structured.map(slotHtml).join("")}
       ${flats.length ? `<div class="divider">Anywhere in the show</div>${flats.map(slotHtml).join("")}` : ""}
       <button class="savebtn" id="save">Lock 'em in</button>
-      <p style="font-size:.75rem;margin:8px 0 0;text-align:center;color:var(--paper-ink-soft)">You can change your picks any time until the cutoff.</p>
+      <p style="font-size:.75rem;margin:8px 0 0;text-align:center;color:var(--paper-ink-soft)">Change your picks any time until cutoff.</p>
       <div class="countbig">${state.cfg.voting_override === "open" ? "Admin override \u2014 voting open" : `Cutoff ${fmtCutoff(show.cutoff_at)} \xB7 <b id="cd"></b>`}</div>
       <div class="err" id="p-err" style="text-align:center"></div>
       ${((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" ? laurelSpray() : ""}
@@ -553,7 +555,7 @@
         ${ruleDefs.map((d) => `<div class="ruledef"><span class="rd-term">${esc(d.term)}</span><span class="rd-desc">${esc(d.desc || "")}</span></div>`).join("")}
       </div>
       ${customRules.length ? `<div class="divider">House rules</div><ul class="customrules">${customRules.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
-      <p class="rulenote">${state.cfg.mode === "ranked_choice" ? "Numbers on the pick sheet are what each rank pays." : "Numbers on the pick sheet are points per slot."}</p>
+      ${state.cfg.mode === "ranked_choice" ? "" : `<p class="rulenote">Numbers on the pick sheet are points per slot.</p>`}
     </div>
     ${footerHtml()}`;
     document.querySelectorAll(".slotline input").forEach(attachAutocomplete);
@@ -581,7 +583,7 @@
     };
     if (state.cfg.voting_override !== "open" && show.cutoff_at) state.timers.push(setInterval(() => {
       const cd = countdown(show.cutoff_at);
-      if (cd) $("#cd").textContent = cd + " left";
+      if (cd) $("#cd").textContent = cd;
       else {
         toast("All picks are locked \u2014 enjoy the show \u{1F95A}");
         openShow(show.id);

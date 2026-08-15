@@ -154,7 +154,11 @@ export function makeFixtures(){
 // allow_duplicates have falsy literal fallbacks, so setting them TRUE here
 // differs from both regression outcomes and covers both shapes at once.
 // **Do not "tidy" those two to false — that silently removes their coverage.**
-export function makeRankedFixtures({ wildcardDebut = false } = {}){
+// `perfect` is a knob, not a constant, because the perfect-sheet rules row
+// has to be checked in BOTH directions — it renders when the bonus is set
+// and must not render when it's 0 (a "+0" row advertises an unearnable
+// bonus). A single fixture value can only ever exercise one of those.
+export function makeRankedFixtures({ wildcardDebut = false, perfect = 5 } = {}){
   const f = makeFixtures();
   const casual = f.tables.brackets.find(b => b.kind === "casual");
   casual.config = {
@@ -170,7 +174,7 @@ export function makeRankedFixtures({ wildcardDebut = false } = {}){
     partial_credit: true,   // literal false
     partial_points: 2,      // literal 1
     allow_duplicates: true, // literal false
-    bonuses: { cover: 1, debut: 2, perfect: 5, jamchart: 0 }, // cover/debut literals are 0
+    bonuses: { cover: 1, debut: 2, perfect, jamchart: 0 }, // cover/debut literals are 0
     wildcards: { debut: wildcardDebut }, // see the two-run note above
     oneset: {
       slots: casual.config.oneset.slots, // 1 entry, non-empty

@@ -374,8 +374,8 @@ export async function runGlobalAdminScenario({ html, scripts, mode }){
 //      fields have no inputs on screen, so they survive only via
 //      saveConfig()'s read-through-to-state.cfg fallbacks — the one piece of
 //      this work with a real data-loss failure mode.
-export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDebut = false }){
-  const { tables } = makeRankedFixtures({ wildcardDebut });
+export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDebut = false, perfect = 5 }){
+  const { tables } = makeRankedFixtures({ wildcardDebut, perfect });
   const casualId = tables.brackets.find(b => b.kind === "casual").id;
   const before = JSON.parse(JSON.stringify(tables.brackets.find(b => b.id === casualId).config));
   const calls = [];
@@ -501,6 +501,15 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
     // dedups by label and every rank has a distinct one.
     ruleRowCount: window.document.querySelectorAll(".ruledef").length,
     ruleText: window.document.querySelector(".ruledef .rd-desc")?.textContent || "",
+    // Terms, so a test can assert WHICH rows are present rather than only
+    // how many. Row count alone can't distinguish "ladder + perfect sheet"
+    // from "two ladder rows", and the count is no longer a fixed 1 now that
+    // the perfect-sheet row is conditional.
+    ruleTerms: [...window.document.querySelectorAll(".ruledef .rd-term")].map(t => t.textContent),
+    ruleDescs: [...window.document.querySelectorAll(".ruledef .rd-desc")].map(t => t.textContent),
+    // The bottom-of-card note. Ranked mode renders no element at all (not
+    // alternate copy), so this is null there and a string in slot mode.
+    ruleNote: window.document.querySelector(".rulenote")?.textContent ?? null,
     // The "Anywhere in the show" divider belongs to flat picks, which ranked
     // mode has none of.
     hasFlatDivider: /Anywhere in the show/.test(mainHTML(window, mode)),
@@ -701,6 +710,19 @@ export async function runScenario({ html, scripts, mode, presetSession }){
   await tick(); await tick();
   snap("pick-sheet-open-casual");
 
+  // Slot mode's rules card, captured while the Casual sheet is open. The
+  // ranked work removes the bottom-of-card rulenote in RANKED mode only —
+  // it's a conditional render now rather than a ternary between two
+  // strings, so the failure mode is the element disappearing everywhere.
+  // Nothing else in this suite would notice: every other rules-card
+  // assertion runs inside runRankedChoiceScenario, where the note is
+  // supposed to be absent.
+  const slotsRules = {
+    terms: [...window.document.querySelectorAll(".ruledef .rd-term")].map(t => t.textContent),
+    descs: [...window.document.querySelectorAll(".ruledef .rd-desc")].map(t => t.textContent),
+    note: window.document.querySelector(".rulenote")?.textContent ?? null,
+  };
+
   // type a pick into the first slot input and confirm the (bracket-scoped)
   // draft key persists
   const input = window.document.querySelector(".slotline input");
@@ -883,7 +905,7 @@ export async function runScenario({ html, scripts, mode, presetSession }){
   await tick();
   log.push({ label: "realtime-toast-season-other-bracket", toasts: window.document.getElementById("toasts")?.innerHTML || "" });
 
-  return { log, calls, draftKeyVal, officialHasInputs, localStorage: dumpLocalStorage(window) };
+  return { log, calls, draftKeyVal, officialHasInputs, slotsRules, localStorage: dumpLocalStorage(window) };
 }
 
 function clickTab(window, tab){

@@ -91,6 +91,31 @@ async function runMode(mode){
     afterLock.includes('pickmark progress" title="Picks saved but incomplete"') && !afterLock.includes("pickmark warn"),
     `shows-list-after-lock-with-stale-draft html: ${afterLock}`);
 
+  // Slot mode's rules card. The ranked work turned the bottom-of-card note
+  // from a ternary between two strings into a conditional render, so the
+  // regression to catch is the element vanishing in BOTH modes rather than
+  // just ranked. Every other rules-card assertion lives in the ranked
+  // scenario, where absence is the expected result — so without this,
+  // deleting the note outright would be entirely green.
+  check("slot mode still renders the bottom-of-card rulenote",
+    typeof res.slotsRules.note === "string" && /points per slot/.test(res.slotsRules.note),
+    `note: ${JSON.stringify(res.slotsRules.note)}`);
+  // Perfect sheet in slot mode: the fixture sets perfect:3, so the row must
+  // render with that value read from config.
+  check("slot mode renders the perfect-sheet row with the configured value",
+    res.slotsRules.terms.includes("Perfect sheet")
+      && /\+3\./.test(res.slotsRules.descs.find(d => /Fill every row/.test(d)) ?? ""),
+    `terms: ${JSON.stringify(res.slotsRules.terms)} descs: ${JSON.stringify(res.slotsRules.descs)}`);
+  // The explicit half of that copy. Slot mode's perfect bonus fires on
+  // `breakdown.every(x => x.hit)`, and a played-but-wrong-slot pick sets
+  // hit=true — so the bonus really does pay on a sheet where every song
+  // played and every slot was wrong. The caveat is the whole reason this
+  // string is longer than the ranked one; asserting it stops a future
+  // "tidy" from shortening the copy back into being misleading.
+  check("slot mode's perfect-sheet copy keeps the slots-don't-have-to-match caveat",
+    /slots don't have to match/.test(res.slotsRules.descs.find(d => /Fill every row/.test(d)) ?? ""),
+    `descs: ${JSON.stringify(res.slotsRules.descs)}`);
+
   const officialGate = byLabel(log, "pick-sheet-official-ineligible");
   check("Official (no covering season) shows the ineligible reason, not a form",
     res.officialHasInputs === false && /No Official season covers this show yet/.test(officialGate?.html || ""),
@@ -363,15 +388,51 @@ async function runMode(mode){
   check("each row shows its ladder value",
     JSON.stringify(ranked.sheet.points) === JSON.stringify(["5","4","3","2","1"]),
     `points: ${JSON.stringify(ranked.sheet.points)}`);
+  // One LADDER row, not one per rank — asserted on the terms rather than on
+  // a total row count, which is no longer a fixed 1 now that the
+  // perfect-sheet row is conditional. A 5-rung ladder rendering one row per
+  // rank is the regression this guards.
   check("the rules card explains the ladder once, not once per rank",
-    ranked.sheet.ruleRowCount === 1,
-    `ruleRowCount: ${ranked.sheet.ruleRowCount}`);
+    ranked.sheet.ruleTerms.filter(t => t === "Ladder").length === 1,
+    `ruleTerms: ${JSON.stringify(ranked.sheet.ruleTerms)}`);
   // Copy is worded against what's on screen: rows are unlabelled now, so the
   // rules row explains the number beside each row rather than naming ranks
   // the player can no longer see.
-  check("the rules row explains the ladder in terms of the visible numbers",
-    /number beside it/.test(ranked.sheet.ruleText) && /5/.test(ranked.sheet.ruleText) && /1/.test(ranked.sheet.ruleText),
+  //
+  // Matched on the FULL sentence, not on /number beside it/. That fragment
+  // survived the last two rewordings of this string unchanged, so a green
+  // result proved only that some ladder copy existed — not that the intended
+  // copy landed. The negative half matters just as much: the dropped second
+  // sentence ("Top row is worth most (5), down to 1 …") also contained
+  // "number beside it"'s neighbourhood and would have passed the old check
+  // while still wrapping to seven lines on a phone.
+  check("the ladder row uses the current wording, not a previous revision",
+    ranked.sheet.ruleText === "Each row scores the number beside it if that song is played, anywhere in the show.",
     `ruleText: "${ranked.sheet.ruleText}"`);
+  check("the dropped second sentence is gone from the ladder row",
+    !/Top row is worth most/.test(ranked.sheet.ruleText) && !/setlist/.test(ranked.sheet.ruleText),
+    `ruleText: "${ranked.sheet.ruleText}"`);
+  check("'pays' is gone from player-facing ranked copy",
+    !ranked.sheet.ruleDescs.some(d => /\bpays\b/.test(d)) && !/\bpays\b/.test(ranked.sheet.ruleNote ?? ""),
+    `descs: ${JSON.stringify(ranked.sheet.ruleDescs)} note: ${JSON.stringify(ranked.sheet.ruleNote)}`);
+  // Ranked mode renders NO note element, rather than alternate copy — the
+  // ladder row already says what the numbers mean, and the old note was a
+  // second copy of the same sentence six lines below it.
+  check("ranked mode renders no bottom-of-card rulenote at all",
+    ranked.sheet.ruleNote === null,
+    `ruleNote: ${JSON.stringify(ranked.sheet.ruleNote)}`);
+  // Perfect sheet, present direction. The ranked fixture sets perfect:5, so
+  // the row must render AND must carry that value from config rather than a
+  // hardcoded number.
+  check("perfect-sheet row renders when the bonus is non-zero",
+    ranked.sheet.ruleTerms.includes("Perfect sheet"),
+    `ruleTerms: ${JSON.stringify(ranked.sheet.ruleTerms)}`);
+  check("perfect-sheet row reads its value from config, not a literal",
+    /\+5\./.test(ranked.sheet.ruleDescs.find(d => /Fill all/.test(d)) ?? ""),
+    `descs: ${JSON.stringify(ranked.sheet.ruleDescs)}`);
+  check("perfect-sheet row names the real ladder length",
+    /Fill all 5 rows/.test(ranked.sheet.ruleDescs.find(d => /Fill all/.test(d)) ?? ""),
+    `descs: ${JSON.stringify(ranked.sheet.ruleDescs)}`);
   check("no 'Anywhere in the show' divider in ranked mode (no flat picks)",
     ranked.sheet.hasFlatDivider === false,
     `hasFlatDivider: ${ranked.sheet.hasFlatDivider}`);
@@ -458,6 +519,22 @@ async function runMode(mode){
   check("typing 'Any Debut' in ranked mode still triggers the not-in-catalog confirm",
     rankedWildcardOn.sheet.confirmedUnknown === true,
     `confirmedUnknown: ${rankedWildcardOn.sheet.confirmedUnknown}`);
+
+  // Perfect-sheet row, ABSENT direction — a third ranked run purely to flip
+  // bonuses.perfect to 0. A single fixture value can only ever exercise one
+  // direction, and "+0" advertises a bonus that cannot be earned, so the
+  // absence is a real requirement rather than a cosmetic one.
+  const rankedNoPerfect = await runRankedChoiceScenario({ html, scripts, mode, perfect: 0 });
+  check("perfect-sheet row does NOT render when the bonus is zero",
+    !rankedNoPerfect.sheet.ruleTerms.includes("Perfect sheet"),
+    `ruleTerms: ${JSON.stringify(rankedNoPerfect.sheet.ruleTerms)}`);
+  // Positive control for the check immediately above. Without it, a bug that
+  // dropped EVERY rules row (an exception in ruleDefs, a broken selector, a
+  // sheet that never rendered) would satisfy the absence assertion for
+  // entirely the wrong reason and look green.
+  check("...and the Ladder row still renders on that run (positive control)",
+    rankedNoPerfect.sheet.ruleTerms.includes("Ladder"),
+    `ruleTerms: ${JSON.stringify(rankedNoPerfect.sheet.ruleTerms)}`);
 
   // Session 4 step 2: must_change_pin:true must block the normal tabs
   // behind a forced interstitial, and submitting a matching new PIN must
