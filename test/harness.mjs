@@ -374,7 +374,7 @@ export async function runGlobalAdminScenario({ html, scripts, mode }){
 //      fields have no inputs on screen, so they survive only via
 //      saveConfig()'s read-through-to-state.cfg fallbacks — the one piece of
 //      this work with a real data-loss failure mode.
-export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDebut = false, perfect = 5 }){
+export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDebut = false, perfect = 7 }){
   const { tables } = makeRankedFixtures({ wildcardDebut, perfect });
   const casualId = tables.brackets.find(b => b.kind === "casual").id;
   const before = JSON.parse(JSON.stringify(tables.brackets.find(b => b.id === casualId).config));

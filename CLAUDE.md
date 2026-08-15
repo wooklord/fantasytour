@@ -2183,6 +2183,21 @@ existing ranked 7a-7p blocks.
   mitigation in place is "don't touch it."** Worth stating plainly rather
   than letting the delete read as having closed the exposure.
 
+**Small, unresolved: the countdown is now phrased two ways.** `picks.js`'s
+pick sheet renders `Cutoff Aug 14, 11:00 PM · 2h 14m` — the trailing "left"
+was dropped 2026-08-14 at the dev's request, since it wrapped awkwardly beside
+the cutoff time. But `shows.js:183` and `:256` render the same
+`countdown()` value as `"cutoff in 2h 14m"`, so the app now states the same
+fact two ways and the pick sheet has the version with no word saying what the
+duration *is*. Not a bug and not obviously wrong — a bare `2h 14m` directly
+after a timestamp reads fine in context — but it was a deliberate change made
+without the `shows.js` phrasing in view, so it's recorded rather than left as
+an accident someone later "fixes" in the wrong direction. **Nothing in the
+suite covers `.countbig`**, so either phrasing can drift without a test
+noticing. Options if it's ever worth touching: align `shows.js` to the bare
+form, restore a short word to the sheet ("in 2h 14m"), or decide the two
+contexts genuinely want different wording and note that here instead.
+
 **Open DESIGN QUESTION, not a task — format changes are transparent to
 players in ranked mode and destructive in slot mode, and the asymmetry is
 structural.** Recorded alongside the mechanical `toggleFormat` item above

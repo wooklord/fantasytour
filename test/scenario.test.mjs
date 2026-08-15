@@ -364,7 +364,7 @@ async function runMode(mode){
       flat_picks: 2, flat_points: 3,
       partial_credit: true, partial_points: 2,
       allow_duplicates: true,
-      cover: 1, debut: 2, perfect: 5,
+      cover: 1, debut: 2, perfect: 7,
       wildcardDebut: false,
       onesetFlatPicks: 1, onesetFlatPoints: 2,
     }),
@@ -428,7 +428,7 @@ async function runMode(mode){
     ranked.sheet.ruleTerms.includes("Perfect sheet"),
     `ruleTerms: ${JSON.stringify(ranked.sheet.ruleTerms)}`);
   check("perfect-sheet row reads its value from config, not a literal",
-    /\+5\./.test(ranked.sheet.ruleDescs.find(d => /Fill all/.test(d)) ?? ""),
+    /\+7\./.test(ranked.sheet.ruleDescs.find(d => /Fill all/.test(d)) ?? ""),
     `descs: ${JSON.stringify(ranked.sheet.ruleDescs)}`);
   check("perfect-sheet row names the real ladder length",
     /Fill all 5 rows/.test(ranked.sheet.ruleDescs.find(d => /Fill all/.test(d)) ?? ""),

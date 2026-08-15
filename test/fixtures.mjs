@@ -158,7 +158,17 @@ export function makeFixtures(){
 // has to be checked in BOTH directions — it renders when the bonus is set
 // and must not render when it's 0 (a "+0" row advertises an unearnable
 // bonus). A single fixture value can only ever exercise one of those.
-export function makeRankedFixtures({ wildcardDebut = false, perfect = 5 } = {}){
+//
+// The default is 7 SPECIFICALLY so it differs from `ladder.length` (5) and
+// `ladder[0]` (5). It was 5 for one commit, which collided with both: the
+// rules row renders "Fill all 5 rows … : +5.", so swapping the two
+// interpolations — `Fill all ${perfectPts} rows … +${ladder.length}` —
+// produced a byte-identical string and both assertions stayed green. A
+// check named "reads its value from config" proved nothing about WHICH
+// value it read. Same argument as the note above about `flat_picks`/
+// `partial_points` needing to differ from their literal fallbacks; this
+// knob has to differ from the ladder it sits beside.
+export function makeRankedFixtures({ wildcardDebut = false, perfect = 7 } = {}){
   const f = makeFixtures();
   const casual = f.tables.brackets.find(b => b.kind === "casual");
   casual.config = {
