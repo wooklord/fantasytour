@@ -1347,6 +1347,38 @@ before assuming a change is covered just because the suite is green:
     fill, the text-on-fill contrast was never the problem, the
     component's boundary against the paper was. Fixed with a
     `.sheet .btn` override using `--paper-ink`.
+  - **`--coral` on the paper fails AA in BOTH themes — found 2026-08-15,
+    NOT YET FIXED.** Same class as the first two: an app-wide token used
+    on the cream sheet. Computed from sRGB relative luminance (the WCAG
+    formula), not eyeballed, and recomputed here rather than accepting a
+    relayed number:
+    - **Dark theme** — `--coral:#FF6B5E` on `--paper:#FFF3DC` = **2.54:1**.
+      Fails AA's 4.5:1 *and* the 3:1 large-text floor.
+    - **Light theme** — `--coral:#D9503F` on the same paper = **3.70:1**.
+      Fails AA's 4.5:1. **It does clear the 3:1 large-text floor** — but
+      that floor doesn't apply here: both affected elements render at
+      `.85rem`, which is normal text, so 4.5:1 is the applicable
+      threshold and both themes fail it. (An earlier relay of this finding
+      said both themes were under 3:1; light is not. The AA conclusion is
+      unchanged.)
+    - `--paper` is defined once in `:root` and never redefined under
+      `html[data-theme="light"]`, so the paper is the same cream in both
+      themes and only `--coral` moves. For calibration against tokens that
+      pass: `--paper-ink` is 13.70:1 and `--paper-ink-soft` is 6.83:1.
+    - **Two places this actually renders today, both inside `.sheet`** —
+      this is a live defect, not a prospective hazard:
+      1. **`.err` / `#p-err`** (`styles.css:413`, `picks.js:261`) — every
+         save and validation error on the pick sheet.
+      2. **`.countbig b`** (`styles.css:322`, `picks.js:260`) — the
+         cutoff countdown. This is the element whose two-row split
+         surfaced the finding in the first place.
+      `.linkbtn` and `.pill.live` also use `--coral` but don't currently
+      land on paper; they're the same hazard if ever moved there.
+    - **Fix, when it's taken**: a `.sheet`-scoped override in the same
+      idiom as the `.btn` fix above — a paper-safe danger colour rather
+      than reusing `--coral`, since `--coral` has to keep working on the
+      app's own dark panels where it's fine. Do **not** darken `--coral`
+      globally to solve a paper-only problem.
   The pattern to watch for: it's not just text-color classes that break
   this way — **any app-wide component class** (buttons, pills, badges,
   whatever gets added next) breaks the instant it's dropped inside

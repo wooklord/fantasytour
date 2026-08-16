@@ -637,7 +637,42 @@ instance constants.
   string touched above: mechanical justification only, no "other bands"
   framing anywhere.
 
-## STATUS as of 2026-08-13 (durability checkpoint — read this first)
+## STATUS as of 2026-08-15 (durability checkpoint — read this first)
+
+**MODULE B IS SHIPPED, DEPLOYED, AND VERIFIED IN PRODUCTION. There is no
+next step for the module itself.** Casual ran ranked choice for a real show
+(The Pines Music Park, 2026-08-14, show `1765912122`, finalized 12:00:04Z)
+and the first production run of `scoreRankedPicks` was checked against
+`scores.breakdown` and passed every check — ladder values paid per rung
+(`rank1` paid 6, ruling out the flat-pick fallback), no "Any Debut" row, the
+perfect-sheet gate correctly withheld, totals reconciling. Full detail and
+the caveats live in the "✅ VERIFIED 2026-08-15 — FIRST PRODUCTION RUN OF
+`scoreRankedPicks`" bullet in CLAUDE.md; that is the authoritative record,
+not this file.
+
+**Carried forward, deliberately not logged as open work:**
+- **Rank-ordering is verified by test and cannot realistically be verified
+  in production.** It needs stored row order to differ from rank order;
+  `scoreBracket` fetches picks with no `ORDER BY`, so ordering follows
+  insertion order, which follows sheet order. The scenario fixture stores
+  `rank3,1,5,2,4` deliberately for this reason and the branch is
+  mutation-verified. Permanent property, not a pending task.
+- **Participation, first real data point: only 3 of Casual's members
+  submitted.** An observation, not a correctness issue, and a poor baseline
+  — the same evening carried a format toggle, an orphaned-pick incident and
+  a mid-evening levelling. Worth watching over a few shows.
+- **`test/fixtures.mjs` ranked `perfect` defaults to 7, not 5**, because 5
+  collided with `ladder.length` and `ladder[0]` and made two assertions
+  unable to prove which value they read. Don't "tidy" it back.
+
+**The still-open items below are not Module B blockers** — the slot-mode
+perfect-sheet count check, the `toggleFormat` orphan warning, and the
+format-transparency design question are all recorded in CLAUDE.md's
+later-work list and stand on their own.
+
+---
+
+### Superseded status block (2026-08-13), kept for the sequence it records
 
 **The scorer and the admin panel are DONE and committed. `picks.js` — the
 entire player-facing half — is NOT STARTED. Nothing is deployed.**
