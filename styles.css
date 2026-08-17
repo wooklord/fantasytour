@@ -288,6 +288,15 @@ html[data-theme="light"] .panel.live-halo{
 .sheet .revertlink{display:none;background:none;border:none;color:var(--paper-ink-soft);font-size:.78rem;text-decoration:underline;padding:0;margin:2px 0 0;cursor:pointer}
 .sheet.dirty .revertlink{display:inline-block}
 .sheet .divider{border-top:1px solid rgba(43,33,64,.2);margin:18px 0 6px;padding-top:10px;font-family:var(--mono);font-size:.72rem;color:var(--paper-ink-soft);letter-spacing:1px;text-transform:uppercase}
+/* Admin scope line — visually the same idea as .sheet .divider above, but a
+   SEPARATE rule on purpose: that one is paper-scoped and uses --paper-ink-soft,
+   which is only correct on the cream .sheet stock. This one sits on the app
+   background, so it uses the app's own --line/--cream-dim/--cream tokens,
+   all three of which are redefined per theme. Reusing the paper class here
+   would be the exact mistake the Frontend/CSS gotchas in CLAUDE.md describe
+   in the other direction. */
+.scopeline{border-top:1px solid var(--line);margin:22px 0 10px;padding-top:10px;font-family:var(--mono);font-size:.72rem;color:var(--cream-dim);letter-spacing:1px;text-transform:uppercase}
+.scopeline b{color:var(--cream);font-weight:700}
 /* "The Rules" companion card — same .sheet paper treatment (cream stock,
    tape corners, shadow, rotation), just a second instance below the pick
    sheet, so it reads as a companion page rather than a different

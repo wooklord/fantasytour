@@ -306,60 +306,26 @@ export async function renderAdmin(){
         const [, m, d] = sh.showdate.split("-");
         return `${Number(m)}/${Number(d)}`;
       }).join(", ")}</div>` : "";
+  // ---- SECTION ORDER IS GROUPED BY SCOPE. Don't reorder casually. ----
+  // League-scoped first, then a scope line, then everything scoped to the
+  // CURRENT bracket, then global, then personal. The line is only truthful
+  // if nothing league-scoped sits under it, so moving a section across it
+  // is a behavioural change, not a cosmetic one.
+  //
+  // Seasons is the subtle one, and its placement is deliberate: it sits
+  // just ABOVE the line, next to but NOT with Season tiebreakers. Despite
+  // the matching names the two have different scopes — Seasons resolves
+  // officialBracketId() and edits Official no matter which bracket the
+  // switcher shows, while Season tiebreakers is current-bracket config
+  // (cfg.tiebreakers, saved with p_bracket_id: state.currentBracketId)
+  // that only renders when the current bracket IS Official. Putting
+  // Seasons below the line would make the line actively false for it.
+  // This looks wrong when scanning by name and is correct by behaviour —
+  // please don't "fix" it by moving them together.
+  const scopeLine = currentBracket()
+    ? `<div class="scopeline">Editing <b>${esc(currentBracket().bracket_name)}</b> · ${esc(currentBracket().league_name)} — everything below applies to this bracket only</div>`
+    : "";
   $("#main").innerHTML = `
-    ${globalConsoleHtml()}
-    <div class="panel"><h2>Who's picked</h2>
-      <div class="field"><label>Show</label>
-        <select id="roster-show" onchange="loadRoster()">
-          ${(shows||[]).map(sh => `<option value="${sh.id}" ${nextShow && sh.id===nextShow.id ? "selected" : ""}>${fmtDate(sh.showdate)} — ${esc(sh.venue||"TBA")}</option>`).join("")}
-        </select></div>
-      <div id="roster"><p class="muted">Pick a show.</p></div>
-    </div>
-    ${collapsible("master", "Master switch", `
-      <div class="field"><label>Voting override</label>
-        <select id="c-override">
-          <option value="auto" ${(cfg.voting_override||"auto")==="auto"?"selected":""}>Auto — cutoffs decide</option>
-          <option value="locked" ${cfg.voting_override==="locked"?"selected":""}>Locked — nobody can vote</option>
-          <option value="open" ${cfg.voting_override==="open"?"selected":""}>Open — voting open for today + future shows</option>
-        </select></div>
-      <div class="field"><label>Scoring mode</label>
-        <select id="c-mode" onchange="onModeChange()">
-          <option value="slots" ${mode!=="ranked_choice"?"selected":""}>Slots — position matters (opener, closers, encore)</option>
-          ${showRanked ? `<option value="ranked_choice" ${mode==="ranked_choice"?"selected":""}>Ranked choice — N picks against a fixed ladder</option>` : ""}
-        </select></div>
-      <div class="field"><label>Bonus: perfect sheet (every pick hits)</label><input id="c-bperfect" type="number" min="0" value="${b.perfect||0}"></div>
-      <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.
-        Perfect sheet lives here rather than with the other bonuses because it's the one
-        bonus that applies in every scoring mode — it scores the whole sheet being right,
-        not any individual song.</p>
-    `)}
-    ${collapsible("seasons", "Seasons", `
-      <p class="muted">Named date ranges — shows sort themselves in by date.</p>
-      <div id="seasonrows">${(seasonsA||[]).map(seasonRow).join("")}</div>
-      <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
-    `, seasonWarning)}
-    ${currentBracket()?.bracket_kind === "official" ? collapsible("tiebreakers", "Season tiebreakers", `
-      <p class="muted">Applies only to Official's season standings, when a season ends with players tied on points. Tried in order — the first layer that separates two players decides. Leave all "None", or exhaust every layer without a difference, and they share the placing — same as a per-show tie.</p>
-      <div class="grid2">
-        ${[0,1,2].map(i => tiebreakerSelectRow(i, (cfg.tiebreakers||[])[i] || "")).join("")}
-      </div>
-      <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros — any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins — per-show ties still share the crown. Highest single-show score.</p>
-    `) : ""}
-    ${collapsible("rules-custom", "House rules", `
-      <p class="muted">Bracket-wide house rules, shown on the pick sheet's "The Rules"
-        card below the auto-generated slot definitions. Casual and Official can each
-        have their own. Up to ${CUSTOM_RULES_MAX} rules, ${CUSTOM_RULE_MAXLEN}
-        characters each.</p>
-      <div id="customrules">${(cfg.custom_rules||[]).map(customRuleRow).join("")}</div>
-      <button class="btn ghost small" id="add-rule-btn" onclick="addCustomRule()"
-        ${(cfg.custom_rules||[]).length >= CUSTOM_RULES_MAX ? "disabled" : ""}>+ add rule</button>
-    `)}
-    <div id="rules-region">${rulesRegionHtml(cfg, mode)}</div>
-    <div class="panel">
-      <button class="btn" onclick="saveConfig()">Save all rules</button>
-      <div class="err" id="cfg-err"></div>
-      <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments. Saves both rule sections above, whether or not they're currently expanded.</p>
-    </div>
     ${collapsible("shows", "Shows & cutoffs", `
       <p class="muted">Cutoffs are shown and edited in each show's venue-local time. New shows default to 6 PM venue-local.</p>
       ${(shows||[]).map(sh => {
@@ -399,6 +365,59 @@ export async function renderAdmin(){
       <button class="linkbtn" id="banToggle" onclick="toggleBans()" style="margin-top:8px">show ban list</button>
       <div id="banlist" class="hidden" style="margin-top:6px"></div>
     `)}
+    ${collapsible("seasons", "Seasons", `
+      <p class="muted">Named date ranges — shows sort themselves in by date.</p>
+      <div id="seasonrows">${(seasonsA||[]).map(seasonRow).join("")}</div>
+      <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
+    `, seasonWarning)}
+    ${scopeLine}
+    <div class="panel"><h2>Who's picked</h2>
+      <div class="field"><label>Show</label>
+        <select id="roster-show" onchange="loadRoster()">
+          ${(shows||[]).map(sh => `<option value="${sh.id}" ${nextShow && sh.id===nextShow.id ? "selected" : ""}>${fmtDate(sh.showdate)} — ${esc(sh.venue||"TBA")}</option>`).join("")}
+        </select></div>
+      <div id="roster"><p class="muted">Pick a show.</p></div>
+    </div>
+    ${collapsible("master", "Master switch", `
+      <div class="field"><label>Voting override</label>
+        <select id="c-override">
+          <option value="auto" ${(cfg.voting_override||"auto")==="auto"?"selected":""}>Auto — cutoffs decide</option>
+          <option value="locked" ${cfg.voting_override==="locked"?"selected":""}>Locked — nobody can vote</option>
+          <option value="open" ${cfg.voting_override==="open"?"selected":""}>Open — voting open for today + future shows</option>
+        </select></div>
+      <div class="field"><label>Scoring mode</label>
+        <select id="c-mode" onchange="onModeChange()">
+          <option value="slots" ${mode!=="ranked_choice"?"selected":""}>Slots — position matters (opener, closers, encore)</option>
+          ${showRanked ? `<option value="ranked_choice" ${mode==="ranked_choice"?"selected":""}>Ranked choice — N picks against a fixed ladder</option>` : ""}
+        </select></div>
+      <div class="field"><label>Bonus: perfect sheet (every pick hits)</label><input id="c-bperfect" type="number" min="0" value="${b.perfect||0}"></div>
+      <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.
+        Perfect sheet lives here rather than with the other bonuses because it's the one
+        bonus that applies in every scoring mode — it scores the whole sheet being right,
+        not any individual song.</p>
+    `)}
+    ${currentBracket()?.bracket_kind === "official" ? collapsible("tiebreakers", "Season tiebreakers", `
+      <p class="muted">Applies only to Official's season standings, when a season ends with players tied on points. Tried in order — the first layer that separates two players decides. Leave all "None", or exhaust every layer without a difference, and they share the placing — same as a per-show tie.</p>
+      <div class="grid2">
+        ${[0,1,2].map(i => tiebreakerSelectRow(i, (cfg.tiebreakers||[])[i] || "")).join("")}
+      </div>
+      <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros — any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins — per-show ties still share the crown. Highest single-show score.</p>
+    `) : ""}
+    ${collapsible("rules-custom", "House rules", `
+      <p class="muted">Bracket-wide house rules, shown on the pick sheet's "The Rules"
+        card below the auto-generated slot definitions. Casual and Official can each
+        have their own. Up to ${CUSTOM_RULES_MAX} rules, ${CUSTOM_RULE_MAXLEN}
+        characters each.</p>
+      <div id="customrules">${(cfg.custom_rules||[]).map(customRuleRow).join("")}</div>
+      <button class="btn ghost small" id="add-rule-btn" onclick="addCustomRule()"
+        ${(cfg.custom_rules||[]).length >= CUSTOM_RULES_MAX ? "disabled" : ""}>+ add rule</button>
+    `)}
+    <div id="rules-region">${rulesRegionHtml(cfg, mode)}</div>
+    <div class="panel">
+      <button class="btn" onclick="saveConfig()">Save all rules</button>
+      <div class="err" id="cfg-err"></div>
+      <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments. Saves both rule sections above, whether or not they're currently expanded.</p>
+    </div>
     ${collapsible("data", "Data", `
       <div class="row">
         <button class="btn ghost small" onclick="runEdge('sync_shows', this)">Sync shows</button>
@@ -407,6 +426,7 @@ export async function renderAdmin(){
       </div>
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
     `)}
+    ${globalConsoleHtml()}
     ${settingsPanelHtml()}
     ${footerHtml()}`;
   if ((shows||[]).length) loadRoster();
