@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runUnaffiliatedScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -145,6 +145,19 @@ async function runMode(mode){
   check("admin tab renders admin content for a league admin",
     admin && /Seasons|Master switch/.test(admin.html),
     `admin html present: ${!!admin?.html}`);
+  // The Data section is global-admin only (2026-08-17). Its three buttons
+  // trigger CROSS-LEAGUE writes -- syncShows loops every league creating
+  // league_shows overlays, and scoreShows scores every bracket of every
+  // league and posts to every league's Discord. A league admin has no
+  // business reaching that from their own league's panel.
+  // NOTE this is presentation only, NOT a security boundary: the three edge
+  // actions take no auth at all, runEdge is on window, and the endpoint is
+  // callable with the publishable key. See CLAUDE.md.
+  // This session (p1) is a league admin with is_global_admin:false, which is
+  // exactly the case that must NOT see it.
+  check("the Data section is hidden from a league admin who is not a global admin",
+    admin && !/>Data</.test(admin.html) && !/Sync song catalog/.test(admin.html),
+    `admin html: ${admin?.html?.slice(0, 400)}`);
 
   check("admin tab's embedded Settings section shows the Casual/Official bracket toggle",
     admin && /Casual/.test(admin.html) && /Official/.test(admin.html),
@@ -272,8 +285,12 @@ async function runMode(mode){
   // settingsPanelHtml() (with its own "Log out" button) is embedded inside
   // renderAdmin() too (see admin.js), so "Log out" appears on both — the
   // admin-only signal is Master switch/Who's picked, not the absence of Log out.
+  // Keyed on the section ID, not its title: this broke once when "Master
+  // switch" was renamed to "Voting & scoring mode" (2026-08-17). The id is
+  // the stable identity — it is what toggleSection and the localStorage
+  // collapse state address — while titles are copy and will change again.
   check("a genuine global admin (no league-admin flag) sees Admin content",
-    /Master switch/.test(globalAdmin.adminHtml) && /Who's picked/.test(globalAdmin.adminHtml),
+    /id="sec-master"/.test(globalAdmin.adminHtml) && /Who's picked/.test(globalAdmin.adminHtml),
     `adminHtml present: ${!!globalAdmin.adminHtml}`);
   check("a genuine global admin's shared tab is labeled Admin, not Settings",
     globalAdmin.sharedTabLabel === "Admin",
@@ -658,6 +675,45 @@ async function runMode(mode){
   check("after being added, a reload shows the nav tabs",
     noLeague.after.tabsDisplay === "flex",
     `after.tabsDisplay: "${noLeague.after.tabsDisplay}"`);
+
+  // The save split's whole reason for existing: neither save may revert the
+  // other's fields. Asserted on the actual admin_update_config payloads, not
+  // on rendered values — a reverted field looks identical on screen until the
+  // next reload, which is why this was invisible.
+  const unaff = await runUnaffiliatedScenario({ html, scripts, mode });
+  check("the unaffiliated panel lists the registered non-member",
+    /Wanderer/.test(unaff.listed.html),
+    `listed: ${unaff.listed.html.slice(0, 300)}`);
+  // The predicate check: p2 (EggHead) is a league member, so listing them
+  // would mean the frontend is using admin_find_players' "not in THIS league"
+  // rule instead of "in NO league" — the two diverge at two leagues.
+  check("the unaffiliated panel excludes players who are already in a league",
+    !/EggHead/.test(unaff.listed.html) && !/Wooklord/.test(unaff.listed.html),
+    `listed: ${unaff.listed.html.slice(0, 300)}`);
+  check("the unaffiliated panel states the count",
+    /not in any league \(1\)/.test(unaff.listed.html),
+    `listed: ${unaff.listed.html.slice(0, 300)}`);
+  // The on-screen mitigation for two admins working the same list.
+  check("the unaffiliated panel warns they may not have asked to join this league",
+    /may not have asked to join/.test(unaff.listed.html) && /only if they/.test(unaff.listed.html),
+    `listed: ${unaff.listed.html.slice(0, 400)}`);
+  check("adding from the unaffiliated panel re-fetches, dropping the row without a reload",
+    !/Wanderer/.test(unaff.afterAdd.html),
+    `afterAdd: ${unaff.afterAdd.html.slice(0, 300)}`);
+
+  const split = await runSaveSplitScenario({ html, scripts, mode });
+  check("Master switch save writes its own two fields",
+    split.masterWrote.voting_override === "locked" && split.masterWrote.perfect === 9,
+    `masterWrote: ${JSON.stringify(split.masterWrote)}`);
+  check("a later rules save does NOT revert voting override or the perfect bonus",
+    split.rulesPreserved.voting_override === "locked" && split.rulesPreserved.perfect === 9,
+    `rulesPreserved: ${JSON.stringify(split.rulesPreserved)}`);
+  check("the rules save still writes its own fields",
+    typeof split.rulesWrote.flat_picks === "number",
+    `rulesWrote: ${JSON.stringify(split.rulesWrote)}`);
+  check("a later Master switch save does NOT revert rules fields",
+    split.masterPreserved.flat_picks === split.rulesWrote.flat_picks,
+    `masterPreserved: ${JSON.stringify(split.masterPreserved)} vs rulesWrote: ${JSON.stringify(split.rulesWrote)}`);
 
   const forcedPin = await runForcedPinChangeScenario({ html, scripts, mode });
   check("must_change_pin:true renders the forced interstitial, not the normal tabs",

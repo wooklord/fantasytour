@@ -13,7 +13,7 @@ import {
   toggleFormat, saveCutoff, finalizeShow, reopenShow, toggleBans, unban, runEdge, bootPlayer,
   searchMembers, addMember, toggleRoster, setRosterMember, toggleSection,
   addCustomRule, checkRuleCap, resetMemberPin,
-  onModeChange, addRankRow, renumberRanks,
+  onModeChange, addRankRow, renumberRanks, saveMasterSwitch,
   globalCreateLeague, globalSearchPlayers, globalAppointAdmin, globalResetPin,
 } from "./features/admin.js";
 
@@ -25,7 +25,7 @@ Object.assign(window, {
   toggleFormat, saveCutoff, finalizeShow, reopenShow, toggleBans, unban, runEdge, bootPlayer,
   searchMembers, addMember, toggleRoster, setRosterMember, toggleSection,
   addCustomRule, checkRuleCap, resetMemberPin,
-  onModeChange, addRankRow, renumberRanks,
+  onModeChange, addRankRow, renumberRanks, saveMasterSwitch,
   globalCreateLeague, globalSearchPlayers, globalAppointAdmin, globalResetPin,
   switchToBracket, switchToLeague,
 });

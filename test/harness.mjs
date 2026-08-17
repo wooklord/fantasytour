@@ -146,6 +146,14 @@ const RPC_HANDLERS = {
   admin_list_season_roster: async ({ p_season_id }, tables) =>
     tables.season_rosters.filter(sr => sr.season_id === p_season_id),
   admin_set_season_roster: async () => ({ ok: true }),
+  // Real join against the fixture, not a stub: the predicate is the whole
+  // point of the RPC and is deliberately UNSCOPED ("in no league"), not
+  // "not in this league" the way admin_find_players is. A stub returning a
+  // fixed list would pass whichever predicate the frontend used.
+  admin_list_unaffiliated_players: async (_args, tables) =>
+    (tables.players_public || [])
+      .filter(p => !(tables.league_members || []).some(lm => lm.player_id === p.id))
+      .map(p => ({ player_id: p.id, name: p.name })),
   // Standings-facing counterpart to admin_list_season_roster — same
   // underlying table, membership-gated rather than admin-gated in real SQL,
   // but the fake doesn't model auth failures, only the real join.
@@ -634,6 +642,108 @@ export async function runNoLeagueScenario({ html, scripts, mode }){
   return { before, after };
 }
 
+// The save-split round trip (2026-08-17). Splitting Master switch out of
+// "Save all rules" exists to stop one panel's save silently reverting the
+// other's fields, and NOTHING tested that: the three repointed mode-change
+// assertions exercise confirmModeChange, not the payloads. This drives both
+// saves in both orders and inspects what each actually PUT.
+//
+// The hazard is specific: admin_update_config writes the whole config object,
+// so each save must merge against state.cfg rather than build from scratch.
+// If saveConfig re-reads #c-bperfect, or saveMasterSwitch stops spreading
+// ...state.cfg, one save clobbers the other's field and the only symptom is a
+// value quietly reverting — no error, no toast, nothing on screen.
+// The "Registered, not in any league" panel. p3 ("Wanderer") is the fixture's
+// registered non-member, so the list must contain exactly them — and must NOT
+// contain p1/p2/p4, who are all in a league. That distinction is the test:
+// the predicate is "in NO league", not admin_find_players' "not in THIS
+// league", and at two leagues those diverge.
+export async function runUnaffiliatedScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, {});
+  window.localStorage.setItem("ft_session", JSON.stringify(
+    { id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+  clickTab(window, "admin");
+  await tick(); await tick(); await tick();
+
+  const box = () => window.document.getElementById("unaffiliated");
+  const listed = { html: box()?.innerHTML || "" };
+
+  // Adding one must re-fetch, so the row disappears without a manual reload.
+  // The fake admin_add_league_member does not mutate tables, so mutate here
+  // to model the server write the real RPC performs.
+  tables.league_members.push({ league_id: 1, player_id: "p3", is_league_admin: false, official_opt_in: true });
+  await window.addMember("p3", "Wanderer");
+  await tick(); await tick(); await tick();
+  const afterAdd = { html: box()?.innerHTML || "" };
+
+  return { listed, afterAdd };
+}
+
+export async function runSaveSplitScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, {});
+  window.localStorage.setItem("ft_session", JSON.stringify(
+    { id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+  clickTab(window, "admin");
+  await tick(); await tick();
+
+  const q = (id) => window.document.getElementById(id);
+  const payloads = () => calls.filter(c => c.type === "rpc" && c.fn === "admin_update_config").map(c => c.args.p_data);
+  const last = () => payloads()[payloads().length - 1];
+
+  // --- 1. Master switch save: its own two fields.
+  q("c-override").value = "locked";
+  q("c-bperfect").value = "9";
+  await window.saveMasterSwitch();
+  await tick(); await tick();
+  const afterMaster = last();
+
+  // --- 2. Rules save afterwards must NOT revert them.
+  //
+  // CRITICAL: dirty #c-bperfect WITHOUT saving it first, so the input and
+  // state.cfg genuinely DIVERGE (input 3, saved 9). Without this the test is
+  // blind: right after a Master switch save both sources agree, so reading
+  // either produces the same payload and a saveConfig that wrongly re-reads
+  // the input passes anyway. Verified by mutation — the earlier version of
+  // this scenario did not catch exactly that regression.
+  //
+  // It is also the semantically correct expectation: an UNSAVED Master switch
+  // edit must not be silently committed by pressing Save rules.
+  q("c-bperfect").value = "3";
+  const flatBefore = q("c-flat")?.value;
+  if (q("c-flat")) q("c-flat").value = String(Number(flatBefore || 0) + 2);
+  await window.saveConfig();
+  await tick(); await tick();
+  const afterRules = last();
+
+  // --- 3. Reverse direction: a second Master switch save must not revert the
+  // rules field the previous step just wrote.
+  await window.saveMasterSwitch();
+  await tick(); await tick();
+  const afterMasterAgain = last();
+
+  return {
+    masterWrote: { voting_override: afterMaster?.voting_override, perfect: afterMaster?.bonuses?.perfect },
+    // The whole point: these must still hold Master switch's values.
+    rulesPreserved: { voting_override: afterRules?.voting_override, perfect: afterRules?.bonuses?.perfect },
+    rulesWrote: { flat_picks: afterRules?.flat_picks },
+    // ...and this must still hold the rules value.
+    masterPreserved: { flat_picks: afterMasterAgain?.flat_picks },
+    writes: payloads().length,
+  };
+}
+
 export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDebut = false, perfect = 7 }){
   const { tables } = makeRankedFixtures({ wildcardDebut, perfect });
   const casualId = tables.brackets.find(b => b.kind === "casual").id;
@@ -848,7 +958,11 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
   q("c-mode").value = "slots";
   window.onModeChange();
   await tick();
-  await window.saveConfig();
+  // Repointed 2026-08-17: scoring mode is owned by saveMasterSwitch now, so
+  // the orphan warning fires from there, not from saveConfig. Driving
+  // saveConfig here would assert nothing — its `mode` comes from state.cfg
+  // and can never differ from it.
+  await window.saveMasterSwitch();
   await tick(); await tick();
   window.confirm = () => true;
   const modeWarning = {
@@ -871,7 +985,7 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
   q("c-mode").value = "slots";
   window.onModeChange();
   await tick();
-  await window.saveConfig();
+  await window.saveMasterSwitch();
   await tick(); await tick();
   window.confirm = () => true;
   RPC_HANDLERS.get_show_picks = origShowPicks;

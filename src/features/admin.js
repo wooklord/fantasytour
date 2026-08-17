@@ -326,7 +326,7 @@ export async function renderAdmin(){
     ? `<div class="scopeline">Editing <b>${esc(currentBracket().bracket_name)}</b> · ${esc(currentBracket().league_name)} — everything below applies to this bracket only</div>`
     : "";
   $("#main").innerHTML = `
-    ${collapsible("shows", "Shows & cutoffs", `
+    ${collapsible("shows", "Shows: cutoffs &amp; finalizing", `
       <p class="muted">Cutoffs are shown and edited in each show's venue-local time. New shows default to 6 PM venue-local.</p>
       ${(shows||[]).map(sh => {
         const tz = sh.timezone || null;
@@ -362,10 +362,11 @@ export async function renderAdmin(){
         <input id="member-search" placeholder="Search registered players by name…" oninput="searchMembers()" autocomplete="off"></div>
       <div id="member-results"></div>
       <div id="playerlist"><p class="muted">Loading…</p></div>
+      <div id="unaffiliated"></div>
       <button class="linkbtn" id="banToggle" onclick="toggleBans()" style="margin-top:8px">show ban list</button>
       <div id="banlist" class="hidden" style="margin-top:6px"></div>
     `)}
-    ${collapsible("seasons", "Seasons", `
+    ${collapsible("seasons", "Seasons (Official)", `
       <p class="muted">Named date ranges — shows sort themselves in by date.</p>
       <div id="seasonrows">${(seasonsA||[]).map(seasonRow).join("")}</div>
       <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
@@ -378,7 +379,7 @@ export async function renderAdmin(){
         </select></div>
       <div id="roster"><p class="muted">Pick a show.</p></div>
     </div>
-    ${collapsible("master", "Master switch", `
+    ${collapsible("master", "Voting &amp; scoring mode", `
       <div class="field"><label>Voting override</label>
         <select id="c-override">
           <option value="auto" ${(cfg.voting_override||"auto")==="auto"?"selected":""}>Auto — cutoffs decide</option>
@@ -391,18 +392,15 @@ export async function renderAdmin(){
           ${showRanked ? `<option value="ranked_choice" ${mode==="ranked_choice"?"selected":""}>Ranked choice — N picks against a fixed ladder</option>` : ""}
         </select></div>
       <div class="field"><label>Bonus: perfect sheet (every pick hits)</label><input id="c-bperfect" type="number" min="0" value="${b.perfect||0}"></div>
-      <p class="muted">Enforced in the database, saved with the rules below. Auto is normal operation.
-        Perfect sheet lives here rather than with the other bonuses because it's the one
-        bonus that applies in every scoring mode — it scores the whole sheet being right,
-        not any individual song.</p>
+      <button class="btn" onclick="saveMasterSwitch()">Save master switch</button>
+      <div class="err" id="ms-err"></div>
+      <p class="muted" style="margin-top:6px">Saves these three fields only — the rules
+        sections below have their own save. Enforced in the database; Auto is normal
+        operation. Perfect sheet lives here rather than with the other bonuses because
+        it's the one bonus that applies in every scoring mode — it scores the whole
+        sheet being right, not any individual song.</p>
     `)}
-    ${currentBracket()?.bracket_kind === "official" ? collapsible("tiebreakers", "Season tiebreakers", `
-      <p class="muted">Applies only to Official's season standings, when a season ends with players tied on points. Tried in order — the first layer that separates two players decides. Leave all "None", or exhaust every layer without a difference, and they share the placing — same as a per-show tie.</p>
-      <div class="grid2">
-        ${[0,1,2].map(i => tiebreakerSelectRow(i, (cfg.tiebreakers||[])[i] || "")).join("")}
-      </div>
-      <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros — any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins — per-show ties still share the crown. Highest single-show score.</p>
-    `) : ""}
+    <div id="rules-region">${rulesRegionHtml(cfg, mode)}</div>
     ${collapsible("rules-custom", "House rules", `
       <p class="muted">Bracket-wide house rules, shown on the pick sheet's "The Rules"
         card below the auto-generated slot definitions. Casual and Official can each
@@ -412,20 +410,30 @@ export async function renderAdmin(){
       <button class="btn ghost small" id="add-rule-btn" onclick="addCustomRule()"
         ${(cfg.custom_rules||[]).length >= CUSTOM_RULES_MAX ? "disabled" : ""}>+ add rule</button>
     `)}
-    <div id="rules-region">${rulesRegionHtml(cfg, mode)}</div>
+    ${currentBracket()?.bracket_kind === "official" ? collapsible("tiebreakers", "Season tiebreakers", `
+      <p class="muted">Applies only to Official's season standings, when a season ends with players tied on points. Tried in order — the first layer that separates two players decides. Leave all "None", or exhaust every layer without a difference, and they share the placing — same as a per-show tie.</p>
+      <div class="grid2">
+        ${[0,1,2].map(i => tiebreakerSelectRow(i, (cfg.tiebreakers||[])[i] || "")).join("")}
+      </div>
+      <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros — any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins — per-show ties still share the crown. Highest single-show score.</p>
+    `) : ""}
     <div class="panel">
-      <button class="btn" onclick="saveConfig()">Save all rules</button>
+      <button class="btn" onclick="saveConfig()">Save rules</button>
       <div class="err" id="cfg-err"></div>
-      <p class="muted" style="margin-top:6px">Rule changes apply on the next scoring run. Don't change mid-show unless you enjoy arguments. Saves both rule sections above, whether or not they're currently expanded.</p>
+      <p class="muted" style="margin-top:6px">Saves the three sections directly above —
+        Game rules, House rules and Season tiebreakers — whether or not they're
+        currently expanded. Voting &amp; scoring mode has its own save. Rule changes
+        apply on the next scoring run; don't change mid-show unless you enjoy
+        arguments.</p>
     </div>
-    ${collapsible("data", "Data", `
+    ${state.session.is_global_admin ? collapsible("data", "Manual sync &amp; scoring", `
       <div class="row">
         <button class="btn ghost small" onclick="runEdge('sync_shows', this)">Sync shows</button>
         <button class="btn ghost small" onclick="runEdge('sync_songs', this)">Sync song catalog</button>
         <button class="btn ghost small" onclick="runEdge('score', this)">Run scoring now</button>
       </div>
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
-    `)}
+    `) : ""}
     ${globalConsoleHtml()}
     ${settingsPanelHtml()}
     ${footerHtml()}`;
@@ -449,6 +457,48 @@ export async function loadMembers(){
           +'<button class="btn ghost small" onclick="resetMemberPin(\''+p.player_id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')">Reset PIN</button> '
           +'<button class="btn ghost small" onclick="bootPlayer(\''+p.player_id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')" style="border-color:var(--coral);color:var(--coral)">Boot</button>'}</span>
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
+  loadUnaffiliated();
+}
+
+// Registered players who belong to NO league. Before this there was no
+// admin-facing signal that anyone had registered at all — see
+// sql/stage_q_unaffiliated_players.sql for why nothing else could supply it.
+//
+// The heading states what the list IS, not what it is FOR: the app has no
+// idea which league someone wants, or whether they want one at all, so
+// "waiting to join" would be a claim it cannot support. The caution line is
+// the real mitigation and belongs on screen rather than only in a briefing:
+// with two leagues, both admins see this same list, and nothing stops each
+// adding the same person to a different league — silently, since a second
+// add is a different (league_id, player_id) row and cannot conflict. The
+// player then sits in two leagues, opted into both Official brackets,
+// having asked for one.
+//
+// Failures render inline rather than throwing: this is a supplementary
+// panel, and a lookup failure here must not take down the member list above
+// it, which is the section's actual job.
+export async function loadUnaffiliated(){
+  const box = $("#unaffiliated");
+  if (!box) return;
+  let rows;
+  try{
+    rows = await rpc("admin_list_unaffiliated_players", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId });
+  }catch(e){
+    box.innerHTML = `<p class="err">Couldn't load registered players: ${esc(e.message)}</p>`;
+    return;
+  }
+  const n = (rows||[]).length;
+  if (!n){ box.innerHTML = ""; return; }
+  box.innerHTML = `
+    <p class="muted" style="margin-top:14px;font-weight:600">Registered, not in any league (${n})</p>
+    <p class="muted" style="font-size:.78rem">These people have accounts but no league.
+      They may not have asked to join <b>this</b> one — add someone only if they
+      contacted you.</p>
+    ${(rows||[]).map(p => `
+      <div class="pickres">
+        <span>${esc(p.name)}</span>
+        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Add</button></span>
+      </div>`).join("")}`;
 }
 // Session 4 step 4 — server-generates the new PIN (this admin never chooses
 // it), returned once for relay; the reset target is forced to set a real
@@ -741,9 +791,83 @@ function readTiebreakers(){
   }
   return list;
 }
+// Master switch owns its own save as of 2026-08-17. Previously its three
+// fields (voting override, scoring mode, perfect-sheet bonus) were committed
+// by the "Save all rules" button four sections below — a control whose
+// consequences weren't visible from where you acted, which is the defect
+// this splits.
+//
+// The cost, stated because it is real: admin_update_config writes the WHOLE
+// config object, so both save paths must merge against state.cfg rather than
+// build from scratch. That is the delicate logic saveConfig documents below
+// (a literal fallback is a data-loss path, not a harmless default), and
+// there are now two places honouring it instead of one. Both spread
+// ...state.cfg first for exactly that reason.
+async function confirmModeChange(mode){
+  if (mode === (state.cfg.mode || "slots")) return true;
+  let atRisk = [];
+  let lookupFailed = false;
+  try{
+    const shows = await fetchShows(q => q.gte("showdate", new Date(Date.now()-2*864e5).toISOString().slice(0,10)));
+    const open = (shows||[]).filter(sh => showState(sh) === "open");
+    const counts = await Promise.all(open.map(sh =>
+      rpc("get_show_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id })
+        .then(rows => ({ show: sh, n: (rows||[]).length }))));
+    atRisk = counts.filter(c => c.n > 0);
+  }catch(e){ lookupFailed = true; }
+  // A failed lookup gets its own confirm rather than falling through
+  // silently. Not blocking the save on a network hiccup is the right
+  // default, but "no picks are at risk" and "couldn't find out" must not
+  // look the same to the admin.
+  if (lookupFailed){
+    return confirm(
+      `Couldn't check whether existing picks would be orphaned.\n\n` +
+      `Switching mode may erase picks players have already entered for open shows.\n\n` +
+      `Switch anyway?`);
+  }
+  if (atRisk.length){
+    const nPicks = atRisk.reduce((sum, c) => sum + c.n, 0);
+    const venues = atRisk.map(c => c.show.venue || "TBA").join(", ");
+    return confirm(
+      `Switching scoring mode will orphan existing picks.\n\n` +
+      `Saved picks are keyed to the current mode — opener/closer/… in slots mode, ` +
+      `rank1/rank2/… in ranked. After the switch those keys stop matching, so anyone ` +
+      `who has already picked for an open show sees a blank sheet and loses what they entered.\n\n` +
+      `This affects ${nPicks} pick${nPicks === 1 ? "" : "s"} across ` +
+      `${atRisk.length} open show${atRisk.length === 1 ? "" : "s"} (${venues}).\n\n` +
+      `Nothing in the app re-keys them; it has to be done directly in the database.\n\n` +
+      `Switch anyway?`);
+  }
+  return true;
+}
+
+export async function saveMasterSwitch(){
+  $("#ms-err").textContent = "";
+  const mode = $("#c-mode").value;
+  if (!await confirmModeChange(mode)) return;
+  const data = {
+    ...state.cfg,
+    voting_override: $("#c-override").value,
+    mode,
+    bonuses: { ...(state.cfg.bonuses || {}), perfect: Number($("#c-bperfect").value) },
+  };
+  try{
+    await rpc("admin_update_config", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_data:data });
+    state.cfg = data; toast("Master switch saved ✔", "score");
+    // Mode selects which rules sections exist, so re-render them from what
+    // was actually SAVED — same reasoning as saveConfig's re-render below.
+    const region = $("#rules-region");
+    if (region) region.innerHTML = rulesRegionHtml(data, data.mode);
+  }catch(e){ $("#ms-err").textContent = e.message; }
+}
+
 export async function saveConfig(){
   $("#cfg-err").textContent = "";
-  const mode = $("#c-mode").value;
+  // Mode is owned by saveMasterSwitch now, so it is read from the saved
+  // config rather than the select. Every branch below keys off whether an
+  // INPUT is rendered, not off mode, so this changes nothing about which
+  // values get read — only which save is authoritative for the field.
+  const mode = state.cfg.mode || "slots";
   // Only one mode's rule sections are on screen at a time, so every read
   // below has to tolerate its input being absent — and must fall back to
   // the value ALREADY IN state.cfg, never to a literal like 0/false/[].
@@ -792,46 +916,6 @@ export async function saveConfig(){
   // cancelling here is clean: return early, nothing persisted, the select
   // keeps the admin's choice so they can simply change it back.
   //
-  // Only asks when there is something to lose — a bracket whose open shows
-  // have no picks yet shouldn't nag. The lookup is gated on the mode
-  // actually changing, so it stays off the normal save path entirely.
-  if (mode !== (state.cfg.mode || "slots")){
-    let atRisk = [];
-    let lookupFailed = false;
-    try{
-      const shows = await fetchShows(q => q.gte("showdate", new Date(Date.now()-2*864e5).toISOString().slice(0,10)));
-      const open = (shows||[]).filter(sh => showState(sh) === "open");
-      const counts = await Promise.all(open.map(sh =>
-        rpc("get_show_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id })
-          .then(rows => ({ show: sh, n: (rows||[]).length }))));
-      atRisk = counts.filter(c => c.n > 0);
-    }catch(e){ lookupFailed = true; }
-    // A failed lookup gets its own confirm rather than falling through
-    // silently. Not blocking the save on a network hiccup is the right
-    // default, but "no picks are at risk" and "couldn't find out" must not
-    // look the same to the admin — that's the difference between an
-    // informed decision and an invisible pass.
-    if (lookupFailed){
-      const ok = confirm(
-        `Couldn't check whether existing picks would be orphaned.\n\n` +
-        `Switching mode may erase picks players have already entered for open shows.\n\n` +
-        `Switch anyway?`);
-      if (!ok) return;
-    } else if (atRisk.length){
-      const nPicks = atRisk.reduce((sum, c) => sum + c.n, 0);
-      const venues = atRisk.map(c => c.show.venue || "TBA").join(", ");
-      const ok = confirm(
-        `Switching scoring mode will orphan existing picks.\n\n` +
-        `Saved picks are keyed to the current mode — opener/closer/… in slots mode, ` +
-        `rank1/rank2/… in ranked. After the switch those keys stop matching, so anyone ` +
-        `who has already picked for an open show sees a blank sheet and loses what they entered.\n\n` +
-        `This affects ${nPicks} pick${nPicks === 1 ? "" : "s"} across ` +
-        `${atRisk.length} open show${atRisk.length === 1 ? "" : "s"} (${venues}).\n\n` +
-        `Nothing in the app re-keys them; it has to be done directly in the database.\n\n` +
-        `Switch anyway?`);
-      if (!ok) return;
-    }
-  }
   const tiebreakers = readTiebreakers();
   const data = {
     slots,
@@ -843,12 +927,17 @@ export async function saveConfig(){
     partial_credit: $("#c-partial") ? $("#c-partial").value === "true" : !!state.cfg.partial_credit,
     partial_points: Number($("#c-partpts")?.value ?? state.cfg.partial_points ?? 1),
     allow_duplicates: $("#c-dupes") ? $("#c-dupes").value === "true" : !!state.cfg.allow_duplicates,
-    voting_override: $("#c-override").value,
+    // voting_override and bonuses.perfect are owned by saveMasterSwitch as of
+    // 2026-08-17 and are carried through from state.cfg here, NOT read from
+    // their inputs. Reading them in both saves would let the two panels
+    // silently disagree: whichever saved last would win, so an edit made in
+    // Master switch and saved there could be reverted by a later rules save
+    // that happened to re-read a stale input. One writer per field.
+    voting_override: state.cfg.voting_override,
     bonuses: {
       cover: Number($("#c-bcover")?.value ?? state.cfg.bonuses?.cover ?? 0),
       debut: Number($("#c-bdebut")?.value ?? state.cfg.bonuses?.debut ?? 0),
-      // Always rendered (Master switch), in every mode — no guard needed.
-      perfect: Number($("#c-bperfect").value),
+      perfect: Number(state.cfg.bonuses?.perfect ?? 0),
       jamchart: 0,
     },
     wildcards: { debut: $("#c-wcdebut") ? $("#c-wcdebut").value === "true" : (state.cfg.wildcards?.debut ?? true) },
