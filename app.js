@@ -2164,11 +2164,15 @@ Switch anyway?`
     }
     $("#main").innerHTML = `<div class="panel" style="margin-top:30px">
     <h2>You're not in a league yet</h2>
-    <p class="muted">An admin has to add you before you can play \u2014 you don't need to do anything else.</p>
+    <p class="muted">Someone has to add you before you can play.</p>
     <p style="color:var(--coral);font-weight:600;margin:10px 0;padding:10px;border:1px solid var(--coral);border-radius:8px">
       Don't register again \u2014 a second account can't be merged with this one.</p>
-    <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell a league admin your name is <b>${esc(state.session.name)}</b> and ask them to add you.</p>
-    <button class="btn ghost" onclick="logout()">Log out</button>
+    <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell whoever invited you that your nickname is <b>${esc(state.session.name)}</b>.</p>
+    <p class="muted">Once they've added you, tap <b>Check again</b> below \u2014 this screen won't update on its own.</p>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" onclick="location.reload()">Check again</button>
+      <button class="btn ghost" onclick="logout()">Log out</button>
+    </div>
   </div>`;
   }
   async function boot() {

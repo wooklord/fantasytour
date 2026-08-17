@@ -32,13 +32,34 @@ async function renderNoLeague(){
   // eventual case-insensitive-login cleanup worse. The don't-re-register
   // warning is styled as its own callout (not buried in the muted prose
   // above it) specifically because burying it is what let that happen.
+  // The copy deliberately says "whoever invited you", not "a league admin":
+  // there is NO league context available on this screen and there cannot be.
+  // The player holds a session and a public read of `leagues` (names only);
+  // admin identities are unreachable by construction, since admin_list_members
+  // is gated on _is_league_admin_or_global and a league-less player fails it.
+  // They also haven't chosen a league, so there is no "their" league whose
+  // admins could be resolved even in principle.
+  //
+  // This screen previously ended the first line with "you don't need to do
+  // anything else", which was false and actively harmful: state.leagues is
+  // populated only by resolveLeagues() inside boot(), which runs once at page
+  // load, and nothing here polls or refetches. So after an admin adds them,
+  // this screen keeps saying they aren't in a league until the app is fully
+  // reloaded — while telling them no further action is needed, and (rightly)
+  // forbidding the one thing they'd otherwise try. The Check again button is
+  // the fix: it turns "fully close and reopen the app" into one tap, using
+  // the reload path that already works rather than new refresh logic.
   $("#main").innerHTML = `<div class="panel" style="margin-top:30px">
     <h2>You're not in a league yet</h2>
-    <p class="muted">An admin has to add you before you can play — you don't need to do anything else.</p>
+    <p class="muted">Someone has to add you before you can play.</p>
     <p style="color:var(--coral);font-weight:600;margin:10px 0;padding:10px;border:1px solid var(--coral);border-radius:8px">
       Don't register again — a second account can't be merged with this one.</p>
-    <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell a league admin your name is <b>${esc(state.session.name)}</b> and ask them to add you.</p>
-    <button class="btn ghost" onclick="logout()">Log out</button>
+    <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell whoever invited you that your nickname is <b>${esc(state.session.name)}</b>.</p>
+    <p class="muted">Once they've added you, tap <b>Check again</b> below — this screen won't update on its own.</p>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" onclick="location.reload()">Check again</button>
+      <button class="btn ghost" onclick="logout()">Log out</button>
+    </div>
   </div>`;
 }
 

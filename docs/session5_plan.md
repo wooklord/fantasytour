@@ -248,6 +248,55 @@ do it themselves — only a league admin can remove them from a running
 season's roster. Accepted for now; revisit together with #6 before season
 two.
 
+#### Decision analysis (2026-08-17) — pending, deadline is season activation
+
+**The framing that matters: this is not really a choice between three
+defaults.** `set_official_opt_in` exists server-side, is correct, and is
+wired to nothing. Until that control is built, **whichever default is
+chosen is a one-way door for the player** — they cannot move themselves in
+either direction.
+
+**Where the flag is actually set, since this is easy to get wrong:**
+registration sets nothing. `register_player` inserts into `players`, which
+has no `official_opt_in` column at all — the flag lives on
+`league_members`. Two live paths create membership and **neither names the
+column**, so both take the Stage F default of `true`:
+`admin_add_league_member` (`league_id, player_id`) and
+`global_appoint_league_admin` (`league_id, player_id, is_league_admin`).
+So it is the **Add button** that opts someone in, not their registration.
+
+| option | cost | assessment |
+|---|---|---|
+| **A — keep `true`** | zero; already live | Nobody is silently excluded. But `computeStandings` seeds EVERY roster member into the table (`tiebreak.js:58`), so at 50 the Official board lists all 50 with most at zero |
+| **B — `false`** | one `alter table` **plus a mandatory opt-in control** | Spec-correct, but shipped alone it means nobody can ever join Official except by admin action |
+| **C — toggle at add-time** | RPC parameter + UI + a decision on every one of ~50 adds | Moves the consent problem rather than solving it |
+
+**On A's real cost, which is scale-dependent and was invisible at 14:**
+seeding every roster member into standings is *deliberate* — the comment at
+`standings.js:113-120` records it as a fix, because an opted-in member who
+never had a show finalize used to be invisible rather than shown at 0. That
+fix stops scaling at 50: the board becomes mostly people who don't know the
+bracket exists, for the benefit of the handful who engage.
+
+**On B's hidden dependency:** without the control, default-`false` converts
+"silently enrolled with no exit" into "silently excluded with no entry",
+which is strictly worse for the player — being wrongly *out* costs them the
+game, being wrongly *in* costs them nothing personally.
+
+**RECOMMENDATION: keep A, and build the settings toggle
+(`set_official_opt_in` → a control in `settingsPanelHtml()`) before Green
+Eggs' first Official season activates.** The toggle is required for B
+anyway, so it is the work item either way; building it first makes the
+default a one-line decision taken afterwards, against a real control, while
+nothing has been snapshotted yet.
+
+**Deadline is activation, NOT recruitment.** Enrolment is harmless while no
+Official season exists, and Green Eggs has none. It becomes hard to undo the
+moment one activates, because `activateSeasons` snapshots every
+`official_opt_in = true` member into `season_rosters` and stamps
+`roster_locked_at` — after which removal is the messy, partly irreversible
+path documented in CLAUDE.md's boot entry.
+
 ### 3. Discord webhook secret skipped
 
 **Accepted.** With no `DISCORD_WEBHOOK_<LEAGUENAME>` env var set,
@@ -395,6 +444,15 @@ is only findable by remembering it exists.
 - **The scenario suite has no two-league fixture.** A second league exists in
   production as of 2026-08-16, so `renderLeagueSelector`'s dropdown branch is
   now a real gap rather than a hypothetical one.
+- **The no-league empty state has NO scenario coverage**, and the fixtures
+  deliberately prevent it rendering (`p4` is given a membership row
+  specifically so `renderNoLeague()` doesn't fire). Checking it needs a
+  throwaway non-global-admin account — which **also** closes the
+  membership-gate item above, since that needs exactly the same thing: a
+  non-global-admin in one league. Register it, check the empty state at zero
+  leagues, add it to one league, then use it for the `get_show_picks` check.
+  Note the dev server runs against production Supabase, so registering
+  creates a real `players` row (removable via `global_boot_player`).
 - **`is_mine` not yet eyeballed in-app.** Stage P replaced `player_id` with a
   server-computed `is_mine`. A uniformly-false value renders plausibly —
   everything displays, nothing is highlighted, which reads as an ordinary
