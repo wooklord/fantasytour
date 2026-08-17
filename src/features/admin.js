@@ -516,7 +516,7 @@ async function renderRosterPanel(seasonId){
     panel.innerHTML = (members||[]).map(m => `
       <div class="pickres ${onRoster.has(m.player_id)?"hit":"miss"}">
         <span>${onRoster.has(m.player_id)?"✔":"—"}</span><span>${esc(m.name)}</span>
-        <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)})">${onRoster.has(m.player_id)?"Remove":"Add"}</button></span>
+        <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)}, '${esc(m.name).replace(/'/g,"\\'")}')">${onRoster.has(m.player_id)?"Remove":"Add"}</button></span>
       </div>`).join("") || '<p class="muted">No members in this league yet.</p>';
   }catch(e){ panel.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
@@ -527,7 +527,45 @@ export async function toggleRoster(seasonId){
   if (panel) panel.classList.toggle("hidden", !rosterOpen[seasonId]);
   if (rosterOpen[seasonId]) renderRosterPanel(seasonId);
 }
-export async function setRosterMember(seasonId, playerId, add){
+// Adding is idempotent, cheap and non-destructive — no confirm. REMOVAL is
+// the destructive half and had none until 2026-08-17. What it actually does
+// is easy to get wrong in both directions, so the wording below is precise
+// rather than scary: the player does NOT vanish from the standings (inScope
+// filters on the season's date range and never reads rosterJoinDates, so
+// their points, shows, high and wins all survive), removal does not stop
+// their zeros and can increase them, and a later re-add resets added_at —
+// silently dropping every zero accumulated before that point, which is a
+// standings edit in the player's FAVOUR and cannot be undone.
+export async function setRosterMember(seasonId, playerId, add, name){
+  if (!add){
+    // Same blocking-catch discipline as bootPlayer: the lock note below
+    // changes what the admin is told, so guessing at it is worse than
+    // stopping. Looked up per invocation, never from renderAdmin's snapshot.
+    let season = null;
+    try{
+      const seasons = await rpc("get_bracket_seasons", { p_bracket_id: officialBracketId() });
+      season = (seasons||[]).find(s => Number(s.id) === Number(seasonId));
+      if (!season) throw new Error("season not found");
+    }catch(e){
+      toast("Couldn't load this season — removal cancelled. Try again.");
+      return;
+    }
+    const lockNote = season.roster_locked_at
+      ? `\n\nThis season is already activated, so nothing will re-add them `
+        + `automatically — only a manual re-add here.`
+      : "";
+    if (!confirm(
+      `Remove ${name || "this player"} from "${season.name}"?\n\n`
+      + `They stop accruing points — their picks for this season's remaining `
+      + `shows won't be scored.\n\n`
+      + `Their existing scores stay on the board and keep counting toward their `
+      + `season total. They do not disappear from the standings.\n\n`
+      + `This does NOT stop their zeros, and can increase them: losing their `
+      + `join date widens the zero window back to the season's start.\n\n`
+      + `If you re-add them later, their join date resets to that moment and `
+      + `every zero they'd built up before then is permanently dropped. The `
+      + `original date cannot be restored.` + lockNote)) return;
+  }
   try{
     await rpc("admin_set_season_roster", { p_name:state.session.name, p_pin:state.session.pin, p_season_id:seasonId, p_player_id:playerId, p_add:add });
     toast(add ? "Added to roster" : "Removed from roster", "score");
@@ -611,9 +649,10 @@ export async function bootPlayer(id, name){
       + `for every remaining show in it, counting against them under the `
       + `"fewest zeros" tiebreaker.\n\n`
       + `There is currently NO way to prevent this. Removing them from the season `
-      + `roster does not help — they keep counting because they already have `
-      + `scores in this bracket — and it can make it worse. Boot now only if `
-      + `that's acceptable.`
+      + `roster is not a workaround: they keep counting because they already have `
+      + `scores in this bracket, and it can make it worse. Re-adding them `
+      + `afterwards permanently drops the zeros they'd built up — that's a `
+      + `standings edit, not a repair. Boot now only if that's acceptable.`
     : `No Official season is running, so no zeros will accrue. They won't be `
       + `added to future season rosters either.`;
   if (!confirm(head + tail)) return;

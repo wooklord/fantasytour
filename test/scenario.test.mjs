@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -565,8 +565,14 @@ async function runMode(mode){
   check("boot during a live season states the zero-accrual consequence",
     /zero/i.test(bootScen.case2.firstConfirm) && /fewest zeros/i.test(bootScen.case2.firstConfirm),
     `case2 confirm: ${JSON.stringify(bootScen.case2.firstConfirm)}`);
-  check("boot during a live season says there is no way to prevent it, rather than pointing at the season roster as a fix",
-    /NO way to prevent/i.test(bootScen.case2.firstConfirm) && /does not help/i.test(bootScen.case2.firstConfirm),
+  // The third clause is the newest claim and the one most likely to be
+  // softened back into sounding harmless — remove-then-re-add silently drops
+  // a player's accumulated zeros, which is a standings change in their
+  // favour, not a repair. Pinned explicitly for that reason.
+  check("boot during a live season says roster removal is not a workaround, and that re-adding is a standings edit rather than a repair",
+    /NO way to prevent/i.test(bootScen.case2.firstConfirm)
+      && /not a workaround/i.test(bootScen.case2.firstConfirm)
+      && /standings edit, not a repair/i.test(bootScen.case2.firstConfirm),
     `case2 confirm: ${JSON.stringify(bootScen.case2.firstConfirm)}`);
   check("boot during a live season still proceeds when accepted",
     bootScen.case2.booted === true,
@@ -583,6 +589,48 @@ async function runMode(mode){
   check("a failed season lookup surfaces a toast explaining the boot was cancelled",
     /cancel/i.test(bootScen.case3.toastHtml),
     `case3 toastHtml: ${bootScen.case3.toastHtml}`);
+
+  // Season-roster removal. The wording claims are pinned individually
+  // because each states a fact that was got WRONG at least once while this
+  // dialog was being written: that the player stays on the board, that
+  // removal doesn't stop zeros, and that a re-add drops accumulated zeros.
+  const roster = await runRosterScenario({ html, scripts, mode });
+  check("roster removal confirms, and says the player does NOT disappear from the standings",
+    /do not disappear from the standings/i.test(roster.unlocked.confirm),
+    `unlocked confirm: ${JSON.stringify(roster.unlocked.confirm)}`);
+  check("roster removal says it does NOT stop their zeros and can increase them",
+    /does NOT stop their zeros/i.test(roster.unlocked.confirm)
+      && /widens the zero window/i.test(roster.unlocked.confirm),
+    `unlocked confirm: ${JSON.stringify(roster.unlocked.confirm)}`);
+  check("roster removal warns that re-adding resets the join date and permanently drops earlier zeros",
+    /join date resets/i.test(roster.unlocked.confirm)
+      && /permanently dropped/i.test(roster.unlocked.confirm),
+    `unlocked confirm: ${JSON.stringify(roster.unlocked.confirm)}`);
+  check("roster removal proceeds to admin_set_season_roster when accepted",
+    roster.unlocked.called === true,
+    `unlocked called: ${roster.unlocked.called}`);
+  check("an UNLOCKED season's removal confirm omits the activation sentence",
+    !/already activated/i.test(roster.unlocked.confirm),
+    `unlocked confirm: ${JSON.stringify(roster.unlocked.confirm)}`);
+  check("a LOCKED season's removal confirm adds the activation sentence",
+    /already activated/i.test(roster.locked.confirm)
+      && /only a manual re-add/i.test(roster.locked.confirm),
+    `locked confirm: ${JSON.stringify(roster.locked.confirm)}`);
+  check("cancelling the roster-removal confirm makes NO admin_set_season_roster call",
+    roster.cancelled.called === false,
+    `cancelled called: ${roster.cancelled.called}`);
+  check("ADDING to a roster is confirm-free and still calls the RPC",
+    roster.added.confirmCount === 0 && roster.added.called === true,
+    `add confirmCount: ${roster.added.confirmCount}, called: ${roster.added.called}`);
+  check("a failed season lookup blocks roster removal with no confirm",
+    roster.lookupFailed.confirmCount === 0,
+    `lookupFailed confirmCount: ${roster.lookupFailed.confirmCount}`);
+  check("a failed season lookup makes NO admin_set_season_roster call",
+    roster.lookupFailed.called === false,
+    `lookupFailed called: ${roster.lookupFailed.called}`);
+  check("a failed season lookup surfaces a cancellation toast",
+    /cancel/i.test(roster.lookupFailed.toastHtml),
+    `lookupFailed toastHtml: ${roster.lookupFailed.toastHtml}`);
 
   const forcedPin = await runForcedPinChangeScenario({ html, scripts, mode });
   check("must_change_pin:true renders the forced interstitial, not the normal tabs",

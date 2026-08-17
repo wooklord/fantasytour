@@ -204,11 +204,23 @@ target is actually reached before trusting a check that names it.**
   per member"*. Those assert the buttons are in the markup. **Nothing ever
   invoked either handler.** So the panel read as well-covered while both of
   its destructive controls were entirely untested.
+- **`setRosterMember` had zero coverage until 2026-08-17** — third instance,
+  same shape as the second. `toggleRoster(501)` was already called and the
+  roster panel's render asserted, while the handler behind its buttons was
+  never invoked.
 - The distinction that matters: the first is a fake that made a real surface
-  unreachable; the second is presence standing in for behaviour. Both look
-  identical from a green run. This is the same substitution discipline item
-  5 names — a correlate passing for the condition — applied to tests rather
-  than to production code.
+  unreachable; the second and third are presence standing in for behaviour.
+  All look identical from a green run. This is the same substitution
+  discipline item 5 names — a correlate passing for the condition — applied
+  to tests rather than to production code.
+- **"Does anything actually INVOKE this handler?" is now a standard check,
+  not an occasional one.** Three instances, and **two of the three were
+  found by asking rather than by any failure** — nothing was ever going to
+  surface them, because the suite was green and the panels were asserted.
+  Grepping `test/` for the handler name takes seconds and is the whole
+  check: if the only hits are a fake handler and a render assertion, the
+  behaviour is untested no matter how well-covered the panel looks. Do this
+  before trusting green on any control that writes or deletes.
 
 **`runBootScenario` (added 2026-08-17) covers bootPlayer's three confirm
 branches, and was mutation-tested rather than assumed.** Boot is the control
@@ -240,6 +252,51 @@ load-bearing:
   and two unrelated checks depend on that ("Official (no covering season)
   shows the ineligible reason" and "standings defaults to All time"). Its
   dates are built off `Date.now()`, never hardcoded.
+
+**`runRosterScenario` (added 2026-08-17) covers season-roster removal —
+`setRosterMember`, the app's other destructive admin control, and the THIRD
+instance of presence standing in for behaviour.** `toggleRoster(501)` was
+already exercised, so the roster panel rendered and was asserted, while
+`setRosterMember` was never invoked by anything and
+`admin_set_season_roster`'s fake was a bare `{ok:true}` nothing reached.
+Cases: unlocked removal, locked removal (extra activation sentence),
+cancelled confirm, add (asserted confirm-FREE, so a future "confirm
+everything" pass has to decide rather than drift), and failed lookup.
+Mutation results:
+- **Drop the `return` in the catch:** crashes with `TypeError: Cannot read
+  properties of null (reading 'roster_locked_at')` before any assertion
+  runs. Caught, but by JavaScript, not by the tests.
+- **Invert the lock condition** (`!season.roster_locked_at`): both the
+  locked and unlocked assertions fail. Pinned in both directions on
+  purpose — a one-sided check would pass.
+- **Bypass the confirm** (`if (false && !confirm(...))`): 5 assertions
+  fail, and the load-bearing one is "cancelling … makes NO
+  admin_set_season_roster call". The wording checks alone cannot catch a
+  dialog that is *shown but whose answer is ignored*. Note the negative
+  assertion ("UNLOCKED … omits the activation sentence") correctly
+  survives — an empty dialog genuinely lacks the phrase, so negatives can
+  never detect the dialog vanishing entirely. Positives carry that weight.
+- **Soften the claim** — replace "standings edit, not a repair" with
+  "restores their position": fails, and **only via the third clause of that
+  assertion.** The softened text still contains `NO way to prevent` and
+  `not a workaround`, so a two-clause check would have shipped it — leaving
+  the dialog telling admins a remove/re-add round trip *restores* a
+  player's position when it actually hands them an advantage.
+
+**ASYMMETRY WORTH KNOWING BEFORE RELYING ON EITHER: the same mutation
+behaves completely differently on the two paths.** Dropping the catch's
+`return`:
+- in **`setRosterMember`** is *self-detonating* — the next line dereferences
+  `season`, which is still `null`, so it throws immediately and loudly.
+- in **`bootPlayer`** is *silent* — `live` is simply `null`, which is a
+  legitimate value meaning "no season running", so execution continues into
+  a perfectly plausible dialog and the boot proceeds. Three separate
+  assertions were needed to catch it.
+The practical rule: a path whose failure mode is a null dereference defends
+itself; a path whose failure mode is a **valid-looking value** does not, and
+needs tests. When adding a guard like this, ask which kind it is — the
+answer determines whether the tests are belt-and-braces or the only thing
+standing there.
 
 **Other session shapes still not exercised by anything in this harness** — read this
 before assuming a change is covered just because the suite is green:

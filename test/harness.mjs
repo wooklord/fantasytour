@@ -463,6 +463,92 @@ export async function runBootScenario({ html, scripts, mode }){
   return { case1, case2, case3 };
 }
 
+// Season-roster removal — the OTHER destructive control in the admin panel,
+// and the third instance of "the panel is asserted, the handler never is":
+// toggleRoster(501) was already exercised below, so the roster panel rendered
+// and was checked, while setRosterMember was never invoked by anything and
+// admin_set_season_roster's fake was a bare {ok:true} nothing reached.
+//
+// What removal actually does is easy to state wrongly in both directions, so
+// the assertions pin the precise claims: the player does NOT vanish from the
+// standings, removal does not stop their zeros, and a later re-add resets
+// added_at and silently drops accumulated zeros. Adding stays confirm-free
+// (idempotent, non-destructive) and is asserted as such.
+export async function runRosterScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const dbHolder = {};
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, dbHolder);
+  window.localStorage.setItem("ft_session", JSON.stringify(
+    { id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+  clickTab(window, "admin");
+  await tick(); await tick();
+
+  const setCalls = () => calls.filter(c => c.type === "rpc" && c.fn === "admin_set_season_roster");
+
+  // Fixture season 501 has roster_locked_at: null — the unlocked case.
+  const unlockedConfirms = [];
+  window.confirm = (m) => { unlockedConfirms.push(m); return true; };
+  const beforeUnlocked = setCalls().length;
+  await window.setRosterMember(501, "p1", false, "Wooklord");
+  await tick(); await tick();
+  const unlocked = {
+    confirm: unlockedConfirms[0] || "",
+    called: setCalls().length > beforeUnlocked,
+  };
+
+  // Locked: same season, roster_locked_at stamped. The extra sentence must
+  // appear — activation never revisits a season whose roster_locked_at is
+  // set, so removal really is permanent until a manual re-add.
+  tables.seasons.find(s => s.id === 501).roster_locked_at = "2026-01-01T00:00:00Z";
+  const lockedConfirms = [];
+  window.confirm = (m) => { lockedConfirms.push(m); return true; };
+  await window.setRosterMember(501, "p1", false, "Wooklord");
+  await tick(); await tick();
+  const locked = { confirm: lockedConfirms[0] || "" };
+
+  // Cancelled confirm: the RPC must NOT fire. Without this, a confirm that
+  // returned the wrong value (or was bypassed) would still look green from
+  // the wording assertions alone.
+  const beforeCancel = setCalls().length;
+  window.confirm = () => false;
+  await window.setRosterMember(501, "p1", false, "Wooklord");
+  await tick(); await tick();
+  const cancelled = { called: setCalls().length > beforeCancel };
+
+  // Adding is deliberately confirm-free — assert that, so a future "add a
+  // confirm to everything" pass has to make a decision rather than drift.
+  const addConfirms = [];
+  window.confirm = (m) => { addConfirms.push(m); return true; };
+  const beforeAdd = setCalls().length;
+  await window.setRosterMember(501, "p2", true, "EggHead");
+  await tick(); await tick();
+  const added = { confirmCount: addConfirms.length, called: setCalls().length > beforeAdd };
+
+  // Failed season lookup blocks removal: no confirm, no RPC, a toast.
+  const origSeasons = RPC_HANDLERS.get_bracket_seasons;
+  RPC_HANDLERS.get_bracket_seasons = async () => { throw new Error("simulated season lookup failure"); };
+  const failConfirms = [];
+  window.confirm = (m) => { failConfirms.push(m); return true; };
+  window.document.getElementById("toasts").innerHTML = "";
+  const beforeFail = setCalls().length;
+  await window.setRosterMember(501, "p1", false, "Wooklord");
+  await tick(); await tick();
+  const lookupFailed = {
+    confirmCount: failConfirms.length,
+    called: setCalls().length > beforeFail,
+    toastHtml: window.document.getElementById("toasts")?.innerHTML || "",
+  };
+  RPC_HANDLERS.get_bracket_seasons = origSeasons;
+  window.confirm = () => true;
+
+  return { unlocked, locked, cancelled, added, lookupFailed };
+}
+
 // Session 4 step 2: a session with must_change_pin:true must land on the
 // forced interstitial instead of the normal tabs, and submitting a matching
 // new PIN must clear the flag and resume the normal app. Direct session

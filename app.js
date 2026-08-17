@@ -1655,7 +1655,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       panel.innerHTML = (members || []).map((m) => `
       <div class="pickres ${onRoster.has(m.player_id) ? "hit" : "miss"}">
         <span>${onRoster.has(m.player_id) ? "\u2714" : "\u2014"}</span><span>${esc(m.name)}</span>
-        <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)})">${onRoster.has(m.player_id) ? "Remove" : "Add"}</button></span>
+        <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)}, '${esc(m.name).replace(/'/g, "\\'")}')">${onRoster.has(m.player_id) ? "Remove" : "Add"}</button></span>
       </div>`).join("") || '<p class="muted">No members in this league yet.</p>';
     } catch (e) {
       panel.innerHTML = `<p class="err">${esc(e.message)}</p>`;
@@ -1668,7 +1668,32 @@ Relay this to them now \u2014 it will not be shown again.`);
     if (panel) panel.classList.toggle("hidden", !rosterOpen[seasonId]);
     if (rosterOpen[seasonId]) renderRosterPanel(seasonId);
   }
-  async function setRosterMember(seasonId, playerId, add) {
+  async function setRosterMember(seasonId, playerId, add, name) {
+    if (!add) {
+      let season = null;
+      try {
+        const seasons = await rpc("get_bracket_seasons", { p_bracket_id: officialBracketId() });
+        season = (seasons || []).find((s) => Number(s.id) === Number(seasonId));
+        if (!season) throw new Error("season not found");
+      } catch (e) {
+        toast("Couldn't load this season \u2014 removal cancelled. Try again.");
+        return;
+      }
+      const lockNote = season.roster_locked_at ? `
+
+This season is already activated, so nothing will re-add them automatically \u2014 only a manual re-add here.` : "";
+      if (!confirm(
+        `Remove ${name || "this player"} from "${season.name}"?
+
+They stop accruing points \u2014 their picks for this season's remaining shows won't be scored.
+
+Their existing scores stay on the board and keep counting toward their season total. They do not disappear from the standings.
+
+This does NOT stop their zeros, and can increase them: losing their join date widens the zero window back to the season's start.
+
+If you re-add them later, their join date resets to that moment and every zero they'd built up before then is permanently dropped. The original date cannot be restored.` + lockNote
+      )) return;
+    }
     try {
       await rpc("admin_set_season_roster", { p_name: state.session.name, p_pin: state.session.pin, p_season_id: seasonId, p_player_id: playerId, p_add: add });
       toast(add ? "Added to roster" : "Removed from roster", "score");
@@ -1749,7 +1774,7 @@ Their existing picks and scores stay on the books, and standings for seasons tha
 `;
     const tail = live ? `"${live.name}" is running. They stay on its roster and will score a zero for every remaining show in it, counting against them under the "fewest zeros" tiebreaker.
 
-There is currently NO way to prevent this. Removing them from the season roster does not help \u2014 they keep counting because they already have scores in this bracket \u2014 and it can make it worse. Boot now only if that's acceptable.` : `No Official season is running, so no zeros will accrue. They won't be added to future season rosters either.`;
+There is currently NO way to prevent this. Removing them from the season roster is not a workaround: they keep counting because they already have scores in this bracket, and it can make it worse. Re-adding them afterwards permanently drops the zeros they'd built up \u2014 that's a standings edit, not a repair. Boot now only if that's acceptable.` : `No Official season is running, so no zeros will accrue. They won't be added to future season rosters either.`;
     if (!confirm(head + tail)) return;
     const ban = confirm(`Also block the name "${name}" from rejoining this league?
 
