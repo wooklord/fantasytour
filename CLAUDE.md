@@ -2617,6 +2617,119 @@ player who never filled it are indistinguishable in `picks`).
   not a guarantee — a bracket with a one-set-only slot type would orphan on
   the way back. Check the actual key sets, don't assume a direction is safe.
 
+**Members panel — two findings from 2026-08-17, one behavioural and one
+about signalling. Both concern the Reset PIN / Boot button pair.**
+
+**(a) BEHAVIOURAL, and it contradicts how boot is described elsewhere in
+this file: `admin_league_boot` does NOT remove the player from
+`season_rosters`, so a player booted mid-season keeps accruing ZEROS in
+Official's tiebreaker for the rest of that season.** The phrase "they just
+stop accruing" (used in `admin_league_boot`'s own comment and in the Stage
+C1 notes above) is imprecise — they stop accruing *points* and keep
+accruing *zeros*, which is worse than freezing, not equivalent to it.
+- Boot's only destructive statement is `delete from league_members`. The
+  tables that carry gameplay are all untouched: `picks`, `scores`, and
+  crucially `season_rosters`. Nothing cascades off `league_members`.
+- The edge function is not where this bites — `scoreBracket` filters
+  *picks* by roster membership (`index.ts:701`), so a rostered player with
+  no picks simply gets no `scores` row.
+- **Standings is where it bites.** `computeStandings` takes `rosterIds` —
+  "every player_id on the season's roster" — and the fewest-zeros layer
+  counts any in-scope show worth 0 points *including one never picked at
+  all*, scoped from `added_at`. A booted player is still on the roster, so
+  every subsequent show in that season scores as a zero against them.
+- **So "remove from league" and "stop accruing in Official" are two
+  different operations, in two different admin sections** — Members ▸ Boot,
+  and Seasons ▸ manage roster (`admin_set_season_roster`, remove branch).
+  Boot's confirm text ("Their past picks/scores stay on the books — they
+  just stop being able to submit new ones") is true as far as it goes and
+  implies the second happened. It didn't.
+- Fix candidate: either have `admin_league_boot` also remove the player
+  from any *unfinished* season's roster, or say so in the confirm and point
+  at the Seasons panel. The first changes behaviour and needs thought about
+  finished seasons (history must stay); the second is copy only.
+
+**(b) SIGNALLING: the visual weight and confirm count both understate Reset
+PIN relative to its operational cost.** Not a claim about reversibility —
+both controls are recoverable, and an earlier framing of this as
+"recoverable vs irreversible" was wrong. Boot is undone by re-adding
+(unban first if banned); Reset PIN is undone by resetting again. What is
+genuinely one-shot is the PIN *string*, not the account state.
+- Boot carries **two** confirms and coral border+text. Reset PIN carries
+  **one** confirm and plain `.btn.ghost.small` styling, identical to every
+  other small button in the panel.
+- But Reset PIN is the one that **takes a live account offline until a
+  human is reached**: the target is locked into the forced interstitial and
+  `_reject_if_must_change_pin` blocks every write RPC until they complete
+  it. Boot removes someone from a league they can be re-added to.
+- So the styling and the confirm count both point at Boot while the
+  real-time obligation sits with Reset. Worth correcting whenever the
+  Members section is next touched — the current treatment teaches the wrong
+  instinct about which button to be careful with.
+- Scale note: the pair renders once per member row, so at Ambassadors' 14
+  members that is 13 of each on screen at once; at ~50 it is ~98 destructive
+  buttons in a flat list.
+
+**NOT a bug, checked 2026-08-17 so nobody re-investigates: `must_change_pin`
+is set correctly by BOTH admin reset buttons.** It looks like Session 4
+might have wired the interstitial to `globalResetPin` only, but there is
+just one implementation — `resetMemberPin` (`admin.js:463`) and
+`globalResetPin` (`admin.js:167`) call the same `admin_reset_player_pin`
+RPC, differing only in `p_league_id`. That RPC sets
+`must_change_pin = true` unconditionally (`stage_l:77`), and the only other
+statement in non-archive SQL that writes `pin_hash` is `change_own_pin`,
+which clears the flag. There is no second path to miss.
+
+**FIX CANDIDATE: there are TWO fallbacks for a missing `oneset` config
+section, and they disagree with each other. That disagreement is the bug —
+not either fallback on its own.** Found 2026-08-17 on the newly-created
+Green Eggs league, whose brackets have no `oneset` section because
+`global_create_league`'s `def_cfg` doesn't define one.
+- **The scorer's fallback** (`scoring.js`'s `resolveConfigSection`) and
+  **the pick sheet's** (`picks.js`'s `slotDefs`/`breakdownSlotInfo`) are the
+  identical expression — `(format === "one_set" && cfg.oneset) ? cfg.oneset
+  : cfg` — so they agree with each other and fall back to the top-level
+  standard section.
+- **The admin panel's fallback** (`admin.js`'s `rulesRegionHtml`) is a
+  hardcoded object of its own: `cfg.oneset || { slots:[opener, closer,
+  cover1], flat_picks:3, flat_points:1 }`. For Green Eggs that displays
+  `opener / closer / cover1` where the other two use `opener / closer /
+  encore` — and `cover1` appears nowhere in that bracket's config.
+- **DON'T "fix" the scorer's fallback — it is fine, and the obvious reason
+  to distrust it is wrong.** The intuition is that standard slots reference
+  set structure a one-setter lacks. They mostly don't:
+  `ONE_SET_EXCLUDED_TYPES` is only `["set1_closer", "set2_opener"]`.
+  `closer` is not excluded (`slotLabelFor()` relabels it to plain "Closer",
+  which is meaningful at a one-setter) and neither is `encore`. Every slot
+  in Green Eggs' standard section is valid at a one-set show.
+- **The panel being untruthful and the behaviour being correct pull in
+  opposite directions, which is what makes it confusing at the keyboard.**
+  Pressing Save makes the panel honest by writing its invented section into
+  the config — `saveConfig` reads `#slots1`, which always exists because the
+  panel rendered the fabrication into it — thereby swapping `encore` for
+  `cover1` on one-set shows for real. Not pressing Save keeps scoring
+  correct and leaves the panel lying. **No admin action resolves both**, so
+  this is a code fix, not something to be careful about.
+- **Note the trigger is any unrelated save.** A rules change aimed at
+  something else entirely still materialises the invented `oneset`.
+- **The decision, not yet made:** either point `rulesRegionHtml`'s fallback
+  at the same expression the other two use (smallest, kills the divergence
+  directly), or give `def_cfg` a real `oneset` section so new leagues are
+  consistent from creation. The second is more thorough but **does not fix
+  brackets 3 and 4, which already exist** — it needs its own one-shot
+  update, exactly like the `shows.timezone` backfill. Either way the goal is
+  one fallback, not two.
+- **Separate, narrower bug found alongside it:** `resolveConfigSection`
+  returns `cfg` wholesale without filtering `ONE_SET_EXCLUDED_TYPES`, so a
+  bracket whose standard section *did* contain `set1_closer`/`set2_opener`
+  and had no `oneset` section would render and score set-2 slots at a
+  one-set show. No live bracket is in that state; the admin editor hides
+  those types when editing one-set, but nothing enforces it at scoring time.
+- Live exposure today is **zero** — the fallback only fires for brackets 3
+  and 4, whose standard sections are one-set-safe, and Ambassadors' two
+  brackets both carry real `oneset` sections so they never reach it. Full
+  write-up in `docs/session5_plan.md`.
+
 **FIX CANDIDATE (small, and the correct implementation already exists ten
 lines away): slot mode's perfect-sheet gate is a count where it should be a
 coverage check.** `scorePicks` (`supabase/functions/carton-sync/scoring.js`)

@@ -29,6 +29,20 @@ by role only. Resolve identities with a query at the time you need them.
 2. **Second league created** via the real Global console
    (`global_create_league`), which seeds Official + Casual with the
    hardcoded `def_cfg` and **no members**.
+   - **⚠️ IT IS CALLED "Green Eggs" — NOT "Facebook League".** Every plan
+     document in this repo, including the roadmap in CLAUDE.md and the
+     section headings in this file, refers to the second league as "the
+     Facebook League" because that was the working name for years before
+     it existed. The league that actually exists is named **Green Eggs**.
+     Nothing is wrong; the name simply changed at creation time. Recorded
+     explicitly so nobody greps for "Facebook" and concludes the league
+     was never created.
+   - Resolved ids, so they don't have to be looked up under pressure:
+     **league_id 2**, **Official = bracket 3**, **Casual = bracket 4**.
+     (Ambassadors remains league_id 1, Official 1, Casual 2.)
+   - **Neither Green Eggs bracket has a `oneset` config section**, because
+     `def_cfg` does not define one. See the gap recorded below — it is
+     display-only today but one save away from being a scoring change.
 3. **Dev added himself** to the new league — see "Why appointing yourself
    was the only route" below for the mechanism and why it necessarily set
    the admin flag.
@@ -92,6 +106,98 @@ live `official_opt_in` flag, so everyone added in the meantime can vote in
 Official right away and the snapshot happens once against a full roster.
 
 ---
+
+## GAP: `def_cfg` seeds no `oneset` section, and the admin panel invents one
+
+Found 2026-08-17 while looking at the new league. **Display-only right now,
+but it becomes a real scoring change the first time anyone saves rules on a
+Green Eggs bracket** — so it is a trap, not a cosmetic wart.
+
+**Verified against the live `brackets` table**, all four brackets:
+
+| bracket | league | kind | has `oneset`? |
+|---|---|---|---|
+| 1 | Ambassadors | official | **yes** — opener 5, closer 5, cover1 3, flat 1 @ 2 |
+| 2 | Ambassadors | casual | **yes** — opener 2, second_song 2, cover1 2, flat 0 @ 1 |
+| 3 | Green Eggs | official | **no** |
+| 4 | Green Eggs | casual | **no** |
+
+So Ambassadors is unaffected — both its brackets got real `oneset` sections
+from earlier saves. Only a freshly-created league has the gap.
+
+**Three code paths disagree about what a one-set show means when `oneset` is
+absent, and the odd one out is the admin panel:**
+- `scoring.js`'s `resolveConfigSection` → `(format === "one_set" && cfg.oneset) ? cfg.oneset : cfg`, i.e. **falls back to the top-level standard section**.
+- `picks.js`'s `slotDefs`/`breakdownSlotInfo` → the identical expression, so the **pick sheet agrees with the scorer**.
+- `admin.js`'s `rulesRegionHtml` → `const os = cfg.oneset || { slots:[opener, closer, cover1], flat_picks:3, flat_points:1 }` — **its own hardcoded default that matches neither.**
+
+Concretely for Green Eggs: a one-set show would score and render with
+`opener / closer / **encore**` + 3 flats (the top-level section), while the
+admin panel displays `opener / closer / **cover1**` + 3 flats. Different
+third slot.
+
+**THE FALLBACK ITSELF IS FINE — do not "fix" it.** The obvious reading is
+that falling back to the standard section is broken because standard slots
+reference set structure a one-setter doesn't have. Checked, and that is not
+the case: `ONE_SET_EXCLUDED_TYPES` is only `["set1_closer", "set2_opener"]`.
+`closer` is NOT excluded — `slotLabelFor()` relabels it to plain "Closer"
+(last song before the encore), which is meaningful at a one-set show — and
+`encore` is not excluded either, since one-set shows have encores. Green
+Eggs' standard section is `opener / closer / encore` + 3 flats, **every one
+of which is valid at a one-setter.** The fallback produces a sensible sheet.
+
+**So the divergence is the admin panel's invented default, not the
+fallback.** Only `rulesRegionHtml` disagrees with the other two, and it
+disagrees by proposing `cover1` — a slot type that appears nowhere in this
+bracket's config.
+
+**Which makes the save direction the dangerous one, and the instinct to
+avoid saving CORRECT for behaviour:**
+- **Not saving** → the panel displays something the scorer won't use.
+  Cosmetic. Actual scoring and the pick sheet are both sane.
+- **Saving** → `saveConfig` reads `#slots1`, which always exists because the
+  panel rendered its fabricated default into it, and writes
+  `oneset: { slots: slots1, ... }`. **Any** rules save on these brackets —
+  including one aimed at something completely unrelated — materialises the
+  invented section and swaps `encore` for `cover1` on one-set shows. Nobody
+  typed that; the panel supplied it.
+
+**Stated plainly, because this is the whole reason it is confusing: the
+panel is untruthful and the behaviour is correct, and those two facts pull
+in opposite directions.** Every instinct that fixes one breaks the other.
+Making the panel honest by pressing Save changes scoring. Keeping scoring
+correct by not saving leaves the panel lying. There is no action available
+to an admin that resolves both — which is precisely why this is a code fix
+and not something to be careful about at the keyboard.
+
+An earlier draft of this note framed it the other way round (avoid saving =
+wrong instinct). That was written before `ONE_SET_EXCLUDED_TYPES` was
+checked and is wrong: it would push an admin toward the single action that
+actually changes scoring.
+
+**Live exposure today: none.** The fallback only fires for brackets 3 and 4,
+whose standard sections contain no excluded types. Ambassadors never reaches
+it — both its brackets have real `oneset` sections.
+
+**The narrow real bug, worth knowing separately:** `resolveConfigSection`
+returns `cfg` wholesale without filtering `ONE_SET_EXCLUDED_TYPES`. So a
+bracket whose standard section *did* contain `set1_closer` or `set2_opener`,
+with no `oneset` section, would render and score set-2 slots at a one-set
+show. No live bracket is in that state, and the admin editor already hides
+those types when editing one-set — but nothing enforces it at scoring time.
+
+**Options, undecided:** point `rulesRegionHtml`'s fallback at the same
+expression the scorer uses, so the panel shows the top-level section when
+`oneset` is absent and stops inventing (smallest, fixes the actual
+divergence); and/or give `def_cfg` a real `oneset` section — which also
+needs a one-shot update for brackets 3 and 4, since they already exist.
+
+**Unrelated observation, recorded because it contradicts a written note:**
+Ambassadors Official's live config no longer matches the values CLAUDE.md
+recorded on 2026-08-14 (which had top-level opener/closer/encore/cover1 all
+at 2 with flat 2 @ 1). It now reads opener 5, closer 5, encore 5, cover1 3,
+flat 2 @ 2. Presumably a deliberate later edit; noted only so the CLAUDE.md
+figures aren't treated as current.
 
 ## ACCEPTED RISKS — decided, not drifted
 
