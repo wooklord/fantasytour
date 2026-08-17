@@ -304,15 +304,22 @@ appointments.
 
 ## Next steps, in order
 
-0. **UNVERIFIED IN A BROWSER — do this first.** The admin-tab reorg and the
-   new `.scopeline` CSS shipped and are live, but were only ever checked by
-   the test suite, which is blind to CSS by design. Specifically look at:
-   the scope line in **light theme** (this codebase has shipped three
-   contrast failures from token choices, one still open); Casual, where
-   Season tiebreakers disappears and the line is followed by Who's picked;
-   Green Eggs, where the line's league half should change; and desktop at
-   ~901–1000px, where the admin column is ~224px and the line is a long
-   sentence. Dev server: `npm run dev` → http://localhost:8080/.
+0. ✅ **DONE — verified in a browser 2026-08-17. Nothing outstanding here.**
+   The admin-tab reorg and the `.scopeline` CSS shipped having been checked
+   only by the test suite, which is blind to CSS by design; this closes that
+   gap. Verified by eye:
+   - **Contrast in both light and dark themes.** The highest-risk item — the
+     codebase has shipped three contrast failures from token choices and one
+     (`--coral` on paper) is still open, so `.scopeline`'s use of
+     `--line`/`--cream-dim`/`--cream` was worth confirming visually rather
+     than by reading token values.
+   - **Wraps cleanly at narrow widths** — the line is a long sentence and the
+     desktop admin column is only ~224px at the 901px breakpoint.
+   - **Both halves track the switcher**: switching Official ↔ Casual updates
+     the bracket half, and doing it **in both leagues** updates the league
+     half. That is the two-Casuals case the line exists for — with a second
+     league, the bracket name alone identifies nothing, which is why the
+     line names both.
 1. **Admin tab reorg — arrangement DONE 2026-08-17 and shipped** (commit
    `170851c`). See CLAUDE.md's "The admin tab is GROUPED BY SCOPE" entry for
    the order and why it is load-bearing. **What remains is the Members
@@ -338,7 +345,14 @@ appointments.
      account offline until a human is reached; and Boot's confirm text,
      which wrongly implies removal stops Official accrual.
    - Not started. No code written for any of it.
-3. Appoint the two league admins via the Global console.
+   - **THIS IS THE GATE ON STEP 3.** The two prospective league admins are
+     deliberately not being appointed until the Members section is
+     reorganised — the dev's call, and the reasoning is recorded under
+     "BLOCKER on the remaining Session 5 work" below: on a brand-new league
+     the destructive controls have nothing to destroy, so what actually
+     blocks handing the panel over is that it is hard to hand to someone who
+     did not build it.
+3. Appoint the two league admins via the Global console. **Blocked on step 2.**
 3. **Brief them on the reload requirement before they add anyone** — every
    player added must fully close and reopen the app before the league
    appears; foregrounding is not enough. See CLAUDE.md, "Multi-league
