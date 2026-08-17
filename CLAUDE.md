@@ -203,10 +203,18 @@ before assuming a change is covered just because the suite is green:
   which exist in `src/` yet despite being described in the spec) needs a
   global-admin session added to the harness from the day it's built, not after.
 - **More than one league.** `renderLeagueSelector()`'s actual dropdown branch
-  (`leagueIds.length > 1`) has never run — the fixture has exactly one league
-  (Ambassadors), so the function always takes the "hide the selector" early return.
-  Once the Facebook League is real, a player or admin in both leagues exercises the
-  branch nobody's ever seen render.
+  (`leagueIds.length > 1`) has never run **in the test suite** — the fixture has
+  exactly one league (Ambassadors), so the function always takes the "hide the
+  selector" early return. **Still true of the fixtures as of 2026-08-16, and now
+  a real gap rather than a hypothetical one: a second league exists in
+  production as of that date**, so the harness is no longer modelling the
+  shape the app actually runs in. A two-league fixture (plus a player who is
+  a member of both) is the missing piece.
+  - The production behaviour of this branch was traced by hand when the
+    second league was created — see **"Multi-league switcher behavior"**
+    below for what it actually does, including the onboarding-critical
+    reload requirement. That trace is a code read, **not** test coverage,
+    and does not substitute for the fixture.
 - **A player who is NOT opted into Official / not on the season roster, blocked from
   submitting picks for that reason.** `p2`'s `official_opt_in: false` in the fixture
   has never been exercised through an actual login, and separately, the fake
@@ -894,10 +902,27 @@ before assuming a change is covered just because the suite is green:
     write time: `get_show_picks` is the only public (anon-grantable) pick
     read and it returns nothing until `now() >= cutoff_at`, which was still
     ~5h45m out; `picks` has no public SELECT policy by design. Both
-    confirmed empty by direct call, not assumed. **After 03:00Z the anon key
-    can count it** — `rpc/get_show_picks` with
-    `{"p_bracket_id":2,"p_show_id":1765912122}`. Before then it needs the
-    dev's admin PIN (`admin_pick_status`) or the SQL editor.
+    confirmed empty by direct call, not assumed.
+    - **⛔ THE ANON-KEY PATH DESCRIBED HERE NO LONGER WORKS — Stage P,
+      2026-08-16.** This paragraph used to end: *"After 03:00Z the anon key
+      can count it — `rpc/get_show_picks` with
+      `{"p_bracket_id":2,"p_show_id":1765912122}`."* That call now fails:
+      `sql/stage_p_get_show_picks_membership.sql` gave `get_show_picks` a
+      `(p_name, p_pin, p_bracket_id, p_show_id)` signature, an
+      `_auth_player` + league-membership gate, and dropped `player_id` from
+      the payload in favour of a server-computed `is_mine`. **Losing this
+      diagnostic was a known, accepted cost of closing gate item #7, not an
+      oversight** — but the instructions are corrected here rather than
+      left describing something that silently 404s.
+    - **What replaces it**, in order of convenience: `admin_pick_status`
+      (name/PIN, league admin — returns `picks_count` + `last_saved` per
+      player, which answers the "did everyone submit" question directly);
+      the Supabase SQL editor; or `get_show_picks` itself with real
+      credentials, which still works and still reveals only after cutoff.
+    - **Do NOT read a `PGRST202` from the old two-argument call as "the
+      function is missing."** PostgREST resolves an RPC by the exact set of
+      argument names in the body, so the old payload matches nothing now.
+      That is a signature mismatch, not an absent function.
     - **Count distinct rank positions per player, NOT `count(*)`** —
       discipline item 5, and this is the exact shape it warns about. A
       player with 6 rows is not necessarily a full sheet: these picks were
@@ -1420,6 +1445,95 @@ before assuming a change is covered just because the suite is green:
   901px desktop's grid never renders at all (`isDesktop()` in
   `core/dom.js` is `min-width:901px`) — that's phone/tablet's `.wrap`
   instead, covered by the first tier.
+
+---
+
+## Multi-league switcher behavior (traced 2026-08-16, second league now exists)
+
+Traced end to end against `src/core/switcher.js` the day the second league
+was created — i.e. the first time any of this could run at all. Written down
+because two of the three findings are counterintuitive and the third is an
+unstated assumption the code silently depends on.
+
+- **🚨 ONBOARDING-CRITICAL: a player added to a league must FULLY RELOAD the
+  app before that league appears. Nothing refreshes it in the background.
+  Expect this to be the single most common support question during Facebook
+  League recruitment, and note that neither new league admin will have any
+  way to guess the cause** — from the player's side the app simply doesn't
+  show the league they were just told they're in, with no error and no
+  pending state.
+  - **The call chain, so nobody re-derives it:** `state.leagues` is
+    populated only by `resolveLeagues()` (`switcher.js:48`), whose sole
+    caller is `session.js:66` inside `boot()`, whose sole caller is
+    `main.js:33` at page load. That is the entire graph — verified by
+    grep, not assumed.
+  - **Backgrounding and returning does NOT work, and this is the part that
+    makes it confusing.** The `visibilitychange` listener
+    (`realtime.js:109`) calls `refreshCurrent()`, which re-renders the
+    current tab and refetches shows/scores — so the app visibly *does*
+    update on foreground, just never its league list. Something that looks
+    like a refresh happens and the league still isn't there.
+  - **For PWA users, "reload" means fully closing and reopening the app**,
+    not switching back to it. There is no in-app reload control on the
+    normal path (the only `location.reload()` is on `boot()`'s error
+    screen).
+  - Same applies to a player being *removed* from a league — their open
+    session keeps showing it until they reload.
+  - Worth telling the two league admins explicitly as part of handing them
+    the role: "after you add someone, tell them to close the app completely
+    and reopen it."
+- **The league selector is ABSENT, not disabled, for a single-league
+  player** — `renderLeagueSelector()` returns early with
+  `el.innerHTML = ""` when `leagueIds.length <= 1` (`switcher.js:93`). It
+  renders into `#leagueSelect` inside `settingsPanelHtml()`
+  (`settings.js:16`), which for an admin sits at the very BOTTOM of the
+  Admin tab, below the Data section. So "I don't see a league dropdown" is
+  the expected single-league state, not a bug.
+- **`switchToBracket` resets the tab**: `state.tab = "shows"` and
+  `state.currentShow = null` (`switcher.js:110`), deliberately, so an open
+  pick sheet isn't carried across. Consequence worth knowing —
+  **switching leagues from the bottom of the Admin tab bounces you to
+  Shows.**
+- **The stale-`ft_bracket_id` failure everyone predicts does NOT exist —
+  don't "fix" it.** The intuition is that a localStorage bracket id from
+  the other league would leave the app pointing at a bracket that isn't in
+  the league it thinks it's in. It can't: `resolveLeagues` resolves the
+  saved value with `state.leagues.find(l => l.bracket_id === saved)`
+  (`switcher.js:52`) — a lookup **against the membership list**, not a bare
+  read — so an id from a league the player isn't in is simply not found,
+  and it falls through to `defaultBracketFor(...)`. When it *is* found,
+  `currentBracketId` and `currentLeagueId` are set from the SAME row
+  (lines 54-55), so the pair cannot desync. This is correct by
+  construction, not by an explicit guard someone might later remove as
+  redundant.
+- **Real two-league wrinkle, in the fallback: a stale saved bracket lands
+  the player in the ALPHABETICALLY FIRST league, not their own.**
+  `defaultBracketFor(state.leagues[0].league_id)` (`switcher.js:53`) takes
+  `leagues[0]`, and `my_leagues` orders by `l.name, b.kind` — so
+  "Ambassadors" sorts ahead of "Facebook League" and an FB player who
+  belongs to both gets dropped into Ambassadors. **Only reachable when the
+  saved value is invalid** (bracket deleted, player removed from that
+  league, or localStorage cleared/copied between origins) — a valid saved
+  choice always wins, so this is not the everyday path. Low severity, but
+  it is the one place a second league produces a non-obvious result.
+- **STRUCTURAL DEPENDENCY, nowhere documented at the point of use: bracket
+  ids are GLOBALLY unique, not per-league** (`bigserial` on `brackets` in
+  `sql/stage_a_schema.sql`). That is the entire reason a single
+  `ft_bracket_id` key can identify both the bracket AND the league — every
+  lookup above recovers `league_id` by finding the bracket row. If brackets
+  were ever renumbered per-league, or if a bracket id were ever reused,
+  every one of those lookups breaks silently rather than erroring.
+  - **This is also what `switchToLeague`'s missing error path quietly rests
+    on.** `switchToLeague` (`switcher.js:120`) holds no state of its own —
+    it picks a bracket and delegates entirely to `switchToBracket`, which
+    early-returns on `!row || bracketId === state.currentBracketId`. If
+    that guard ever fired, the `<select>` would already be displaying the
+    new league while `currentLeagueId` never changed — a silent desync with
+    no toast and no thrown error. It is unreachable **only** because
+    bracket ids are globally unique (so the id-equality guard can't be true
+    across two different leagues) and because `global_create_league` always
+    seeds exactly two brackets (so `pick` is never undefined). The function
+    asserts neither.
 
 ---
 
@@ -2064,10 +2178,32 @@ this is the condensed, durable record so the roadmap survives a context boundary
   `realtime_pings`, `pingRealtime()` in the edge function, its own
   dedicated channel and `handlePing()` in `realtime.js`, and the two
   now-dead direct bindings removed rather than left in place.
-- **Session 4 — auth + Global console: code complete (steps 1-5, plus
-  self-service PIN change pulled forward from step 6's original scope — see
-  below), SQL not yet run against the live database — that's the dev's next
-  action, not done yet.** Ran in the manual-approval mode this bullet used to
+- **Session 4 — auth + Global console: DONE, code and SQL both. ✅ Stages
+  k/l/m/n verified live 2026-08-16** (steps 1-5, plus self-service PIN
+  change pulled forward from step 6's original scope — see below).
+  **This bullet read "SQL not yet run against the live database — that's
+  the dev's next action, not done yet" until 2026-08-16; that was stale,
+  and it mattered — it made the Global console look unusable and would
+  have sent a Session 5 prep down a re-run path.** How it was verified,
+  since "is this deployed" recurs: POST each RPC over the REST API with
+  its EXACT parameter set and a deliberately wrong name/PIN.
+  `global_find_players` (stage_m) and `change_own_pin` (stage_k) both
+  returned `P0001 "Wrong name or PIN"` — i.e. they exist, are granted to
+  anon, and reached `_auth_player` — where a missing function returns
+  `PGRST202` instead. Stage_n rewrites bodies only, so it has no probeable
+  signature; it's covered transitively, since stage_o applied cleanly on
+  2026-08-14 and its `submit_picks` body calls
+  `_reject_if_must_change_pin`, which would have failed to create had
+  stage_l's helper been absent.
+  - **The probe has one trap worth recording, because the first attempt
+    hit it and read as "nothing is deployed."** PostgREST resolves an RPC
+    by the exact set of argument names in the body, so sending a UNION of
+    parameters across several functions matches NOTHING and returns
+    `PGRST202` for every one of them — including functions that certainly
+    exist (`my_leagues` returned PGRST202 that way). A `PGRST202` is only
+    evidence of absence when the argument set exactly matches the
+    function's own signature. Probe one function at a time.
+  Ran in the manual-approval mode this bullet used to
   only describe: every SQL file was reviewed individually before the next
   was written, and two follow-up gaps the dev caught in review (the
   server-side bypass below, and the platform-logging caveat now in the
@@ -2124,11 +2260,31 @@ this is the condensed, durable record so the roadmap survives a context boundary
     interstitial uses. **Login rate-limiting and the Official opt-in-default
     revisit stay genuinely deferred** — each gets its own follow-up session,
     see the two gotcha bullets above for why they weren't folded in here.
-- **Session 5 — Facebook League launch:** create the league + appoint its two
-  admins through the real console this time, provision one Discord webhook
-  secret, smoke-test. Blocked on the two admins being named and confirmed.
-  **See the PRE-SESSION-5 GATE immediately below — do not start this
-  session without walking that list.**
+- **Session 5 — Facebook League launch: PARTIALLY DONE 2026-08-16.** The
+  league was created via the real Global console and the dev appointed
+  himself to it; **no season, no other admin appointments, and the Discord
+  webhook secret deliberately skipped** (nobody is in that channel yet, so
+  misrouted announcements are noise nobody hears — see the accepted-risk
+  record in `docs/session5_plan.md`). Remaining: appoint the two league
+  admins, provision the webhook secret, smoke-test. **Appointing the two
+  admins is now gated on the admin-tab reorg** (see below), at the dev's
+  call — the panel is being reorganised before anyone who didn't build it
+  is handed it.
+  **See the PRE-SESSION-5 GATE immediately below — do not start the
+  remaining work without walking that list.**
+  - **🚨 Brief both admins on the reload requirement before they add a
+    single player.** Every player added to a league must fully close and
+    reopen the app before the league appears — nothing refreshes
+    `state.leagues` in the background, and foregrounding the app runs a
+    refresh that pointedly does *not* fix it. This will be the most common
+    support question during recruitment and is invisible from the admin
+    side. Full trace in "Multi-league switcher behavior" above.
+  - Note the dev appointing himself set `is_league_admin = true` on his own
+    row — **that is the only in-app way to join a league you aren't already
+    in**, since the Members panel's add is hardcoded to
+    `state.currentLeagueId` and the switcher can't reach a league
+    `my_leagues` doesn't return. Not the same thing as the deferred
+    appointments of the two outside admins.
 
 ### DATED DEADLINES — check these first, they expire
 
@@ -2186,11 +2342,51 @@ no home bullet elsewhere, so its reasoning lives directly below the table.)
 | 4 | **Ladder-mutability revisit** (Module B) | "Alternate scoring modes" → Module B locked decisions → "Decided: mid-season ladder edits stay unguarded" | Unguarded config edits silently rewrite already-published scores; acceptable only while one trusted person can edit |
 | 5 | **Appointing any non-dev league admin** | Cross-cuts #4 and the `admin_update_config`/`admin_set_season_roster` integrity notes | This is the event that invalidates "only the dev can do damage," which several decisions currently rest on |
 | 6 | **Official opt-in default revisit** (Stage F flipped it to `true` for beta convenience) | 2.0 rebuild key decisions — the `official_opt_in` bullet | Opt-in-by-default was a closed-group convenience; a semi-public pool should choose deliberately |
-| 7 | **`get_show_picks` is anon-readable while `get_bracket_scores` is not — OPEN QUESTION, not a fix** | The bullet immediately below this table | Anyone with the publishable key can scrape every player's nickname, UUID and full pick history; at ~50 semi-strangers that stops being a closed-group detail |
+| 7 | ✅ **DONE 2026-08-16** — **`get_show_picks` is now membership-gated**, matching `get_bracket_scores`; `player_id` dropped from the payload in favour of a server-computed `is_mine`. Reveal-after-cutoff unchanged | The bullet immediately below this table, and `sql/stage_p_get_show_picks_membership.sql` | Anyone with the publishable key could scrape every player's nickname, UUID and full pick history; at ~50 semi-strangers that stopped being a closed-group detail |
 
-**#7 in full — recorded as an open question because the original intent is
-unknown, and guessing it is how the wrong thing gets "fixed."** Two read RPCs
-covering overlapping data are gated completely differently:
+**#7 in full — ✅ RESOLVED 2026-08-16 by `sql/stage_p_get_show_picks_membership.sql`.
+The question below was answered "oversight, not design": the anon grant was
+carried over from Stage C1 with nothing recorded either way, and the dev
+decided it was never intended.** What shipped:
+- **The gate now mirrors `get_bracket_scores` exactly** — `_auth_player`,
+  then global-admin OR a `league_members` row for the bracket's league.
+- **`player_id` is gone from the payload**, replaced by a server-computed
+  `is_mine boolean`. This answers the second half of the "what to decide"
+  bullet below: the field is not needed, but the *capability* is — the one
+  real consumer was `picks.js`'s `mineHits`, which highlights the caller's
+  own picks in the setlist view. Computing it server-side removes every
+  other player's UUID from the response entirely, so this is strictly less
+  data than before rather than the same data behind a gate.
+- **Reveal-after-cutoff is untouched**, deliberately — the `now() >=
+  ls.cutoff_at` condition is carried over verbatim. Players seeing each
+  other's sheets after lock is the game working as intended; only *who may
+  ask* changed.
+- **The anon `grant` is deliberately KEPT.** The body rejects
+  unauthenticated callers on its own, and every other RPC here carries the
+  same grant — dropping it would make this one inconsistent without adding
+  a gate that matters.
+- **Known coverage gap, stated rather than implied: the membership gate
+  itself is NOT exercised by the scenario suite, and realistically cannot
+  be.** `test/harness.mjs`'s fake mirrors the rejection so it fails closed,
+  but no scenario asserts it, because no UI path can reach this call site
+  as a non-member — `state.currentBracketId` only ever comes from
+  `my_leagues`, and a non-member is routed to `renderNoLeague()` at boot
+  and never reaches a show detail view. A test that invoked the RPC
+  directly would assert that the *fake* throws, which is a tautology, not
+  coverage of the SQL. The real gate is verified only by the verification
+  block at the bottom of the stage file (an unauthenticated `curl` that
+  must return `P0001`). The fake also does not model the global-admin
+  bypass — fixture `p4` has a real `league_members` row, so it passes on
+  membership, not on `is_global_admin`.
+- **Historical detail worth keeping**: this cost a real diagnostic. Reading
+  picks after cutoff using nothing but the publishable key was an actually-
+  used workflow (2026-08-15, ranked sheet-shape check). Replacements are
+  `admin_pick_status` or the SQL editor — see the corrected passage in the
+  ranked-choice verification bullet above.
+
+**The original open question, preserved because the reasoning is what
+justified the change** — two read RPCs covering overlapping data were gated
+completely differently:
 - `get_bracket_scores` — authenticated **and** membership-gated. Cross-league
   visibility is deliberately Global-admin-only.
 - `get_show_picks` — `grant execute ... to anon`, no auth, no membership
@@ -2247,6 +2443,110 @@ stats (revisit past 2-3 leagues); the per-league webhook DB+UI (revisit if
 env-var management gets painful, or the Global console expands); the
 notification-preference toggle (no strong trigger, pick up whenever wanted);
 game numbering past 12 shows (revisit only if a season actually gets there).
+
+**Deferred, and it silently taxes EVERY breaking change: `app.js` HAS NO
+CACHE-BUSTING, and both it and `index.html` are served with
+`max-age=600`.** Measured directly against the live site 2026-08-16 (not
+inferred from GitHub Pages docs), so nobody has to re-measure it:
+
+```
+app.js      Cache-Control: max-age=600
+index.html  Cache-Control: max-age=600
+```
+
+and `index.html:52` loads the bundle as a bare `<script src="app.js">` —
+**no content hash in the filename, no query string, nothing tied to the
+build.** Consequences, in the order they bite:
+
+- **An active browser can keep running the old bundle for ~10 minutes
+  after a deploy.** A normal reload inside that window serves the cached
+  copy; only a hard reload bypasses it. So "I pushed it" and "clients are
+  running it" are up to ten minutes apart, and the gap is invisible from
+  the dev's side.
+- **An installed PWA left open never refetches at all** until it is fully
+  closed and reopened — so the tail is *unbounded*, not ten minutes. This
+  compounds with the separate `state.leagues` reload requirement (see
+  "Multi-league switcher behavior"): both are fixed by the same user
+  action, and neither is discoverable by the user.
+- **Therefore no deploy ordering is ever "clean" for a breaking change.**
+  The window is governed by client cache and reload behaviour, which the
+  deploy does not control — not by how fast the push lands.
+
+**Two changes in one week have already paid this cost**, which is what
+moved it from theoretical to recorded:
+- **The domain move (2026-08-15)** — the storage/origin change forced every
+  player to re-load and re-install anyway, so the stale-bundle tail was
+  absorbed into a migration that was already disruptive. Easy to miss as
+  an instance of this problem precisely because it hid inside a bigger one.
+- **Stage P (2026-08-16)** — a genuine breaking RPC signature change, where
+  it directly forced a two-file P1/P2 split (`stage_p1_...` additive,
+  `stage_p2_...` the drop) purely to keep old and new bundles both working
+  across the window. That split is the concrete, recurring cost: **every
+  future signature change needs the same dance until this is fixed.**
+
+**Fix options, either of which removes the window entirely:**
+1. **Content hash in the filename** — emit `app.<hash>.js` from
+   `build.mjs` and rewrite the `<script src>` in `index.html` at build
+   time. Strongest option: the URL changes whenever the bytes change, so a
+   cached old bundle is simply never requested again. Costs a build step
+   that edits `index.html`, which is currently a static hand-maintained
+   file, and means the committed bundle filename changes every build
+   (noisier diffs, and the old file needs cleaning up).
+2. **Query string keyed to the build** — `<script src="app.js?v=<hash>">`.
+   Much smaller change; `app.js` keeps its stable name and git history
+   stays clean. Caches key on the full URL including the query, so this is
+   effective in practice. Slightly weaker than (1) — some intermediaries
+   have historically ignored query strings for caching, though that is
+   rare now and does not apply to the GitHub Pages CDN.
+**Recommendation: (2)**, given `index.html` is a ~50-line hand-maintained
+shell and the bundle is committed to git — (1)'s churn is real and buys
+little at this scale. Either way `index.html` must stay `max-age=600` or
+lower, since it is the file that carries the pointer.
+
+**Not urgent in itself** — it changes nothing on a normal, non-breaking
+deploy, which is most of them. Worth doing before the next breaking RPC
+change, or before the player count makes "tell everyone to reload" stop
+being a viable fallback.
+
+**Deferred, and it is the kind of thing that is only ever discovered at the
+worst possible moment: THE DATABASE RESTORE PATH HAS NEVER BEEN TESTED.**
+Backups themselves went from "none exist at all" to "a script exists" on
+2026-08-16 (see below) — but no restore from one has ever been performed, so
+what exists today is an untested hypothesis, not a recovery capability. The
+distinction is the whole point of this entry: a dump that turns out to have
+the wrong format, the wrong table set, or an unusable insert order fails
+exactly when it is needed and not one moment earlier.
+- **Where the backup tooling lives, deliberately NOT in this repo:**
+  `C:\Users\kylem\backups\fantasyeggy\` — `dump.sh`, a `README.md`, and the
+  dumps. It is outside the working tree (confirmed via `git check-ignore`,
+  which reports it as outside the repository rather than merely ignored)
+  because the dumps carry `players.pin_hash` plus every player's pick
+  history, and this repo is public. **The directory also holds `conn.txt`,
+  a full Postgres connection string in plaintext — read/write, not a scoped
+  key — so the folder as a whole is as sensitive as the database.** Its
+  README says so at the top; don't relocate it into the repo for
+  convenience.
+- **Requires `pg_dump`, which was not installed** — `supabase db dump`
+  shells out to Docker and fails without it (`LegacyDockerRunError`), and
+  the machine had no `pg_dump`/`psql`/`docker` on PATH at all. Installed
+  via `scoop install postgresql` (18.6); the binaries are at
+  `C:\Users\kylem\scoop\apps\postgresql\current\bin` and `dump.sh` adds
+  that to PATH itself rather than depending on the shell's.
+- **What to actually verify when the restore test happens**, against a
+  scratch project or a local Postgres and never against production:
+  `--column-inserts` output restores cleanly against a schema built from
+  `sql/`; foreign-key insert ordering works or needs `--disable-triggers`
+  (pg_dump's table order is not guaranteed to be a valid FK order);
+  `players.pin_hash` survives round-trip and a restored account can really
+  log in; and nothing depends on the Supabase-managed `auth`/`storage`
+  schemas the dump excludes — it shouldn't, since this app uses name+PIN
+  RPCs rather than Supabase Auth, but that is the assumption under test.
+- **`shows`/`setlist_songs`/`songs_cache` are in the dump on purpose, and
+  omitting them would quietly break it.** They look regenerable from The
+  Carton, but `syncShows` only covers a rolling 200-show/14-day window and
+  full setlist history has never been backfilled — so a re-sync would not
+  restore them, and historical `scores` rows would reference shows and
+  setlists that no longer exist.
 
 **Deferred, and the shape is already proven: `toggleFormat` needs the same
 orphan warning `saveConfig` got.** Identical failure, identical mechanism, no

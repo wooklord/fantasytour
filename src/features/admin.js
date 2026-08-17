@@ -702,7 +702,7 @@ export async function saveConfig(){
       const shows = await fetchShows(q => q.gte("showdate", new Date(Date.now()-2*864e5).toISOString().slice(0,10)));
       const open = (shows||[]).filter(sh => showState(sh) === "open");
       const counts = await Promise.all(open.map(sh =>
-        rpc("get_show_picks", { p_bracket_id: state.currentBracketId, p_show_id: sh.id })
+        rpc("get_show_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id })
           .then(rows => ({ show: sh, n: (rows||[]).length }))));
       atRisk = counts.filter(c => c.n > 0);
     }catch(e){ lookupFailed = true; }

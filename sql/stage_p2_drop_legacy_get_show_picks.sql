@@ -1,0 +1,79 @@
+-- ============================================================
+-- FANTASY EGGY — STAGE P2: drop the legacy anon get_show_picks
+-- ============================================================
+-- Run ONCE in the Supabase SQL Editor, AFTER both of these are true:
+--
+--   1. sql/stage_p1_get_show_picks_membership.sql has been applied, and
+--   2. the frontend that sends p_name/p_pin is DEPLOYED and confirmed
+--      live — not merely committed and pushed.
+--
+-- Confirm (2) rather than assuming it. GitHub Pages serves app.js with
+-- Cache-Control: max-age=600 and index.html references it as a bare
+-- `app.js` with no content hash or query string, so "I pushed it" and
+-- "clients are running it" are up to ~10 minutes apart for an active
+-- browser, and unbounded for an installed PWA that is still open:
+--
+--   curl -s https://fantasyeggy.wooklord.net/app.js | grep -c p_pin
+--
+-- A non-zero count means the edge is serving the new bundle. Anyone whose
+-- browser cached the old one is still on borrowed time until it expires —
+-- which is exactly what this file ends. See the cache-busting entry in
+-- CLAUDE.md's deferred list; fixing that is what would make this whole
+-- two-step dance unnecessary next time.
+--
+-- WHAT THIS DOES: removes the last unauthenticated path to player pick
+-- data. Until it runs, gate item #7 is NOT actually closed — the four-arg
+-- gated function exists, but the old anon-readable two-arg one is still
+-- sitting next to it answering anyone who asks. P1 without P2 is strictly
+-- worse than not having started, because CLAUDE.md now records #7 as done.
+--
+-- IRREVERSIBLE IN PRACTICE: any browser still running a pre-stage-p bundle
+-- starts failing the moment this commits (PGRST202 on the two-arg call).
+-- With the error panel added to renderShowDetail in the same batch, those
+-- users see "Couldn't load this show" with a Try again button rather than
+-- a dead, silent button — a reload fixes them. If you need to back out,
+-- re-running P1's create statement does NOT restore the old function; the
+-- original two-arg body is in sql/stage_c1_rpcs.sql:472-486.
+-- ============================================================
+
+begin;
+
+-- Signature-qualified, not a bare name — the four-argument function added
+-- by P1 shares this name and must survive. `if exists` so a second run is
+-- a no-op rather than an error.
+drop function if exists get_show_picks(bigint,bigint);
+
+commit;
+
+-- ============================================================
+-- VERIFICATION (run separately, after the commit above)
+-- ============================================================
+-- 1. Exactly ONE overload should now remain:
+--
+--   select p.oid::regprocedure
+--   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--   where n.nspname = 'public' and p.proname = 'get_show_picks';
+--
+--   Expect exactly one row:
+--     get_show_picks(text,text,bigint,bigint)
+--
+-- 2. The old anon call must now FAIL — this is the actual close of gate
+--    item #7, and the one check that proves the exposure is gone. It is
+--    the same call that returned 44 rows and 11 distinct player names on
+--    2026-08-16 using nothing but the publishable key:
+--
+--   curl -s -X POST \
+--     'https://zdfhglvjxquvkjyvophz.supabase.co/rest/v1/rpc/get_show_picks' \
+--     -H "apikey: $ANON" -H "Authorization: Bearer $ANON" \
+--     -H 'Content-Type: application/json' \
+--     -d '{"p_bracket_id":2,"p_show_id":1765912122}'
+--
+--   Expect PGRST202 (no function matches that argument set). Anything that
+--   returns rows means the drop did not take.
+--
+-- 3. The app must still work end to end for a real member: open a past
+--    show, confirm the setlist renders, the breakdown renders, and the
+--    player's own picked songs are highlighted (is_mine driving the
+--    `hitmine` class). If the show-detail view shows "Couldn't load this
+--    show" instead, the deployed bundle is older than P1 — that is the
+--    cache window, and it resolves on reload.

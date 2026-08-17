@@ -385,16 +385,56 @@ export async function savePicks(){
   }catch(e){ $("#p-err").textContent = e.message; }
 }
 
+// Visible failure screen for renderShowDetail. Deliberately a `.panel`, NOT
+// the `.sheet` paper card renderIneligible uses: --coral on the cream paper
+// fails WCAG AA in BOTH themes (2.54:1 dark / 3.70:1 light — see the
+// Frontend/CSS gotchas in CLAUDE.md, still unfixed), and an error nobody can
+// read is the same bug this function exists to fix. On an app panel, coral
+// is the normal, tested treatment.
+function renderShowDetailError(show, err){
+  $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button></p>
+    <div class="panel" style="border-color:var(--coral)">
+      <h2>Couldn't load this show</h2>
+      <p class="muted" style="word-break:break-word">${esc(err && err.message ? err.message : String(err))}</p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="openShow(${show.id})">Try again</button>
+      </div>
+    </div>
+    ${footerHtml()}`;
+}
+
 export async function renderShowDetail(show){
   clearTimers();
-  const [{ data: setlist }, picks, scores] = await Promise.all([
-    db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
-    rpc("get_show_picks", { p_bracket_id: state.currentBracketId, p_show_id: show.id }).catch(() => []),
-    rpc("get_bracket_scores", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id: show.id })
-      .then(rows => (rows||[]).sort((a,b) => b.points - a.points)),
-  ]);
+  let setlist, picks, scores;
+  // The old code let get_show_picks fail silently via `.catch(() => [])`,
+  // which rendered an empty pick board — indistinguishable from "nobody
+  // picked." Removing that catch alone was NOT enough, and shipping it that
+  // way would have been a regression: openShow() is called from inline
+  // onclick handlers and never awaits or catches this function, so a bare
+  // rejection is an unhandled promise rejection and the screen simply never
+  // changes — a dead button with no message at all, strictly less visible
+  // than the empty board it replaced. Hence the explicit try/catch and a
+  // real error screen: a member who legitimately can't read picks (the
+  // membership gate added in stage_p) now sees WHY, and everything else
+  // that can fail here surfaces the same way instead of vanishing.
+  try{
+    const [setlistRes, picksRes, scoresRes] = await Promise.all([
+      db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
+      rpc("get_show_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id }),
+      rpc("get_bracket_scores", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id: show.id })
+        .then(rows => (rows||[]).sort((a,b) => b.points - a.points)),
+    ]);
+    setlist = setlistRes.data; picks = picksRes; scores = scoresRes;
+  }catch(e){
+    renderShowDetailError(show, e);
+    return;
+  }
   const pname = Object.fromEntries((scores||[]).map(s => [s.player_id, s.player_name]));
-  const mineHits = new Set((picks||[]).filter(p => p.player_id === state.session.id).map(p => p.songname.toLowerCase()));
+  // is_mine is computed server-side now (stage_p) — the RPC no longer
+  // returns player_id at all, so there is no client-side uuid comparison to
+  // make. Every other player's uuid simply isn't in the payload any more.
+  const mineHits = new Set((picks||[]).filter(p => p.is_mine).map(p => p.songname.toLowerCase()));
   let lastSet = null;
   const setHtml = (setlist||[]).map(s => {
     const label = s.is_encore ? "Encore" : "Set " + (s.setnumber || "1");

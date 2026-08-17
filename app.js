@@ -664,16 +664,37 @@ Save anyway?`)) return;
       $("#p-err").textContent = e.message;
     }
   }
+  function renderShowDetailError(show, err) {
+    $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button></p>
+    <div class="panel" style="border-color:var(--coral)">
+      <h2>Couldn't load this show</h2>
+      <p class="muted" style="word-break:break-word">${esc(err && err.message ? err.message : String(err))}</p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="openShow(${show.id})">Try again</button>
+      </div>
+    </div>
+    ${footerHtml()}`;
+  }
   async function renderShowDetail(show) {
     var _a, _b, _c;
     clearTimers();
-    const [{ data: setlist }, picks, scores] = await Promise.all([
-      db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
-      rpc("get_show_picks", { p_bracket_id: state.currentBracketId, p_show_id: show.id }).catch(() => []),
-      rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id }).then((rows) => (rows || []).sort((a, b) => b.points - a.points))
-    ]);
+    let setlist, picks, scores;
+    try {
+      const [setlistRes, picksRes, scoresRes] = await Promise.all([
+        db.from("setlist_songs").select("*").eq("show_id", show.id).order("position"),
+        rpc("get_show_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id }),
+        rpc("get_bracket_scores", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: show.id }).then((rows) => (rows || []).sort((a, b) => b.points - a.points))
+      ]);
+      setlist = setlistRes.data;
+      picks = picksRes;
+      scores = scoresRes;
+    } catch (e) {
+      renderShowDetailError(show, e);
+      return;
+    }
     const pname = Object.fromEntries((scores || []).map((s) => [s.player_id, s.player_name]));
-    const mineHits = new Set((picks || []).filter((p) => p.player_id === state.session.id).map((p) => p.songname.toLowerCase()));
+    const mineHits = new Set((picks || []).filter((p) => p.is_mine).map((p) => p.songname.toLowerCase()));
     let lastSet = null;
     const setHtml = (setlist || []).map((s) => {
       const label = s.is_encore ? "Encore" : "Set " + (s.setnumber || "1");
@@ -1818,7 +1839,7 @@ OK = remove + ban \xB7 Cancel = remove only`);
       try {
         const shows = await fetchShows((q) => q.gte("showdate", new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10)));
         const open = (shows || []).filter((sh) => showState(sh) === "open");
-        const counts = await Promise.all(open.map((sh) => rpc("get_show_picks", { p_bracket_id: state.currentBracketId, p_show_id: sh.id }).then((rows) => ({ show: sh, n: (rows || []).length }))));
+        const counts = await Promise.all(open.map((sh) => rpc("get_show_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id }).then((rows) => ({ show: sh, n: (rows || []).length }))));
         atRisk = counts.filter((c) => c.n > 0);
       } catch (e) {
         lookupFailed = true;

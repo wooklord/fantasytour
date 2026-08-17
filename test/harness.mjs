@@ -64,13 +64,36 @@ const RPC_HANDLERS = {
   // ("The picks are in" — cutoff passed, picks public, nothing scored yet)
   // could never render in ANY scenario, in either mode. Joins players for
   // the display name the way the real RPC does.
-  get_show_picks: async ({ p_bracket_id, p_show_id }, tables) =>
-    (tables.picks || [])
+  // Stage P: membership-gated, and player_id is gone from the payload —
+  // replaced by a server-computed is_mine. The returned row is built
+  // FIELD BY FIELD rather than spreading `...p` on purpose: spreading would
+  // leak player_id (and every other picks column) into the fake result, so
+  // a frontend that still depended on player_id would keep passing here
+  // while failing against the real RPC. The shape below is exactly the
+  // real RETURNS TABLE and nothing more.
+  get_show_picks: async ({ p_name, p_bracket_id, p_show_id }, tables) => {
+    const me = tables.players_public.find(pl => pl.name === p_name);
+    // Mirror the real membership gate so the fake fails CLOSED the way the
+    // RPC does. Nothing in the app can currently reach this call site as a
+    // non-member (see the known-gap note in the Stage P section of
+    // CLAUDE.md), so this branch is not exercised by any scenario today —
+    // it is here so that if a future change ever does call get_show_picks
+    // from an unauthorised context, the suite fails loudly instead of
+    // quietly handing back rows the real database would refuse.
+    const brk = (tables.brackets || []).find(b => b.id === p_bracket_id);
+    if (!brk) throw new Error("Bracket not found");
+    const isMember = (tables.league_members || [])
+      .some(lm => lm.league_id === brk.league_id && lm.player_id === (me || {}).id);
+    if (!isMember) throw new Error("Not a member of this league");
+    return (tables.picks || [])
       .filter(p => p.bracket_id === p_bracket_id && p.show_id === p_show_id)
       .map(p => ({
-        ...p,
+        is_mine: !!me && p.player_id === me.id,
         player_name: (tables.players_public.find(pl => pl.id === p.player_id) || {}).name || "?",
-      })),
+        slot: p.slot,
+        songname: p.songname,
+      }));
+  },
   // Batch pick-count RPC backing the shows-list marker. Computed against
   // the fixture's real picks rows, same "real join, not a fixed stub"
   // idiom as get_bracket_scores/my_leagues above.
