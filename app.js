@@ -1733,7 +1733,24 @@ Relay this to them now \u2014 it will not be shown again.`);
     }
   }
   async function bootPlayer(id, name) {
-    if (!confirm(`Remove ${name} from this league? Their past picks/scores stay on the books \u2014 they just stop being able to submit new ones.`)) return;
+    let live = null;
+    try {
+      const seasons = await rpc("get_bracket_seasons", { p_bracket_id: officialBracketId() });
+      const today = (/* @__PURE__ */ new Date()).toLocaleDateString("sv");
+      live = (seasons || []).find((s) => s.start_date <= today && today <= s.end_date) || null;
+    } catch (e) {
+      toast("Couldn't check whether a season is running \u2014 boot cancelled. Try again.");
+      return;
+    }
+    const head = `${name} will lose access to this league.
+
+Their existing picks and scores stay on the books, and standings for seasons that have already ended are unaffected.
+
+`;
+    const tail = live ? `"${live.name}" is running. They stay on its roster and will score a zero for every remaining show in it, counting against them under the "fewest zeros" tiebreaker.
+
+There is currently NO way to prevent this. Removing them from the season roster does not help \u2014 they keep counting because they already have scores in this bracket \u2014 and it can make it worse. Boot now only if that's acceptable.` : `No Official season is running, so no zeros will accrue. They won't be added to future season rosters either.`;
+    if (!confirm(head + tail)) return;
     const ban = confirm(`Also block the name "${name}" from rejoining this league?
 
 OK = remove + ban \xB7 Cancel = remove only`);

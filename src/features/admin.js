@@ -574,8 +574,49 @@ export async function unban(name){
     bansOpen = false; toggleBans();
   }catch(e){ toast(esc(e.message)); }
 }
+// The confirm text below states consequences rather than asking "are you
+// sure", because the consequence is the non-obvious part: booting does NOT
+// stop a player accruing zeros in a season that is currently running (see
+// the boot entry in CLAUDE.md), and there is no workaround available in the
+// app today. The previous wording said they "just stop being able to submit
+// new ones", which is true about points and false about zeros.
 export async function bootPlayer(id, name){
-  if (!confirm(`Remove ${name} from this league? Their past picks/scores stay on the books — they just stop being able to submit new ones.`)) return;
+  // Season state is looked up HERE, per invocation — deliberately NOT read
+  // from renderAdmin's `seasonsA`, which is a snapshot from whenever the
+  // panel last rendered and is wrong the moment a season starts or ends.
+  // No show count is shown for the same reason: a cached one would go stale
+  // as soon as a show scored, and a live one is a second round trip.
+  // A FAILED LOOKUP BLOCKS THE BOOT. It deliberately does not fall through
+  // to a warning the admin can click past: the two branches below differ by
+  // "this is harmless" vs "this permanently costs them standings position",
+  // and a failure that silently produced the harmless-sounding wording would
+  // be the worst possible outcome — an irreversible action taken under a
+  // reassurance the code never actually verified. Boot is never urgent
+  // enough to justify guessing; retrying costs one click.
+  let live = null;
+  try{
+    const seasons = await rpc("get_bracket_seasons", { p_bracket_id: officialBracketId() });
+    const today = new Date().toLocaleDateString('sv');
+    live = (seasons||[]).find(s => s.start_date <= today && today <= s.end_date) || null;
+  }catch(e){
+    toast("Couldn't check whether a season is running — boot cancelled. Try again.");
+    return;
+  }
+
+  const head = `${name} will lose access to this league.\n\n`
+    + `Their existing picks and scores stay on the books, and standings for `
+    + `seasons that have already ended are unaffected.\n\n`;
+  const tail = live
+    ? `"${live.name}" is running. They stay on its roster and will score a zero `
+      + `for every remaining show in it, counting against them under the `
+      + `"fewest zeros" tiebreaker.\n\n`
+      + `There is currently NO way to prevent this. Removing them from the season `
+      + `roster does not help — they keep counting because they already have `
+      + `scores in this bracket — and it can make it worse. Boot now only if `
+      + `that's acceptable.`
+    : `No Official season is running, so no zeros will accrue. They won't be `
+      + `added to future season rosters either.`;
+  if (!confirm(head + tail)) return;
   const ban = confirm(`Also block the name "${name}" from rejoining this league?\n\nOK = remove + ban · Cancel = remove only`);
   try{
     await rpc("admin_league_boot", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_player_id:id, p_ban:ban });

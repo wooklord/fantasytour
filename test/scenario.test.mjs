@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -539,6 +539,51 @@ async function runMode(mode){
   // Session 4 step 2: must_change_pin:true must block the normal tabs
   // behind a forced interstitial, and submitting a matching new PIN must
   // clear the flag in the stored session.
+  // bootPlayer's three confirm branches. Boot is irreversible for a player's
+  // standings position (they keep taking zeros in a running season and
+  // nothing in the app undoes it), so the dialog wording IS the safety
+  // mechanism, and the lookup that selects the wording gates the boot.
+  const bootScen = await runBootScenario({ html, scripts, mode });
+  check("boot with no season running says so explicitly",
+    /No Official season is running/.test(bootScen.case1.firstConfirm),
+    `case1 confirm: ${JSON.stringify(bootScen.case1.firstConfirm)}`);
+  // NOT a plain !/zero/ test: the no-season wording legitimately says "no
+  // zeros will accrue", so the word itself is present and proves nothing.
+  // The discriminating property is the absence of the live-season WARNING —
+  // the tiebreaker name and the no-workaround sentence. This is also what
+  // makes the check fail when the two branch strings are swapped.
+  check("boot with no season running carries none of the live-season warning",
+    !/fewest zeros/i.test(bootScen.case1.firstConfirm)
+      && !/NO way to prevent/i.test(bootScen.case1.firstConfirm),
+    `case1 confirm: ${JSON.stringify(bootScen.case1.firstConfirm)}`);
+  check("boot with no season running proceeds to admin_league_boot when accepted",
+    bootScen.case1.booted === true,
+    `case1 booted: ${bootScen.case1.booted}`);
+  check("boot during a live season names that season in the confirm",
+    /Live Season/.test(bootScen.case2.firstConfirm),
+    `case2 confirm: ${JSON.stringify(bootScen.case2.firstConfirm)}`);
+  check("boot during a live season states the zero-accrual consequence",
+    /zero/i.test(bootScen.case2.firstConfirm) && /fewest zeros/i.test(bootScen.case2.firstConfirm),
+    `case2 confirm: ${JSON.stringify(bootScen.case2.firstConfirm)}`);
+  check("boot during a live season says there is no way to prevent it, rather than pointing at the season roster as a fix",
+    /NO way to prevent/i.test(bootScen.case2.firstConfirm) && /does not help/i.test(bootScen.case2.firstConfirm),
+    `case2 confirm: ${JSON.stringify(bootScen.case2.firstConfirm)}`);
+  check("boot during a live season still proceeds when accepted",
+    bootScen.case2.booted === true,
+    `case2 booted: ${bootScen.case2.booted}`);
+  // The three case-3 assertions are deliberately separate: a dropped early
+  // return trips "no confirm" and "no rpc" together, while a lost toast trips
+  // only the third. Collapsing them would hide which half regressed.
+  check("a failed season lookup shows NO confirm at all",
+    bootScen.case3.confirmCount === 0,
+    `case3 confirmCount: ${bootScen.case3.confirmCount}`);
+  check("a failed season lookup does NOT call admin_league_boot",
+    bootScen.case3.booted === false,
+    `case3 booted: ${bootScen.case3.booted}`);
+  check("a failed season lookup surfaces a toast explaining the boot was cancelled",
+    /cancel/i.test(bootScen.case3.toastHtml),
+    `case3 toastHtml: ${bootScen.case3.toastHtml}`);
+
   const forcedPin = await runForcedPinChangeScenario({ html, scripts, mode });
   check("must_change_pin:true renders the forced interstitial, not the normal tabs",
     /Set a new PIN/.test(forcedPin.interstitialHtml) && forcedPin.tabsDisplay !== "flex",

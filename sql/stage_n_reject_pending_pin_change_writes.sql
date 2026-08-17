@@ -68,9 +68,22 @@ begin
     raise exception 'Only Global can remove a Global admin';
   end if;
   -- Hard delete of membership ONLY — picks/scores in this league are left
-  -- untouched (frozen-roster rule: a booted player's season line persists,
-  -- they just stop accruing). league_members.banned is not used here or
-  -- anywhere else in this file.
+  -- untouched. NOTE (comment corrected 2026-08-17; function body UNCHANGED
+  -- from what was executed): this previously read "frozen-roster rule: a
+  -- booted player's season line persists, they just stop accruing", which is
+  -- false. They stop accruing POINTS and keep accruing ZEROS whenever a
+  -- season is RUNNING at boot time — this does not touch season_rosters, and
+  -- standings counts zeros for every player in its table, which is built
+  -- from score rows FIRST and roster ids only second. Ended seasons are
+  -- unaffected, and a boot with no season running is clean (activateSeasons
+  -- snapshots league_members, so a booted player never enters a future
+  -- season's roster).
+  -- Deleting the roster row is NOT a workaround: the player stays in the
+  -- standings table via their score rows so the zeros keep counting, and
+  -- losing added_at widens the zero window back to season start. There is
+  -- currently no fix available at the keyboard — the real one is a
+  -- season_rosters.removed_at column. All recorded in CLAUDE.md.
+  -- league_members.banned is not used here or anywhere else in this file.
   delete from league_members where league_id = p_league_id and player_id = p_player_id;
   if p_ban then
     insert into banned_names (league_id, name) values (p_league_id, lower(tgt.name)) on conflict do nothing;

@@ -192,6 +192,55 @@ then reject) instead. Fixed, and `runNonAdminScenario` (presets `p2`,
 `is_league_admin: false`) now locks in both the initial Settings render and the exact
 backgrounding/foregrounding regression.
 
+**ASSERTING THAT A CONTROL EXISTS IS NOT ASSERTING WHAT IT DOES — and this
+harness has now produced two green-looking gaps of that family. Check the
+target is actually reached before trusting a check that names it.**
+- **`get_show_picks`'s fake returned `[]` unconditionally until 2026-08-13**,
+  so `renderShowDetail`'s pre-scoring pick board ("The picks are in") could
+  never render in ANY scenario, in either mode. Assertions referencing that
+  surface existed and passed; the surface was unreachable.
+- **`bootPlayer` had ZERO coverage until 2026-08-17**, despite three checks
+  asserting the Members panel — including *"Members panel offers Reset PIN
+  per member"*. Those assert the buttons are in the markup. **Nothing ever
+  invoked either handler.** So the panel read as well-covered while both of
+  its destructive controls were entirely untested.
+- The distinction that matters: the first is a fake that made a real surface
+  unreachable; the second is presence standing in for behaviour. Both look
+  identical from a green run. This is the same substitution discipline item
+  5 names — a correlate passing for the condition — applied to tests rather
+  than to production code.
+
+**`runBootScenario` (added 2026-08-17) covers bootPlayer's three confirm
+branches, and was mutation-tested rather than assumed.** Boot is the control
+whose dialog is the only warning that exists — whether an Official season is
+RUNNING at boot time decides whether the player keeps taking zeros for the
+rest of it, and nothing in the app undoes that (see the boot bug entry
+below). Results, worth keeping because they show which assertions are
+load-bearing:
+- **Mutation A — drop the `return` in `bootPlayer`'s catch:** 2 of case 3's
+  3 assertions fail ("shows NO confirm at all", "does NOT call
+  admin_league_boot"). The toast assertion correctly keeps passing, because
+  `toast()` sits *before* the `return` — removing the return doesn't remove
+  the toast. Those three are deliberately separate for exactly this reason:
+  collapsed into one, "the boot proceeded" would be indistinguishable from
+  "the warning vanished."
+- **Mutation B — swap the two branch strings:** all 5 wording assertions
+  fail across both cases. The two `booted === true` checks correctly keep
+  passing, since swapping wording doesn't change whether the boot proceeds.
+- **A draft assertion that would have passed under Mutation B, caught only
+  by baselining first:** case 1 originally asserted `!/zero/i` on the
+  no-season wording. That wording legitimately reads *"no zeros will
+  accrue"*, so the word is present either way and the check discriminated
+  nothing. Replaced with absence of the live-season *warning* markers
+  (`fewest zeros`, `NO way to prevent`). **Baseline before mutating** — the
+  bad assertion failed honestly against correct code instead of silently
+  passing against broken code.
+- The live season is injected inside the scenario, NOT added to
+  `makeFixtures()`: the shared fixture's only season is deliberately past,
+  and two unrelated checks depend on that ("Official (no covering season)
+  shows the ineligible reason" and "standings defaults to All time"). Its
+  dates are built off `Date.now()`, never hardcoded.
+
 **Other session shapes still not exercised by anything in this harness** — read this
 before assuming a change is covered just because the suite is green:
 - **A genuine global admin** (`is_global_admin: true`). No fixture player has this set;
@@ -2700,12 +2749,46 @@ worse than freezing rather than equivalent to it.
   Boot's confirm text ("Their past picks/scores stay on the books — they
   just stop being able to submit new ones") is true as far as it goes and
   implies the second happened. It didn't.
-- Fix candidate: either have `admin_league_boot` also remove the player
-  from any *unfinished* season's roster, or say so in the confirm and point
-  at the Seasons panel. The first changes behaviour and needs thought about
-  finished seasons (history must stay); the second is copy only. **Either
-  way, fix the two wrong sentences above in the same pass** — leaving them
-  is how the next reader concludes this was already handled.
+- **REJECTED FIX, recorded so it isn't re-proposed as the obvious one:
+  having `admin_league_boot` also delete the player's `season_rosters` row.
+  It does not work and makes things worse.** `computeStandings` builds its
+  player table `T` from `scoreRows` FIRST (`tiebreak.js:51`) and adds
+  `rosterIds` only second (`:58`), then runs the zeros loop over
+  `Object.keys(T)` (`:68`). So any player with a final-show score row
+  anywhere in that bracket's history is in `T` permanently, roster or not —
+  deleting the roster row leaves the zeros counting exactly as before. And
+  it drops `rosterJoinDates[playerId]`, so `lo` falls back to
+  `season.start_date` (`:70`), which can *widen* the zero window backwards
+  for a mid-season joiner. Strictly not-better, sometimes worse.
+- **THE REAL FIX: a `season_rosters.removed_at` column.** The zero window
+  has a lower bound (`added_at`) and no upper bound; stopping accrual needs
+  one, and no current column can express it. Scope: add the column (existing
+  rows correctly stay null); stamp it in `admin_league_boot` for seasons
+  with `end_date >= current_date`; return it from `admin_list_season_roster`
+  and the standings read; give `computeStandings` an upper bound beside
+  `joinDate` so `rosterJoinDates` becomes a range; add fixtures in
+  `tiebreak.test.mjs` for the bounded case. Touches SQL, a read path, core
+  scoring-adjacent logic and tests — its own session, not a bolt-on.
+- **GATE (state-based, not dated): build it before any league has an
+  Official season that scores a show while a booted player sits on its
+  roster.** Chosen state-based deliberately, because the point is that
+  **Ambassadors already satisfies it** — Test, Test 2 and Test 3 have all
+  activated and scored (verified 2026-08-17), so the exposure there is not
+  future work. Green Eggs is the one with runway: it has zero seasons, so
+  nothing can go wrong there until its first season scores.
+  - **What bounds the urgency, and it is worth knowing precisely: no
+    Ambassadors season is currently RUNNING.** Test 3 ended 2026-08-14;
+    Test 4 (2026-09-04) and The Final Tour (2026-10-15 → 12-05) are both
+    unactivated. A boot *today* is therefore clean and accrues nothing. The
+    next window opens **2026-09-04**.
+  - Until it is built there is no workaround — see the rejected fix above.
+    The mitigation is the confirm text (shipped 2026-08-17), which names the
+    running season and says plainly that nothing prevents the accrual.
+- **Both wrong sentences are FIXED as of 2026-08-17**, in the same pass:
+  `admin_league_boot`'s SQL comment (corrected in place in
+  `sql/stage_n_reject_pending_pin_change_writes.sql`, comment only — the
+  function body is byte-identical to what was executed) and the frontend
+  confirm (`bootPlayer`, now three branches with mutation-tested coverage).
 
 **Members panel signalling — the visual weight and confirm count both
 understate Reset PIN relative to its operational cost.** Separate from the

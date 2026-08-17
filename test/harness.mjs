@@ -375,6 +375,94 @@ export async function runGlobalAdminScenario({ html, scripts, mode }){
   return { adminHtml, sharedTabLabel, leagueCountAfterCreate, appointResultsHtml, wandererIsAdminOfNewLeague };
 }
 
+// bootPlayer's confirm — three branches, none of which had ANY coverage
+// before 2026-08-17 despite Boot being one of the two most destructive
+// controls in the app. The dialog is not decoration: whether an Official
+// season is RUNNING at boot time decides whether the booted player keeps
+// scoring zeros against the "fewest zeros" tiebreaker for the rest of that
+// season, and nothing in the app can undo that once it starts (see the boot
+// entry in CLAUDE.md). So the wording is the only warning that exists, and
+// the lookup that picks the wording is a hard gate on the boot itself.
+//
+// The live season is injected HERE rather than added to makeFixtures(),
+// deliberately: the shared fixture's only season is deliberately in the past,
+// and two existing checks depend on that ("Official (no covering season)
+// shows the ineligible reason" and "standings defaults to All time"). Adding
+// a live season to the shared fixture would break both for an unrelated
+// reason.
+export async function runBootScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const dbHolder = {};
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, dbHolder);
+  window.localStorage.setItem("ft_session", JSON.stringify(
+    { id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+  clickTab(window, "admin");
+  await tick(); await tick();
+
+  const bootCalls = () => calls.filter(c => c.type === "rpc" && c.fn === "admin_league_boot").length;
+
+  // ---- Case 1: no Official season running (fixture's only season is past)
+  const noSeasonConfirms = [];
+  window.confirm = (m) => { noSeasonConfirms.push(m); return true; };
+  const bootsBeforeCase1 = bootCalls();
+  await window.bootPlayer("p2", "EggHead");
+  await tick(); await tick();
+  const case1 = {
+    firstConfirm: noSeasonConfirms[0] || "",
+    booted: bootCalls() > bootsBeforeCase1,
+  };
+
+  // ---- Case 2: an Official season covering today. Dates are built off the
+  // real wall clock (day()-style), never hardcoded — a fixed window silently
+  // drifts into the past and this branch would stop being exercised without
+  // failing.
+  const today = Date.now();
+  const iso = (off) => new Date(today + off * 864e5).toISOString().slice(0, 10);
+  tables.seasons.push({
+    id: 502, bracket_id: 11, name: "Live Season",
+    start_date: iso(-3), end_date: iso(3), roster_locked_at: null,
+  });
+  const liveConfirms = [];
+  window.confirm = (m) => { liveConfirms.push(m); return true; };
+  const bootsBeforeCase2 = bootCalls();
+  await window.bootPlayer("p2", "EggHead");
+  await tick(); await tick();
+  const case2 = {
+    firstConfirm: liveConfirms[0] || "",
+    booted: bootCalls() > bootsBeforeCase2,
+  };
+
+  // ---- Case 3: the season lookup fails. This is the branch added on
+  // 2026-08-17 and the one where a bug is silent in the dangerous direction:
+  // if the early return were dropped, the boot would proceed under whichever
+  // wording the code fell through to — an irreversible action taken beneath a
+  // reassurance nothing verified. Assert all three of: no confirm, no RPC,
+  // and a visible toast. Same handler-swap idiom as the get_show_picks
+  // lookup-failure block further down this file.
+  const origSeasons = RPC_HANDLERS.get_bracket_seasons;
+  RPC_HANDLERS.get_bracket_seasons = async () => { throw new Error("simulated season lookup failure"); };
+  const failConfirms = [];
+  window.confirm = (m) => { failConfirms.push(m); return true; };
+  window.document.getElementById("toasts").innerHTML = "";
+  const bootsBeforeCase3 = bootCalls();
+  await window.bootPlayer("p2", "EggHead");
+  await tick(); await tick();
+  const case3 = {
+    confirmCount: failConfirms.length,
+    booted: bootCalls() > bootsBeforeCase3,
+    toastHtml: window.document.getElementById("toasts")?.innerHTML || "",
+  };
+  RPC_HANDLERS.get_bracket_seasons = origSeasons;
+  window.confirm = () => true;
+
+  return { case1, case2, case3 };
+}
+
 // Session 4 step 2: a session with must_change_pin:true must land on the
 // forced interstitial instead of the normal tabs, and submitting a matching
 // new PIN must clear the flag and resume the normal app. Direct session
