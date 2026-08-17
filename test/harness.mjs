@@ -571,6 +571,69 @@ export async function runRosterScenario({ html, scripts, mode }){
 //      fields have no inputs on screen, so they survive only via
 //      saveConfig()'s read-through-to-state.cfg fallbacks — the one piece of
 //      this work with a real data-loss failure mode.
+// The registered-but-league-less empty state, and the recruitment loop that
+// runs through it: register -> wait -> admin adds you -> Check again -> you
+// are in the app. That loop is what ~50 people walk during Facebook League
+// recruitment and it had NO coverage at all; worse, every other fixture
+// deliberately prevents renderNoLeague() from firing (p4 is given a
+// membership row specifically so it doesn't), so nothing was ever going to
+// stumble into it.
+//
+// p3 ("Wanderer") is already a registered non-member in makeFixtures(), so
+// my_leagues returns [] for them with no new fixture shape needed.
+//
+// SEAM, stated rather than hidden: the Check again button is asserted to
+// exist and to carry a location.reload() handler, but its click is NOT
+// exercised — jsdom does not implement navigation (that is the "Not
+// implemented: navigation to another Document" line every run prints). The
+// reload is modelled as what it actually is, a second page load against
+// changed server state: a fresh window over the SAME tables object after
+// membership is inserted. That covers the loop's behaviour; it does not
+// cover the button literally navigating.
+export async function runNoLeagueScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const session = { id: "p3", name: "Wanderer", pin: "1234", is_global_admin: false };
+
+  // --- Page load 1: registered, in no league.
+  const domA = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const windowA = domA.window;
+  installGlobals(windowA, mode, tables, RPC_HANDLERS, calls, {});
+  windowA.localStorage.setItem("ft_session", JSON.stringify(session));
+  for (const src of scripts) windowA.eval(src);
+  await tick(); await tick();
+
+  const before = {
+    html: mainHTML(windowA, mode),
+    tabsDisplay: windowA.document.getElementById("tabs")?.style.display || "",
+    // The button is the fix for the dead end — without it the copy tells the
+    // player to do something the screen gives them no way to do.
+    checkAgainHtml: [...windowA.document.querySelectorAll("button")]
+      .map(b => b.outerHTML).find(h => /Check again/.test(h)) || "",
+  };
+
+  // --- The admin adds them. Mutating `tables` is exactly what
+  // admin_add_league_member does server-side; official_opt_in is written
+  // explicitly here as `true` to mirror the Stage F column default that
+  // admin_add_league_member relies on without naming.
+  tables.league_members.push({ league_id: 1, player_id: "p3", is_league_admin: false, official_opt_in: true });
+
+  // --- Page load 2: the reload. Fresh window, same tables, same session.
+  const domB = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const windowB = domB.window;
+  installGlobals(windowB, mode, tables, RPC_HANDLERS, calls, {});
+  windowB.localStorage.setItem("ft_session", JSON.stringify(session));
+  for (const src of scripts) windowB.eval(src);
+  await tick(); await tick();
+
+  const after = {
+    html: mainHTML(windowB, mode),
+    tabsDisplay: windowB.document.getElementById("tabs")?.style.display || "",
+  };
+
+  return { before, after };
+}
+
 export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDebut = false, perfect = 7 }){
   const { tables } = makeRankedFixtures({ wildcardDebut, perfect });
   const casualId = tables.brackets.find(b => b.kind === "casual").id;

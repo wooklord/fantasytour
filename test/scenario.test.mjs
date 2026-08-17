@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -631,6 +631,33 @@ async function runMode(mode){
   check("a failed season lookup surfaces a cancellation toast",
     /cancel/i.test(roster.lookupFailed.toastHtml),
     `lookupFailed toastHtml: ${roster.lookupFailed.toastHtml}`);
+
+  // The recruitment loop. Priority here is the LOOP, not the wording: copy
+  // can be re-read by a human at any time, whereas a regression in
+  // "added -> reload -> in the app" is invisible and strands every new
+  // player on a screen telling them to wait.
+  const noLeague = await runNoLeagueScenario({ html, scripts, mode });
+  check("a registered player in no league gets the no-league screen, not the app",
+    /not in a league yet/i.test(noLeague.before.html),
+    `before.html: ${noLeague.before.html.slice(0, 300)}`);
+  check("the no-league screen hides the nav tabs entirely",
+    noLeague.before.tabsDisplay === "none",
+    `before.tabsDisplay: "${noLeague.before.tabsDisplay}"`);
+  check("the no-league screen offers a Check again control that reloads",
+    /location\.reload/.test(noLeague.before.checkAgainHtml),
+    `checkAgainHtml: ${noLeague.before.checkAgainHtml}`);
+  // The claim the old copy got wrong. Asserted as absence of the false
+  // promise, so restoring it fails rather than silently shipping again.
+  check("the no-league screen does NOT claim no further action is needed",
+    !/don't need to do anything else/i.test(noLeague.before.html),
+    `before.html: ${noLeague.before.html.slice(0, 300)}`);
+  // THE LOOP: after an admin adds them, a reload lands them in the app.
+  check("after being added, a reload leaves the no-league screen behind",
+    !/not in a league yet/i.test(noLeague.after.html),
+    `after.html: ${noLeague.after.html.slice(0, 300)}`);
+  check("after being added, a reload shows the nav tabs",
+    noLeague.after.tabsDisplay === "flex",
+    `after.tabsDisplay: "${noLeague.after.tabsDisplay}"`);
 
   const forcedPin = await runForcedPinChangeScenario({ html, scripts, mode });
   check("must_change_pin:true renders the forced interstitial, not the normal tabs",

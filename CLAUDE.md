@@ -283,20 +283,55 @@ Mutation results:
   the dialog telling admins a remove/re-add round trip *restores* a
   player's position when it actually hands them an advantage.
 
-**ASYMMETRY WORTH KNOWING BEFORE RELYING ON EITHER: the same mutation
-behaves completely differently on the two paths.** Dropping the catch's
-`return`:
-- in **`setRosterMember`** is *self-detonating* — the next line dereferences
-  `season`, which is still `null`, so it throws immediately and loudly.
-- in **`bootPlayer`** is *silent* — `live` is simply `null`, which is a
-  legitimate value meaning "no season running", so execution continues into
-  a perfectly plausible dialog and the boot proceeds. Three separate
-  assertions were needed to catch it.
-The practical rule: a path whose failure mode is a null dereference defends
-itself; a path whose failure mode is a **valid-looking value** does not, and
-needs tests. When adding a guard like this, ask which kind it is — the
-answer determines whether the tests are belt-and-braces or the only thing
-standing there.
+**`runNoLeagueScenario` (added 2026-08-17) covers the registered-but-
+league-less empty state AND the recruitment loop through it.** Every other
+fixture deliberately prevents `renderNoLeague()` from firing (`p4` is given
+a membership row specifically so it doesn't), so nothing was ever going to
+stumble into this path. `p3` ("Wanderer") is already a registered
+non-member, so no new fixture shape was needed.
+- **Priority was the LOOP, not the wording**: register → admin adds you →
+  reload → you are in the app. Copy can be re-read by a human at any time;
+  a regression in the loop is invisible and strands every new player.
+- **The reload is modelled as a second page load** — a fresh window over the
+  SAME mutated `tables` — because that is exactly what `location.reload()`
+  is. **SEAM, stated not hidden:** the Check again button is asserted to
+  exist and to carry a `location.reload()` handler, but its click is NOT
+  exercised, since jsdom does not implement navigation (that is the
+  "Not implemented: navigation to another Document" line every run prints).
+- **Mutation — invert `resolveLeagues`'s guard** (`!state.leagues.length` →
+  `state.leagues.length`): takes down the MAIN scenario before the
+  no-league checks are even reached, with `TypeError: Cannot read
+  properties of null (reading 'mode')` in `slotDefs` — `state.cfg` is null
+  because `boot()` returned early into `renderNoLeague()` and never ran
+  `loadConfig()`. Correct blast radius for a guard this central.
+
+**MUTATION-SHAPE TALLY, and the rule it yields — worth knowing where
+assertion coverage is actually load-bearing rather than belt-and-braces.**
+Seven mutations were run on 2026-08-17. They fall into two kinds:
+- **Self-detonating (2)** — the corrupted value reaches a *dereference*, so
+  JavaScript catches it and no assertion is consulted:
+  - `setRosterMember`'s catch `return` dropped → `season` is `null` and the
+    very next line reads `season.roster_locked_at`. Immediate.
+  - `resolveLeagues`'s guard inverted → league-ful players route to the
+    empty state, `state.cfg` never loads, and a render crashes on it later.
+    **Delayed and in a different module**, which is worth noting: the crash
+    need not be adjacent to the mutation to count.
+- **Silent and plausible (1)** — the corrupted value is absorbed by a branch
+  that treats it as legitimate:
+  - `bootPlayer`'s catch `return` dropped → `live` is `null`, which is a
+    *valid* value meaning "no season running", so execution continues into
+    a perfectly reasonable dialog and the boot proceeds. **Only tests catch
+    this**, and it took 2 of 3 assertions.
+- The remaining 4 changed rendered output and were caught by assertions on
+  that output (branch strings swapped, lock condition inverted, confirm
+  bypassed, the claim softened).
+
+**The rule: it is not "does the next statement dereference" — it is whether
+the corrupted value ever reaches a dereference at all, or is absorbed by a
+branch that accepts it as valid.** `null` meaning "nothing found" is the
+dangerous case precisely because it is indistinguishable from `null`
+meaning "lookup failed". When adding a guard, ask which kind the failure
+value is: if it is absorbable, the tests are the only thing standing there.
 
 **Other session shapes still not exercised by anything in this harness** — read this
 before assuming a change is covered just because the suite is green:
