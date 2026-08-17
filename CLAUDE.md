@@ -2373,11 +2373,52 @@ decided it was never intended.** What shipped:
   `my_leagues`, and a non-member is routed to `renderNoLeague()` at boot
   and never reaches a show detail view. A test that invoked the RPC
   directly would assert that the *fake* throws, which is a tautology, not
-  coverage of the SQL. The real gate is verified only by the verification
-  block at the bottom of the stage file (an unauthenticated `curl` that
-  must return `P0001`). The fake also does not model the global-admin
+  coverage of the SQL. The fake also does not model the global-admin
   bypass — fixture `p4` has a real `league_members` row, so it passes on
   membership, not on `is_global_admin`.
+- **⚠️ AND THE DEV STRUCTURALLY CANNOT TEST THE MEMBERSHIP HALF — don't
+  plan to "just check it manually."** The condition is
+  `if not pl.is_global_admin and not exists (...)`, so a global admin
+  short-circuits on the FIRST clause in every league, including ones they
+  have never joined. The dev's own account therefore passes this gate
+  everywhere and can never trigger the rejection. Reaching it at all needs
+  **valid** credentials (a bad PIN dies at `_auth_player`, upstream of the
+  gate) belonging to a **non-global-admin** player who is **not** in the
+  target league — i.e. someone else's account, which nobody should be
+  handing over. Practical consequence: this branch stays verified by code
+  reading (it is four lines mirroring `get_bracket_scores`, in production
+  since Stage C2a) rather than by execution, indefinitely.
+  - **Natural time to close it: the first Facebook-League-only player** —
+    someone in the FB league and NOT in Ambassadors is, for the first time,
+    a real non-global-admin non-member, so an Ambassadors-bracket call with
+    their credentials would exercise the rejection. Note the obvious
+    catch: it still needs their PIN, which nobody should be asking for.
+  - **The self-service version, and the one actually worth doing: register
+    a throwaway non-global-admin account**, add it to exactly one league,
+    and call the other league's bracket with it. That is entirely within
+    the dev's control, needs nobody else's credentials, and is the only
+    way this gets executed rather than reasoned about. Cheap — a
+    registration and one `curl`.
+- **When checking the positive path, LOOK at `is_mine`, don't infer it
+  from the page rendering fine.** A uniformly-`false` `is_mine` renders
+  perfectly plausibly: the setlist, the breakdown and the pick board all
+  display normally, and the only symptom is that **nothing is
+  highlighted** — no `hitmine` class on any song. That reads as "I didn't
+  hit anything this show," which is an ordinary, common outcome and not
+  visibly wrong. Same shape as discipline item 5: "the page looks right"
+  is a correlate of "`is_mine` is correct," not the condition itself.
+  Check that it is `true` on exactly the caller's own rows and `false` on
+  everyone else's — **both halves**, since an all-`true` bug would light
+  up every song and an all-`false` one would light up none, and only the
+  second is easy to mistake for normal play.
+- **What WAS proven, 2026-08-16, and it is the half that mattered:** after
+  P2, the old unauthenticated two-arg call returns `PGRST202` ("Could not
+  find the function public.get_show_picks(p_bracket_id, p_show_id)") — the
+  anon-readable path that returned 44 rows and 11 distinct nicknames to
+  anyone holding the publishable key is genuinely gone, not merely
+  documented as gone. The new four-arg call with bad credentials returns
+  `P0001 "Wrong name or PIN"`. Two different failures at two different
+  layers, both confirmed live.
 - **Historical detail worth keeping**: this cost a real diagnostic. Reading
   picks after cutoff using nothing but the publishable key was an actually-
   used workflow (2026-08-15, ranked sheet-shape check). Replacements are
