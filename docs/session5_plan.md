@@ -304,10 +304,41 @@ appointments.
 
 ## Next steps, in order
 
-1. **Admin tab reorg** — inventory first (done, see below), then arrangement.
-   This is the next work item, ahead of everything else on the later-work
-   list.
-2. Appoint the two league admins via the Global console.
+0. **UNVERIFIED IN A BROWSER — do this first.** The admin-tab reorg and the
+   new `.scopeline` CSS shipped and are live, but were only ever checked by
+   the test suite, which is blind to CSS by design. Specifically look at:
+   the scope line in **light theme** (this codebase has shipped three
+   contrast failures from token choices, one still open); Casual, where
+   Season tiebreakers disappears and the line is followed by Who's picked;
+   Green Eggs, where the line's league half should change; and desktop at
+   ~901–1000px, where the admin column is ~224px and the line is a long
+   sentence. Dev server: `npm run dev` → http://localhost:8080/.
+1. **Admin tab reorg — arrangement DONE 2026-08-17 and shipped** (commit
+   `170851c`). See CLAUDE.md's "The admin tab is GROUPED BY SCOPE" entry for
+   the order and why it is load-bearing. **What remains is the Members
+   section**, decided but not built — see the next item.
+2. **Members section rework — DECIDED, NOT BUILT. Resume here.**
+   - **Problem:** Reset PIN and Boot render as adjacent, identically-sized
+     small buttons on every member row. At Ambassadors' 14 members that is
+     13 of each on screen at once; at ~50 it is ~98 destructive buttons in
+     a flat list. Finding a specific member means scrolling.
+   - **Chosen shape ("Option 1"), confirmed by the dev:** hide the Boot
+     buttons behind a visibility toggle **reusing the existing
+     `toggleBans()` idiom already in this panel** — a `linkbtn` above the
+     list, a class on each Boot button, one exported toggle that flips a
+     `hidden` class. Same pattern as `#banToggle`/`#banlist`
+     (`admin.js:534`+), so no new idiom is introduced.
+   - **Plus a filter input above the list**, not a fixed-height scroll. At
+     50 members the real problem is finding someone; typing three letters
+     should be the answer. It pairs with the toggle: filter to one row,
+     then reveal, and nothing else destructive is on screen.
+   - **Fold in while there** (both recorded in CLAUDE.md): the signalling
+     correction — Boot has two confirms + coral styling while Reset PIN has
+     one confirm + default styling, yet Reset is the one that takes a live
+     account offline until a human is reached; and Boot's confirm text,
+     which wrongly implies removal stops Official accrual.
+   - Not started. No code written for any of it.
+3. Appoint the two league admins via the Global console.
 3. **Brief them on the reload requirement before they add anyone** — every
    player added must fully close and reopen the app before the league
    appears; foregrounding is not enough. See CLAUDE.md, "Multi-league
@@ -317,6 +348,43 @@ appointments.
 5. Recruitment; add players as they register.
 6. Create the Official season with a **future** `start_date`, once the pool
    is stable.
+
+## Open items carried out of 2026-08-16/17, with enough to resume cold
+
+Each of these has a full write-up in CLAUDE.md; this is the index so nothing
+is only findable by remembering it exists.
+
+- **`oneset` fallback divergence — decision not made.** `rulesRegionHtml`
+  falls back to a hardcoded object proposing `cover1`; the scorer and pick
+  sheet fall back to the top-level standard section. Green Eggs' brackets
+  (3, 4) have no `oneset` section at all. Either point the panel's fallback
+  at the same expression the other two use, or give `def_cfg` a real
+  `oneset` section — the latter also needs a one-shot update for brackets 3
+  and 4, which already exist. **Zero live exposure today**; the trap is that
+  any unrelated rules save materialises the invention.
+- **Boot leaves booted players accruing zeros** via `season_rosters`.
+  Behavioural bug plus two wrong sentences (the SQL comment and the confirm
+  text). Fix candidate recorded; not started.
+- **Membership gate on `get_show_picks` is unexecuted.** Auth is verified
+  (`P0001`), membership is not, and the dev structurally cannot test it —
+  global admin short-circuits the check in every league. Closing it needs a
+  throwaway non-global-admin account added to exactly one league, then one
+  `curl` against the other league's bracket. ~10 minutes.
+- **`app.js` cache-busting.** `max-age=600` on both `app.js` and
+  `index.html`, bundle referenced with no content hash or query string.
+  Forced the Stage P1/P2 split and will force the same dance on every future
+  breaking change. Recommended fix: build-keyed query string.
+- **The database restore path has never been tested.** Backups now exist
+  (`C:\Users\kylem\backups\fantasyeggy\`); no restore has ever been
+  performed, so it is a hypothesis. Test against a scratch project, never
+  production.
+- **The scenario suite has no two-league fixture.** A second league exists in
+  production as of 2026-08-16, so `renderLeagueSelector`'s dropdown branch is
+  now a real gap rather than a hypothetical one.
+- **`is_mine` not yet eyeballed in-app.** Stage P replaced `player_id` with a
+  server-computed `is_mine`. A uniformly-false value renders plausibly —
+  everything displays, nothing is highlighted, which reads as an ordinary
+  no-hits show. Check on a show where you know you had hits.
 
 ## Open questions, deliberately unresolved
 

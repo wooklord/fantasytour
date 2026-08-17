@@ -2617,16 +2617,72 @@ player who never filled it are indistinguishable in `picks`).
   not a guarantee — a bracket with a one-set-only slot type would orphan on
   the way back. Check the actual key sets, don't assume a direction is safe.
 
-**Members panel — two findings from 2026-08-17, one behavioural and one
-about signalling. Both concern the Reset PIN / Boot button pair.**
+**The admin tab is GROUPED BY SCOPE as of 2026-08-17, and the order is
+load-bearing — read this before reordering anything in `renderAdmin`.**
+Sections run: league-scoped (Shows & cutoffs, Members, Seasons) → a scope
+line → current-bracket-scoped (Who's picked, Master switch, Season
+tiebreakers, House rules, Game rules, Save all rules) → global (Data,
+Global console) → personal (Settings, footer).
+- **The scope line (`.scopeline`, rendered from `scopeLine` in
+  `renderAdmin`) reads "Editing <bracket> · <league>" and is only truthful
+  if nothing league-scoped sits below it.** Moving a section across it is a
+  behavioural change, not a cosmetic one. It names BOTH bracket and league
+  deliberately: two leagues now exist and both have a bracket called
+  "Casual", so the bracket name alone identifies nothing.
+- **Seasons sits immediately ABOVE the line on purpose, next to but not
+  with Season tiebreakers.** The two share a name and not a scope — Seasons
+  resolves `officialBracketId()` and edits Official regardless of the
+  switcher, while Season tiebreakers is current-bracket config
+  (`cfg.tiebreakers`) that only renders when the current bracket IS
+  Official. Below the line the line would be actively false for it. **This
+  looks wrong when scanning by name and is correct by behaviour** — there
+  is a comment saying so in `admin.js`; don't "fix" it.
+- **Global console moved from first to second-from-last**, joining Data as
+  the other global-scoped section. A separate global-admin tab was
+  considered and rejected: it touches `index.html`'s nav, `layout.js`'s
+  dispatch map / `renderAll` / `applyLayout`, and `dom.js`'s `colMap` +
+  `$()` redirect — and a fourth desktop column takes the 901px columns from
+  ~224px to ~165px, breaking the podium sizing that has already been
+  re-tiered twice for that band (see the podium note in Frontend/CSS
+  gotchas).
+- **`.scopeline` is a separate CSS rule from `.sheet .divider`, on
+  purpose.** That one is paper-scoped and uses `--paper-ink-soft`, correct
+  only on the cream sheet stock; this one sits on the app background and
+  uses `--line`/`--cream-dim`/`--cream`, all redefined per theme.
+- **The scenario suite cannot verify any of this.** Its assertions key on
+  element ids, not on order, and `harness.mjs:420`'s `q()` is a bare
+  `getElementById` — nothing scopes a lookup to `#sec-<id>`. So a body
+  rendered under the wrong heading keeps every id resolvable and the suite
+  stays green. **A reorder must be checked positionally against the
+  source** (find each `collapsible("id"`, slice to the next one, assert a
+  distinctive string from that section's own body appears inside), and the
+  reassembly should be verified to be an identical multiset of lines.
+  That is how the 2026-08-17 reorder was done; a piecemeal edit attempt
+  during it did briefly cross the `shows` and `master` bodies.
 
-**(a) BEHAVIOURAL, and it contradicts how boot is described elsewhere in
-this file: `admin_league_boot` does NOT remove the player from
-`season_rosters`, so a player booted mid-season keeps accruing ZEROS in
-Official's tiebreaker for the rest of that season.** The phrase "they just
-stop accruing" (used in `admin_league_boot`'s own comment and in the Stage
-C1 notes above) is imprecise — they stop accruing *points* and keep
-accruing *zeros*, which is worse than freezing, not equivalent to it.
+**BUG (behavioural, with wrong documentation attached): BOOTING A PLAYER
+MID-SEASON DOES NOT STOP THEM ACCRUING — THEY KEEP TAKING ZEROS IN
+OFFICIAL'S TIEBREAKER FOR THE REST OF THE SEASON.** Found 2026-08-17.
+`admin_league_boot` does not remove the player from `season_rosters`, and
+standings computes zeros from roster membership rather than from score
+rows. **Two places in this codebase currently state the opposite**, which
+is why this is filed as a bug and not a nuance:
+- `admin_league_boot`'s own SQL comment — *"picks/scores in this league are
+  left untouched (frozen-roster rule: a booted player's season line
+  persists, **they just stop accruing**)"*.
+- The frontend confirm text (`admin.js:578`) — *"Their past picks/scores
+  stay on the books — **they just stop being able to submit new ones**."*
+Both are true about *points* and false about *zeros*. The accurate
+statement: they stop accruing points and keep accruing zeros, which is
+worse than freezing rather than equivalent to it.
+- **This reverses the "Boot is recoverable" framing reached earlier the
+  same evening.** That framing was about the *player* — re-add them, unban
+  if needed, and their access is restored. It does not extend to their
+  **standings position**: every zero taken while they sat booted on the
+  roster stays in the fewest-zeros computation, and re-adding to
+  `league_members` does not remove those zeros, because the zeros never
+  came from `league_members` in the first place. Recoverable for the
+  person, not for their record.
 - Boot's only destructive statement is `delete from league_members`. The
   tables that carry gameplay are all untouched: `picks`, `scores`, and
   crucially `season_rosters`. Nothing cascades off `league_members`.
@@ -2647,10 +2703,14 @@ accruing *zeros*, which is worse than freezing, not equivalent to it.
 - Fix candidate: either have `admin_league_boot` also remove the player
   from any *unfinished* season's roster, or say so in the confirm and point
   at the Seasons panel. The first changes behaviour and needs thought about
-  finished seasons (history must stay); the second is copy only.
+  finished seasons (history must stay); the second is copy only. **Either
+  way, fix the two wrong sentences above in the same pass** — leaving them
+  is how the next reader concludes this was already handled.
 
-**(b) SIGNALLING: the visual weight and confirm count both understate Reset
-PIN relative to its operational cost.** Not a claim about reversibility —
+**Members panel signalling — the visual weight and confirm count both
+understate Reset PIN relative to its operational cost.** Separate from the
+boot bug above; this one is layout/affordance, not behaviour. Not a claim
+about reversibility —
 both controls are recoverable, and an earlier framing of this as
 "recoverable vs irreversible" was wrong. Boot is undone by re-adding
 (unban first if banned); Reset PIN is undone by resetting again. What is
