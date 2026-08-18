@@ -308,9 +308,21 @@ html[data-theme="light"] .panel.live-halo{
    independently: at the ~224px desktop admin column a single flowing string
    wraps before it reaches a <br> and produces three ragged lines. */
 .scopeline{border-top:1px solid var(--line);margin:22px 0 10px;padding-top:10px}
-.scopeline-label{font-family:var(--mono);font-size:.8rem;letter-spacing:1px;text-transform:uppercase;color:var(--cream-dim)}
+/* .95/.9 rather than .8/.85: the label is now nominally LARGER than the
+   note, so subordination is reinforced by size instead of relying purely on
+   casing and colour. letter-spacing drops 1px -> .5px because a bigger label
+   needs less of it to read as a label, and it claws back ~15px of width.
+   ACCEPTED COST: "EDITING OFFICIAL · AMBASSADORS" is 29 uppercase mono
+   characters ≈ 279px, so it wraps at the ~224px desktop-narrow admin column
+   AND on a 324px phone (~258px available). It already wrapped at
+   desktop-narrow before this change; the phone wrap is new. Wrapping is
+   clean — label and note are separate elements, so line 1 breaks at a space
+   rather than colliding with the sentence. If that ever grates, the fix is
+   the copy, not the size: moving the league name into the note line leaves
+   "EDITING OFFICIAL" at ~154px, which fits everywhere. */
+.scopeline-label{font-family:var(--mono);font-size:.95rem;letter-spacing:.5px;text-transform:uppercase;color:var(--cream-dim)}
 .scopeline-label b{color:var(--cream);font-weight:700}
-.scopeline-note{margin-top:3px;font-size:.85rem;color:var(--cream-dim)}
+.scopeline-note{margin-top:3px;font-size:.9rem;color:var(--cream-dim)}
 /* NOTE: .section-scope has NO rule here, deliberately. It marks the bracket
    qualifier inside "Who's picked"'s <h2> — see admin.js. It is a child of the
    heading precisely so it inherits Fraunces, the 1.25rem size and the colour
