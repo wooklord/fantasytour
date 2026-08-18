@@ -57,20 +57,41 @@ grant execute on function admin_list_unaffiliated_players(text,text,bigint) to a
 commit;
 
 -- ============================================================
--- VERIFICATION (run separately)
+-- VERIFICATION (run separately) — IN THIS ORDER
 -- ============================================================
--- 1. Unauthenticated must fail:
+-- 1. DID IT DEPLOY? Run this FIRST. Nothing else here answers the question.
+--
+--   select p.oid::regprocedure::text
+--   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--   where n.nspname = 'public' and p.proname = 'admin_list_unaffiliated_players';
+--
+--   Expect exactly one row:
+--     admin_list_unaffiliated_players(text,text,bigint)
+--   NO ROWS means the function does not exist and the file did not apply,
+--   whatever else looked fine.
+--
+-- 2. Is it callable, and does auth work? Unauthenticated must fail:
 --   curl -s -X POST '.../rest/v1/rpc/admin_list_unaffiliated_players' \
 --     -H "apikey: $ANON" -H "Authorization: Bearer $ANON" \
 --     -H 'Content-Type: application/json' \
 --     -d '{"p_name":"__nope__","p_pin":"0000","p_league_id":1}'
---   Expect P0001 "Wrong name or PIN".
+--   Expect P0001 "Wrong name or PIN". A PGRST202 here means NOT DEPLOYED —
+--   PostgREST could not find a function with that argument set.
 --
--- 2. Cross-check the count against the raw predicate — they must agree:
+-- 3. ⚠️ PREDICATE CROSS-CHECK ONLY — THIS PROVES NOTHING ABOUT DEPLOYMENT.
+--    It is a raw table query. It never touches the RPC, and returns exactly
+--    the same answer whether or not the function exists:
+--
 --   select count(*) from players p
 --   where not exists (select 1 from league_members lm where lm.player_id = p.id);
 --
--- 3. A NON-admin member must be refused ('League admins only'). Note the dev
+--    This check ran on 2026-08-17, returned 1, was reported as confirmation,
+--    and the function had NOT been created — the panel failed with PGRST202
+--    on first use. Its only legitimate use is comparing this number against
+--    what the panel DISPLAYS, after steps 1 and 2 have already established
+--    that the panel can call anything at all.
+--
+-- 4. A NON-admin member must be refused ('League admins only'). Note the dev
 --    cannot test this personally — global admins short-circuit
 --    _is_league_admin_or_global in every league. Needs the throwaway
 --    non-global-admin account tracked in docs/session5_plan.md.

@@ -322,10 +322,72 @@ export async function renderAdmin(){
   // Seasons below the line would make the line actively false for it.
   // This looks wrong when scanning by name and is correct by behaviour —
   // please don't "fix" it by moving them together.
+  // Three dividers that BOUND EACH OTHER — each governs until the next. That
+  // is what makes their claims true: the old single line said "everything
+  // below applies to this bracket only", which was false for Manual sync &
+  // scoring, Global console and Settings, all of which sit below it.
+  //
+  // Note the copy carries its own bound too: "The RULES below" names the
+  // subject, so it stays true even if a reader misses the next divider. A
+  // divider that says "everything below" is fragile by construction.
   const scopeLine = currentBracket()
-    ? `<div class="scopeline">Editing <b>${esc(currentBracket().bracket_name)}</b> · ${esc(currentBracket().league_name)} — everything below applies to this bracket only</div>`
+    ? `<div class="scopeline">
+        <div class="scopeline-label">Editing <b>${esc(currentBracket().bracket_name)}</b> · ${esc(currentBracket().league_name)}</div>
+        <div class="scopeline-note">The rules below apply to this bracket only.</div>
+      </div>`
+    : "";
+  // Gated on is_global_admin to match the two sections it heads — otherwise a
+  // league admin gets a divider over nothing.
+  const adminLine = `<div class="scopeline">
+      <div class="scopeline-label">Administrator</div>
+      <div class="scopeline-note">These affect every league, not just this one.</div>
+    </div>`;
+  // No note: "Your account" is self-evident, and Settings is visually
+  // distinct anyway. Its job is to stop the Administrator claim above from
+  // appearing to cover Settings.
+  const accountLine = `<div class="scopeline"><div class="scopeline-label">Your account</div></div>`;
+  // Who's picked is the highest-frequency section, so it sits at the TOP —
+  // above the scope line rather than under it. That costs it the line's
+  // scope claim, which matters more here than almost anywhere: pick status
+  // read for the wrong bracket is a wrong conclusion with nothing to correct
+  // it. Hence its own badge, from the SAME source the scope line uses, so
+  // the two can never disagree.
+  //
+  // Kept as its own element rather than concatenated into the heading string,
+  // even though it renders as one phrase — "Who's picked: Casual". The
+  // separation is structural (addressable, separately styleable if that is
+  // ever wanted); the styling deliberately does NOT advertise it.
+  //
+  // It sits INSIDE the <h2>, not beside it, for a specific reason: a sibling
+  // inherits from .row, so matching the heading would mean re-declaring
+  // Fraunces, the variation settings and 1.25rem — duplicating styles.css:44
+  // and :101, which then drift the day either changes. As a child it inherits
+  // all of that for free, and .panel h2's overflow-wrap:anywhere applies to
+  // the whole phrase, so a long bracket name wraps with the heading instead
+  // of overflowing the ~224px desktop admin column.
+  //
+  // Colon, not a dash or the scope line's "·": the relationship is
+  // heading-to-qualifier, not two peers. "·" specifically is doing the
+  // peer job in scopeLine above (bracket · league), so reusing it here would
+  // imply the same relationship and mislead.
+  //
+  // Were a collapsible() section ever to need the same, do NOT make its
+  // `title` accept markup — it is a plain string at all 11 call sites, so
+  // escaping is nobody's problem today; making it HTML invites an unescaped
+  // interpolation into a function that currently cannot have that bug. Fold
+  // `alwaysVisible` and a qualifier into a trailing options object instead.
+  const bracketBadge = currentBracket()
+    ? `<span class="section-scope">: ${esc(currentBracket().bracket_name)}</span>`
     : "";
   $("#main").innerHTML = `
+    <div class="panel" id="whospicked">
+      <h2>Who's picked${bracketBadge}</h2>
+      <div class="field"><label>Show</label>
+        <select id="roster-show" onchange="loadRoster()">
+          ${(shows||[]).map(sh => `<option value="${sh.id}" ${nextShow && sh.id===nextShow.id ? "selected" : ""}>${fmtDate(sh.showdate)} — ${esc(sh.venue||"TBA")}</option>`).join("")}
+        </select></div>
+      <div id="roster"><p class="muted">Pick a show.</p></div>
+    </div>
     ${collapsible("shows", "Shows: cutoffs &amp; finalizing", `
       <p class="muted">Cutoffs are shown and edited in each show's venue-local time. New shows default to 6 PM venue-local.</p>
       ${(shows||[]).map(sh => {
@@ -372,13 +434,6 @@ export async function renderAdmin(){
       <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
     `, seasonWarning)}
     ${scopeLine}
-    <div class="panel"><h2>Who's picked</h2>
-      <div class="field"><label>Show</label>
-        <select id="roster-show" onchange="loadRoster()">
-          ${(shows||[]).map(sh => `<option value="${sh.id}" ${nextShow && sh.id===nextShow.id ? "selected" : ""}>${fmtDate(sh.showdate)} — ${esc(sh.venue||"TBA")}</option>`).join("")}
-        </select></div>
-      <div id="roster"><p class="muted">Pick a show.</p></div>
-    </div>
     ${collapsible("master", "Voting &amp; scoring mode", `
       <div class="field"><label>Voting override</label>
         <select id="c-override">
@@ -426,6 +481,7 @@ export async function renderAdmin(){
         apply on the next scoring run; don't change mid-show unless you enjoy
         arguments.</p>
     </div>
+    ${state.session.is_global_admin ? adminLine : ""}
     ${state.session.is_global_admin ? collapsible("data", "Manual sync &amp; scoring", `
       <div class="row">
         <button class="btn ghost small" onclick="runEdge('sync_shows', this)">Sync shows</button>
@@ -435,6 +491,7 @@ export async function renderAdmin(){
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
     `) : ""}
     ${globalConsoleHtml()}
+    ${accountLine}
     ${settingsPanelHtml()}
     ${footerHtml()}`;
   if ((shows||[]).length) loadRoster();

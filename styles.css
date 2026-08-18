@@ -89,6 +89,10 @@ header{position:sticky;top:0;z-index:50;background:var(--chrome);backdrop-filter
 .switcher{display:flex;gap:4px;flex:none;flex-wrap:wrap}
 .switcher-btn{text-decoration:none;border:1px solid var(--line2);border-radius:8px;padding:4px 9px;font-size:.78rem;color:var(--cream-dim)}
 .switcher-btn.on{color:var(--yolk);border-color:var(--yolk)}
+/* Settings' bracket toggle only — NOT the shared .switcher-btn, which the
+   2 set / 1 set format toggle on every show row also uses and which is
+   already tight at the 901px breakpoint's ~224px column. */
+#bracketToggle .switcher-btn{padding:6px 14px;font-size:1.17rem}
 .switcher select{background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:4px 8px;font-size:.78rem}
 
 /* ---------- tabs ---------- */
@@ -295,8 +299,27 @@ html[data-theme="light"] .panel.live-halo{
    all three of which are redefined per theme. Reusing the paper class here
    would be the exact mistake the Frontend/CSS gotchas in CLAUDE.md describe
    in the other direction. */
-.scopeline{border-top:1px solid var(--line);margin:22px 0 10px;padding-top:10px;font-family:var(--mono);font-size:.72rem;color:var(--cream-dim);letter-spacing:1px;text-transform:uppercase}
-.scopeline b{color:var(--cream);font-weight:700}
+/* Section dividers. These BOUND EACH OTHER — each governs the sections until
+   the next one — which is what lets each state a scope claim that is
+   actually true. The label half stays mono/uppercase/letter-spaced because
+   it is a label; the note half is a SENTENCE and deliberately drops both,
+   since uppercase + letter-spacing is what made the old one hard to read at
+   any size. Two child elements rather than a <br> so each wraps
+   independently: at the ~224px desktop admin column a single flowing string
+   wraps before it reaches a <br> and produces three ragged lines. */
+.scopeline{border-top:1px solid var(--line);margin:22px 0 10px;padding-top:10px}
+.scopeline-label{font-family:var(--mono);font-size:.8rem;letter-spacing:1px;text-transform:uppercase;color:var(--cream-dim)}
+.scopeline-label b{color:var(--cream);font-weight:700}
+.scopeline-note{margin-top:3px;font-size:.85rem;color:var(--cream-dim)}
+/* NOTE: .section-scope has NO rule here, deliberately. It marks the bracket
+   qualifier inside "Who's picked"'s <h2> — see admin.js. It is a child of the
+   heading precisely so it inherits Fraunces, the 1.25rem size and the colour
+   from `h1,h2,h3` and `.panel h2` above; declaring any of those here would
+   duplicate them and let the two drift. The class exists as an addressable
+   hook, not as a styling target. Don't "fix" the missing rule by adding
+   decoration — a pill/badge treatment was tried and removed, because
+   "Who's picked: Casual" is one phrase and styling half of it re-split what
+   the wording had just joined. */
 /* "The Rules" companion card — same .sheet paper treatment (cream stock,
    tape corners, shadow, rotation), just a second instance below the pick
    sheet, so it reads as a companion page rather than a different
@@ -460,3 +483,7 @@ html[data-theme="light"] .panel.live-halo{
 .credits .merch-plug a{color:var(--yolk)}
 .credits .colophon{margin-top:12px}
 .colophon-foot{text-align:center;padding:20px 0 4px;font-size:.6rem;color:var(--cream-dim);opacity:.35}
+/* Build id in the Settings card — deliberately the quietest thing on the
+   page. Mono because it is an identifier meant to be compared character by
+   character against `curl`'d output, not read as prose. See build.mjs. */
+.buildid{font-family:var(--mono);font-size:.65rem;opacity:.5;user-select:all}

@@ -122,7 +122,32 @@ directly (lower risk), keep these habits:
    re-reading as a set: a count standing in for coverage, a
    presence check standing in for equality, and a point-in-time observation
    standing in for a claim about the future.
-6. **Record mentions at the weight they were given.** One offhand comment is a
+6. **NEVER use `git checkout <file>` (or `git restore <file>`) as a cleanup
+   step. It is whole-file and reverts to HEAD** — it does not undo "the
+   thing you just did", it discards *every* uncommitted change in that file.
+   It is only safe when the file has no other uncommitted work, which is
+   exactly the condition nobody checks before typing a cleanup command.
+   - **This fired on 2026-08-17, it was not a near miss.** A probe line was
+     appended to `styles.css` to prove a CSS edit moved the new build hash,
+     with `git checkout styles.css 2>/dev/null || sed -i '$ d' styles.css`
+     as cleanup. `git checkout` **succeeded**, so the `sed` fallback never
+     ran — and the success is what did the damage: it reverted the whole
+     file to HEAD, discarding an entire session's CSS work (the `.scopeline`
+     label/note split, the `.section-scope` comment, the `#bracketToggle`
+     sizing, the `.buildid` rule). Caught by grepping for each expected
+     marker and finding all four at zero, then restored by hand.
+   - **The instinct to correct: the danger was the PRIMARY command, not the
+     fallback.** A `||` chain reads as "try the safe thing, fall back to the
+     blunt one", which inverts what actually happened here. Reasoning about
+     the fallback while the primary is the destructive one is how this gets
+     repeated.
+   - **Use instead:** a targeted revert of the specific edit (remove the
+     exact line you added), or copy the file first and restore from the
+     copy — the same backup pattern the mutation-testing passes use. Both
+     are bounded to what you changed; `git checkout` never is.
+   - Related, same family: `git stash`, `git restore .`, and `git clean` all
+     have this property at wider scope. None belong in an automated cleanup.
+7. **Record mentions at the weight they were given.** One offhand comment is a
    mention, not a commitment — and writing it down as a deliverable makes it
    indistinguishable from one later. This project has run the failure in both
    directions on the same subject (the desktop sidebar): a single passing
@@ -191,6 +216,59 @@ on Settings, it silently rendered the admin panel (and its admin-gated RPCs, whi
 then reject) instead. Fixed, and `runNonAdminScenario` (presets `p2`,
 `is_league_admin: false`) now locks in both the initial Settings render and the exact
 backgrounding/foregrounding regression.
+
+**THE SUBSTITUTION PATTERN REACHED A VERIFICATION BLOCK, 2026-08-17 — the
+first time it appeared in a check the dev was explicitly told to trust.**
+Discipline item 5 covers a correlate standing in for a condition in *code*.
+This is the same shape in *instructions*: `sql/stage_q_unaffiliated_players.sql`
+shipped with a verification block whose headline check was
+- `select count(*) from players p where not exists (... league_members ...)`
+
+That is a **raw table query**. It never touches the RPC the file creates, and
+returns exactly the same answer whether or not the function exists. It was
+run, returned `1`, was reported as confirmation that "the predicate and the
+panel agree" — and the function **had never been created**. The panel failed
+with `PGRST202` on first use. `pg_proc` returned no row for
+`admin_list_unaffiliated_players` while `get_show_picks(text,text,bigint,bigint)`
+sat right beside it, proving both that the query worked and that Stage P had
+landed.
+- **What made it worse than the earlier instances:** those were correlates
+  chosen by the person writing code. This one was written INTO the
+  verification block as the thing to check, so following the instructions
+  correctly produced false confidence. A wrong check that is obeyed is worse
+  than no check.
+- **The fix, applied to that file:** deployment check FIRST (`pg_proc`
+  expecting `admin_list_unaffiliated_players(text,text,bigint)`), then the
+  auth probe, and the count demoted to step 3 with an explicit warning that
+  it proves nothing about deployment and a note recording that it already
+  misled once.
+- **General rule for any future stage file: the first verification step must
+  be "does this object now exist", queried from the catalog.** Everything
+  downstream — counts, row shapes, behaviour — is only meaningful once that
+  passes, and every one of them can succeed against a database where the
+  migration silently did nothing. A `PGRST202` from a caller is the same
+  signal arriving later and more confusingly.
+
+**COMMITTING A STAGE FILE AND DEPLOYING IT ARE SEPARATE EVENTS, and this
+repo's history conflates them at least once.** Stage Q's commit message
+(`2bc6c31`) reads as though the RPC shipped with the code. It did not: the
+file was committed and pushed while `admin_list_unaffiliated_players` did not
+exist in the database, and the panel calling it failed with `PGRST202` on
+first use. It was applied separately afterwards, on 2026-08-17, and verified
+against `pg_proc`.
+- **Not amended** — rewriting pushed history to fix a commit message costs
+  every SHA cited elsewhere in this file, for a message nobody reads as
+  authoritative anyway. The record lives here instead.
+- **The general hazard: git status tells you nothing about the database.**
+  `sql/` is version-controlled; the schema is not. A clean tree, a green
+  suite and a pushed commit are all fully compatible with a migration that
+  was never run — the frontend is the only thing that finds out, and only
+  when someone uses the feature.
+- **So when reading this repo's history, treat "the stage file exists in
+  `sql/`" as evidence the SQL was WRITTEN, never that it was APPLIED.** The
+  only reliable check is the catalog, live. This applies retroactively to
+  every stage file here, not just Stage Q — most were genuinely run, but the
+  commit is not what establishes that.
 
 **ASSERTING THAT A CONTROL EXISTS IS NOT ASSERTING WHAT IT DOES — and this
 harness has now produced two green-looking gaps of that family. Check the
@@ -2739,6 +2817,51 @@ call nothing.
 - Same class as Pre-Session-5 gate item #1 (login rate-limiting) — a public
   endpoint with no throttle — but much smaller work, and the abuse here
   costs availability rather than accounts.
+
+**HOW TO ANSWER "IS THE NEW BUNDLE LIVE?" — build id, added 2026-08-17.**
+`build.mjs` injects a `__BUILD_ID__` of the form `<contenthash>-<gitsha>`,
+rendered in the Settings card under the colophon. The content hash covers
+**every file that ships** — `src/**/*.js` *plus* `styles.css` *plus*
+`index.html` — because `styles.css` is a separate `<link>` (`index.html:16`)
+that esbuild never sees, so a src-only hash would be blind to CSS changes,
+which was one of the two cases that prompted this.
+
+```
+# what is deployed
+curl -s https://fantasyeggy.wooklord.net/app.js | grep -oE '[0-9a-f]{7}-[0-9a-f]{7}' | head -1
+# what is local (dev server, or swap for a file read of app.js)
+curl -s http://localhost:8080/app.js          | grep -oE '[0-9a-f]{7}-[0-9a-f]{7}' | head -1
+```
+
+Equal = the deploy is live. Different = it is not, and the git SHA half says
+which commit *is*. **This replaces the ad-hoc "grep the bundle for a string
+unique to my change" checks used throughout this file** — those work only if
+you already know such a string, which is exactly what you lack when the
+question is "did anything change at all".
+- **It also separates "not deployed" from "my browser cached it"**: the
+  Settings card shows the id the *tab* is running, `curl` shows the id the
+  *edge* is serving. Two different ids means a stale client, not a failed
+  deploy — the distinction the `max-age=600` entry below makes so painful.
+- **The separator is a plain `-`, deliberately.** esbuild does NOT fold
+  `` `build ${__BUILD_ID__}` `` into one literal — it emits
+  `build ${"<id>"}` — and it escapes non-ASCII, so an earlier `·` came out
+  as `\xB7` and a grep for the rendered prose matched nothing. Verified
+  against the emitted bundle, not assumed.
+- **Content hash, not a timestamp, and not a dirty flag.** `npm run dev`
+  runs `build.mjs` before serving, so a timestamp would rewrite `app.js` on
+  every dev-server start and leave the tree permanently dirty — destroying
+  "tree is clean" as a signal. A dirty flag would be permanently set in the
+  committed bundle, since you always build before committing.
+- **Consequence to know: a CSS-only edit now changes `app.js`**, because the
+  embedded id moves. Rebuild and commit both together. That is what keeps
+  the id honest about CSS rather than silently under-reporting it.
+- **Scope limit, worth stating: the id lives in `app.js` but covers
+  `styles.css` too.** GitHub Pages deploys the whole repo per commit, so the
+  *origin* always serves both from the same commit and the pairing is real
+  there. A *client* can still hold them from different deploys for up to the
+  cache window, since each file is cached independently — so a mismatched
+  pair is possible in a browser and never at the edge. That is the same
+  `max-age=600` problem below, not a flaw in the id.
 
 **Deferred, and it silently taxes EVERY breaking change: `app.js` HAS NO
 CACHE-BUSTING, and both it and `index.html` are served with

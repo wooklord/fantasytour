@@ -26,6 +26,7 @@ export function settingsPanelHtml(){
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> — it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
+      <p class="colophon buildid">build ${__BUILD_ID__}</p>
     </div>
   </div>`;
 }

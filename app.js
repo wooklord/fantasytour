@@ -1162,6 +1162,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
+      <p class="colophon buildid">build ${"3872519-2bc6c31"}</p>
     </div>
   </div>`;
   }
@@ -1479,8 +1480,25 @@ Relay this to them now \u2014 it will not be shown again.`);
       const [, m, d] = sh.showdate.split("-");
       return `${Number(m)}/${Number(d)}`;
     }).join(", ")}</div>` : "";
-    const scopeLine = currentBracket() ? `<div class="scopeline">Editing <b>${esc(currentBracket().bracket_name)}</b> \xB7 ${esc(currentBracket().league_name)} \u2014 everything below applies to this bracket only</div>` : "";
+    const scopeLine = currentBracket() ? `<div class="scopeline">
+        <div class="scopeline-label">Editing <b>${esc(currentBracket().bracket_name)}</b> \xB7 ${esc(currentBracket().league_name)}</div>
+        <div class="scopeline-note">The rules below apply to this bracket only.</div>
+      </div>` : "";
+    const adminLine = `<div class="scopeline">
+      <div class="scopeline-label">Administrator</div>
+      <div class="scopeline-note">These affect every league, not just this one.</div>
+    </div>`;
+    const accountLine = `<div class="scopeline"><div class="scopeline-label">Your account</div></div>`;
+    const bracketBadge = currentBracket() ? `<span class="section-scope">: ${esc(currentBracket().bracket_name)}</span>` : "";
     $("#main").innerHTML = `
+    <div class="panel" id="whospicked">
+      <h2>Who's picked${bracketBadge}</h2>
+      <div class="field"><label>Show</label>
+        <select id="roster-show" onchange="loadRoster()">
+          ${(shows || []).map((sh) => `<option value="${sh.id}" ${nextShow && sh.id === nextShow.id ? "selected" : ""}>${fmtDate(sh.showdate)} \u2014 ${esc(sh.venue || "TBA")}</option>`).join("")}
+        </select></div>
+      <div id="roster"><p class="muted">Pick a show.</p></div>
+    </div>
     ${collapsible("shows", "Shows: cutoffs &amp; finalizing", `
       <p class="muted">Cutoffs are shown and edited in each show's venue-local time. New shows default to 6 PM venue-local.</p>
       ${(shows || []).map((sh) => {
@@ -1518,13 +1536,6 @@ Relay this to them now \u2014 it will not be shown again.`);
       <button class="btn ghost small" onclick="addSeasonRow()">+ add season</button>
     `, seasonWarning)}
     ${scopeLine}
-    <div class="panel"><h2>Who's picked</h2>
-      <div class="field"><label>Show</label>
-        <select id="roster-show" onchange="loadRoster()">
-          ${(shows || []).map((sh) => `<option value="${sh.id}" ${nextShow && sh.id === nextShow.id ? "selected" : ""}>${fmtDate(sh.showdate)} \u2014 ${esc(sh.venue || "TBA")}</option>`).join("")}
-        </select></div>
-      <div id="roster"><p class="muted">Pick a show.</p></div>
-    </div>
     ${collapsible("master", "Voting &amp; scoring mode", `
       <div class="field"><label>Voting override</label>
         <select id="c-override">
@@ -1572,6 +1583,7 @@ Relay this to them now \u2014 it will not be shown again.`);
         apply on the next scoring run; don't change mid-show unless you enjoy
         arguments.</p>
     </div>
+    ${state.session.is_global_admin ? adminLine : ""}
     ${state.session.is_global_admin ? collapsible("data", "Manual sync &amp; scoring", `
       <div class="row">
         <button class="btn ghost small" onclick="runEdge('sync_shows', this)">Sync shows</button>
@@ -1581,6 +1593,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
     `) : ""}
     ${globalConsoleHtml()}
+    ${accountLine}
     ${settingsPanelHtml()}
     ${footerHtml()}`;
     if ((shows || []).length) loadRoster();

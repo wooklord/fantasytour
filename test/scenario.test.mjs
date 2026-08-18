@@ -257,7 +257,7 @@ async function runMode(mode){
   const nonAdmin = await runNonAdminScenario({ html, scripts, mode });
   check("non-admin's shared tab shows Settings, not Admin, content",
     /Bracket/.test(nonAdmin.settingsHtml) && /Log out/.test(nonAdmin.settingsHtml)
-      && !/Master switch/.test(nonAdmin.settingsHtml) && !/Who's picked/.test(nonAdmin.settingsHtml),
+      && !/Master switch/.test(nonAdmin.settingsHtml) && !/id="whospicked"/.test(nonAdmin.settingsHtml),
     `settingsHtml: ${nonAdmin.settingsHtml}`);
   check("non-admin's shared tab is labeled Settings, not Admin",
     nonAdmin.sharedTabLabel === "Settings",
@@ -274,7 +274,7 @@ async function runMode(mode){
     `sessionAfterPinChange: ${JSON.stringify(nonAdmin.sessionAfterPinChange)}`);
   check("backgrounding+foregrounding on that tab still shows Settings, not the admin panel (the actual bug)",
     /Bracket/.test(nonAdmin.afterForegroundHtml) && /Log out/.test(nonAdmin.afterForegroundHtml)
-      && !/Master switch/.test(nonAdmin.afterForegroundHtml) && !/Who's picked/.test(nonAdmin.afterForegroundHtml),
+      && !/Master switch/.test(nonAdmin.afterForegroundHtml) && !/id="whospicked"/.test(nonAdmin.afterForegroundHtml),
     `afterForegroundHtml: ${nonAdmin.afterForegroundHtml}`);
 
   // p4 is a genuine global admin (is_global_admin:true) with no
@@ -290,7 +290,7 @@ async function runMode(mode){
   // the stable identity — it is what toggleSection and the localStorage
   // collapse state address — while titles are copy and will change again.
   check("a genuine global admin (no league-admin flag) sees Admin content",
-    /id="sec-master"/.test(globalAdmin.adminHtml) && /Who's picked/.test(globalAdmin.adminHtml),
+    /id="sec-master"/.test(globalAdmin.adminHtml) && /id="whospicked"/.test(globalAdmin.adminHtml),
     `adminHtml present: ${!!globalAdmin.adminHtml}`);
   check("a genuine global admin's shared tab is labeled Admin, not Settings",
     globalAdmin.sharedTabLabel === "Admin",
