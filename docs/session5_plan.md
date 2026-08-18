@@ -412,6 +412,43 @@ appointments.
 6. Create the Official season with a **future** `start_date`, once the pool
    is stable.
 
+## Admin-tab work, 2026-08-17 — DONE, with what's left
+
+Shipped: the save split (`saveMasterSwitch`), frequency regrouping, five
+renames, Who's picked moved to the top with a bracket qualifier, three
+bounding dividers, the Settings bracket toggle +50%, the build id, Stage Q
+(`admin_list_unaffiliated_players`) and its panel. All mutation-tested; see
+CLAUDE.md for the mechanisms.
+
+**Still unjudged — needs eyes, not code.** These were left deliberately for
+the dev and never ruled on:
+- **`--cream-dim` on `.scopeline-note` at `.9rem`** now carries a full
+  sentence rather than a short label, directly under a `--cream` label.
+  Check LIGHT theme especially — three contrast failures have shipped here
+  from token choices and `--coral` on paper is still open. Fix if needed is
+  one line: `.scopeline-note{color:var(--cream)}`.
+- **Whether `: Casual` in the Who's picked heading needs dimming.** Tried
+  plain first, deliberately; it inherits the heading entirely.
+- **The scope line now WRAPS on phone**, accepted knowingly. "EDITING
+  OFFICIAL · AMBASSADORS" is ~279px against ~258px on a 324px device; it
+  already wrapped at the ~224px desktop-narrow column before the size bump.
+  If it grates, **the fix is the copy, not the size** — moving the league
+  name into the note line leaves "EDITING OFFICIAL" at ~154px, which fits
+  everywhere.
+
+**Deferred from this work, not started:**
+- **`toggleFormat` still has no confirm** — unchanged, and now the only
+  destructive admin control without one, since Boot and roster removal both
+  gained theirs. Tracked in CLAUDE.md's deferred list with the orphan-check
+  shape already spelled out.
+- **The existence-vs-count weakness**: the mode-change assertions use
+  `confirmCalls.some()`, so they verify a matching dialog EXISTS, not how
+  many fired. They cannot distinguish one confirm from two. Same family as
+  presence-vs-behaviour.
+- **Stage Q's non-admin refusal is untested** (verification step 4) — needs
+  the throwaway non-global-admin account, same one that closes the
+  membership-gate and empty-state items below.
+
 ## Open items carried out of 2026-08-16/17, with enough to resume cold
 
 Each of these has a full write-up in CLAUDE.md; this is the index so nothing
