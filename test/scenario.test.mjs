@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runUnaffiliatedScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -680,6 +680,48 @@ async function runMode(mode){
   // other's fields. Asserted on the actual admin_update_config payloads, not
   // on rendered values — a reverted field looks identical on screen until the
   // next reload, which is why this was invisible.
+  // toggleFormat's orphan confirm — the control behind the 2026-08-14
+  // incident, and the last destructive admin action to gain a dialog.
+  const fmt = await runFormatToggleScenario({ html, scripts, mode });
+  check("a format toggle that orphans slots warns, naming the bracket",
+    /Casual/.test(fmt.cancelled.confirm),
+    `confirm: ${JSON.stringify(fmt.cancelled.confirm)}`);
+  check("the format warning names the slots that disappear, not just a count",
+    /Set 2 Closer/.test(fmt.cancelled.confirm) && /Encore/.test(fmt.cancelled.confirm)
+      && /Flat pick 2/.test(fmt.cancelled.confirm),
+    `confirm: ${JSON.stringify(fmt.cancelled.confirm)}`);
+  // Official loses the same keys but holds no picks for this show, so the
+  // n > 0 guard must keep it out of the dialog entirely.
+  check("the format warning excludes a bracket with no picks for that show",
+    !/Official/.test(fmt.cancelled.confirm),
+    `confirm: ${JSON.stringify(fmt.cancelled.confirm)}`);
+  check("cancelling the format warning makes NO admin_set_show_format call",
+    fmt.cancelled.wrote === false,
+    `wrote: ${fmt.cancelled.wrote}`);
+  check("accepting the format warning proceeds to admin_set_show_format",
+    fmt.accepted.wrote === true,
+    `wrote: ${fmt.accepted.wrote}`);
+  // Harmless branch: one_set -> standard loses nothing (oneset keys are a
+  // subset of standard's), so no dialog even though Casual holds picks.
+  // This is what pins the orphan set to the DIFFERENCE rather than to every
+  // current key — a mutation returning all keys passes every other check here.
+  check("a format toggle that orphans nothing shows no dialog and still writes",
+    fmt.harmless.confirmCount === 0 && fmt.harmless.wrote === true,
+    `harmless: ${JSON.stringify(fmt.harmless)}`);
+  // Ranked brackets are format-independent — counting them would be false.
+  check("a ranked bracket is excluded, so a toggle with nothing else at risk shows no dialog",
+    fmt.rankedExcluded.confirmCount === 0 && fmt.rankedExcluded.wrote === true,
+    `rankedExcluded: ${JSON.stringify(fmt.rankedExcluded)}`);
+  check("a failed pick-count lookup blocks the format toggle with no confirm",
+    fmt.lookupFailed.confirmCount === 0,
+    `confirmCount: ${fmt.lookupFailed.confirmCount}`);
+  check("a failed pick-count lookup makes NO admin_set_show_format call",
+    fmt.lookupFailed.wrote === false,
+    `wrote: ${fmt.lookupFailed.wrote}`);
+  check("a failed pick-count lookup surfaces a toast",
+    /format unchanged|Couldn't check/i.test(fmt.lookupFailed.toastHtml),
+    `toastHtml: ${fmt.lookupFailed.toastHtml}`);
+
   const unaff = await runUnaffiliatedScenario({ html, scripts, mode });
   check("the unaffiliated panel lists the registered non-member",
     /Wanderer/.test(unaff.listed.html),

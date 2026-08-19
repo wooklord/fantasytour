@@ -1162,7 +1162,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"69ac543-ec724d4"}</p>
+      <p class="colophon buildid">build ${"b4203ef-3bdd6fe"}</p>
     </div>
   </div>`;
   }
@@ -1836,7 +1836,58 @@ OK = remove + ban \xB7 Cancel = remove only`);
       toast(esc(e.message));
     }
   }
+  function slotKeysFor(cfg, format) {
+    if ((cfg.mode || "slots") === "ranked_choice") return null;
+    const sect = format === "one_set" && cfg.oneset ? cfg.oneset : cfg;
+    const keys = (sect.slots || []).map((s) => s.key);
+    for (let i = 1; i <= (sect.flat_picks || 0); i++) keys.push("flat" + i);
+    return keys;
+  }
+  function slotKeyLabel(cfg, format, key) {
+    const sect = format === "one_set" && cfg.oneset ? cfg.oneset : cfg;
+    const hit = (sect.slots || []).find((s) => s.key === key);
+    if (hit) return hit.label || key;
+    const m = /^flat(\d+)$/.exec(key);
+    return m ? `Flat pick ${m[1]}` : key;
+  }
   async function toggleFormat(showId, next) {
+    let affected = [];
+    try {
+      const show = await fetchShow(showId);
+      const current = (show == null ? void 0 : show.format) || "standard";
+      if (current === next) {
+        return;
+      }
+      const { data: brackets, error } = await db.from("brackets").select("id,name,kind,config").eq("league_id", state.currentLeagueId);
+      if (error) throw new Error(error.message);
+      for (const b of brackets || []) {
+        const cur = slotKeysFor(b.config || {}, current);
+        const nxt = slotKeysFor(b.config || {}, next);
+        if (!cur || !nxt) continue;
+        const lost = cur.filter((k) => !nxt.includes(k));
+        if (!lost.length) continue;
+        const rows = await rpc("admin_pick_status", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: b.id, p_show_id: showId });
+        const n = (rows || []).reduce((sum, r) => sum + (r.picks_count || 0), 0);
+        if (n > 0) affected.push({ name: b.name, n, lost: lost.map((k) => slotKeyLabel(b.config, current, k)) });
+      }
+    } catch (e) {
+      toast("Couldn't check which picks this would orphan \u2014 format unchanged. Try again.");
+      return;
+    }
+    if (affected.length) {
+      const body = affected.map((a) => `\u2022 ${a.name} \u2014 ${a.n} pick${a.n === 1 ? "" : "s"} saved; these slots disappear: ${a.lost.join(", ")}`).join("\n");
+      if (!confirm(
+        `Switching this show to ${next === "one_set" ? "1 set" : "2 set"} removes slots that already hold picks.
+
+${body}
+
+Picks on those slots stop being addressable, and are deleted the next time that player saves. Nothing in the app re-keys them.
+
+(The counts are all picks saved for this show in that bracket \u2014 the app cannot tell, before cutoff, how many sit specifically on the disappearing slots.)
+
+Switch anyway?`
+      )) return;
+    }
     try {
       await rpc("admin_set_show_format", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_show_id: showId, p_format: next });
       toast("Format: " + (next === "one_set" ? "1 set" : "2 set"), "score");

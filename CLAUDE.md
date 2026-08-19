@@ -217,6 +217,36 @@ then reject) instead. Fixed, and `runNonAdminScenario` (presets `p2`,
 `is_league_admin: false`) now locks in both the initial Settings render and the exact
 backgrounding/foregrounding regression.
 
+**A SET-VALUED COMPUTATION NEEDS A CASE WHERE THE SET IS EMPTY. Presence
+assertions cannot tell "the right things" from "the right things plus
+extras" — this is a DIFFERENT shape from the substitution pattern below, and
+strengthening the existing checks would not have caught it.**
+- **Found 2026-08-18 by mutation.** `toggleFormat`'s orphan confirm computes
+  which slot keys a format change removes: `cur.filter(k => !nxt.includes(k))`.
+  Mutated to `cur.slice()` — return every current key rather than the
+  difference — and **the whole suite stayed green.**
+- **Why every existing assertion missed it.** They were all presence checks
+  on specific strings: does the dialog name `Set 2 Closer`, `Encore`,
+  `Flat pick 2`. An over-broad list contains all of those *and more*, so
+  each check passes. Adding more strings, or checking them harder, changes
+  nothing — the mutation makes the set strictly LARGER, and presence
+  assertions are monotone in exactly the wrong direction.
+- **What caught it: a case where the correct answer is an EMPTY set.** The
+  fixture's `oneset` keys (`opener`, `flat1`) are a subset of its standard
+  keys, so `one_set → standard` loses nothing and must show NO dialog even
+  though picks exist for that show. Under the mutation the set is non-empty,
+  a dialog fires, and the case fails. That single assertion is what pins the
+  computation to the difference rather than to the input.
+- **The general rule: whenever a function produces a set/list that drives a
+  decision, cover the case where it should come out empty.** Non-empty cases
+  constrain the lower bound (these things must be in it); only an empty case
+  constrains the upper bound (nothing else may be). Both are needed, and the
+  empty one is the one people skip because it looks like it asserts nothing.
+- Distinguish this from the entry below: those are correlates standing in
+  for conditions — the check asks the wrong question. Here the checks asked
+  the right question and were simply **incomplete**, because no input
+  exercised the boundary. Same green suite, different repair.
+
 **THE SUBSTITUTION PATTERN REACHED A VERIFICATION BLOCK, 2026-08-17 — the
 first time it appeared in a check the dev was explicitly told to trust.**
 Discipline item 5 covers a correlate standing in for a condition in *code*.
@@ -2966,6 +2996,55 @@ exactly when it is needed and not one moment earlier.
   full setlist history has never been backfilled — so a re-sync would not
   restore them, and historical `scores` rows would reference shows and
   setlists that no longer exist.
+
+**✅ DONE 2026-08-18 — `toggleFormat` now confirms, and it exposed a live
+bug in the check it was modelled on. The deferred entry that follows is kept
+for its reasoning; the "no confirm of any kind" half of it is closed.**
+- **What it does:** before writing, it fetches the show's current format,
+  reads every bracket in the league (`brackets` has a public read), computes
+  each one's slot keys for the current and next format with the same section
+  selection `slotDefs()` uses, and lists the keys that would disappear.
+  Brackets losing nothing are skipped; brackets with zero picks for that
+  show are skipped; **ranked brackets are excluded entirely**, since rank
+  keys come from `cfg.ranked.ladder` at config top level and never through
+  `oneset`, so they are format-independent and counting them would be false.
+- **It names the bracket, the pick count and the vanishing slots** rather
+  than warning abstractly — "Casual — 2 picks saved; these slots disappear:
+  Set 2 Closer, Encore, Flat pick 2".
+- **Stated limit, in the dialog itself:** the count is ALL picks for that
+  show in that bracket, not the number sitting on the disappearing slots.
+  `admin_pick_status` returns per-player totals with no slot detail, and the
+  RPC that does have slots (`get_show_picks`) is cutoff-gated and therefore
+  blind on exactly the open shows that matter. Better to say so than imply a
+  number that cannot be computed.
+- **Blocks on a failed lookup** (no confirm, no write, a toast) — same
+  discipline as `bootPlayer` and `setRosterMember`: the two outcomes differ
+  by "nothing at risk" and "N picks lose a slot", so a failure producing the
+  reassuring one would be an irreversible act under an unverified
+  reassurance.
+- **It is presentation-only and does not stop the orphaning** — it makes the
+  consequence visible before the click. The underlying item (a format toggle
+  can strand picks that `submit_picks`' catch-all delete then destroys) is
+  NOT closed by this.
+
+**⚠️ AND THE BUG IT EXPOSED, STILL OPEN: `saveConfig`'s mode-change orphan
+check can never fire.** It counts at-risk picks via `get_show_picks`,
+filtered to shows where `showState(sh) === "open"`. But `showState` returns
+`"open"` when `new Date(s.cutoff_at) > new Date()` — cutoff in the FUTURE —
+while `get_show_picks` ends `and ls.cutoff_at is not null and now() >=
+ls.cutoff_at`, returning rows only AFTER cutoff. **Those conditions are
+mutually exclusive**, so every show it checks returns zero rows, `atRisk` is
+always empty, and the count branch has never once run. The warning silently
+takes its "nothing at risk" path every time.
+- Same shape as everything else this week: a check that looks green because
+  it asks a question whose answer is structurally always the same.
+- **Fix is known and small: use `admin_pick_status`** — admin-gated,
+  bracket-scoped, takes `p_show_id`, and is NOT cutoff-gated. That is what
+  `toggleFormat` uses. Sum `picks_count`; do not count rows, since the
+  `left join` includes members with zero picks.
+- Not fixed in the same pass deliberately — it is a separate control with
+  its own tests, and bundling it would have made the toggleFormat mutations
+  ambiguous.
 
 **Deferred, and the shape is already proven: `toggleFormat` needs the same
 orphan warning `saveConfig` got.** Identical failure, identical mechanism, no

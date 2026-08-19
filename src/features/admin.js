@@ -1,7 +1,7 @@
 import { $, esc, footerHtml } from "../core/dom.js";
 import { db, rpc, edgeFn } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
-import { fetchShows } from "../core/leagueShows.js";
+import { fetchShows, fetchShow } from "../core/leagueShows.js";
 import { fmtDate, clearTimersFor, showState } from "../core/format.js";
 import { toast } from "../core/toast.js";
 import { loadConfig, loadSongs } from "../core/session.js";
@@ -770,7 +770,89 @@ export async function bootPlayer(id, name){
     loadMembers(); loadRoster();
   }catch(e){ toast(esc(e.message)); }
 }
+// Slot keys a bracket renders for a given format. Mirrors slotDefs()'s
+// section selection exactly — `(format === "one_set" && cfg.oneset) ?
+// cfg.oneset : cfg` — so an absent oneset section correctly falls back to
+// the top-level one rather than being treated as empty.
+// Returns null for ranked brackets: rank keys come from cfg.ranked.ladder at
+// config top level and never through the oneset section, so a ranked bracket
+// is format-INDEPENDENT and cannot be orphaned by a toggle. Counting it
+// would be false, not merely noisy.
+function slotKeysFor(cfg, format){
+  if ((cfg.mode || "slots") === "ranked_choice") return null;
+  const sect = (format === "one_set" && cfg.oneset) ? cfg.oneset : cfg;
+  const keys = (sect.slots || []).map(s => s.key);
+  for (let i = 1; i <= (sect.flat_picks || 0); i++) keys.push("flat" + i);
+  return keys;
+}
+function slotKeyLabel(cfg, format, key){
+  const sect = (format === "one_set" && cfg.oneset) ? cfg.oneset : cfg;
+  const hit = (sect.slots || []).find(s => s.key === key);
+  if (hit) return hit.label || key;
+  const m = /^flat(\d+)$/.exec(key);
+  return m ? `Flat pick ${m[1]}` : key;
+}
+
+// A format toggle swaps which config section supplies the valid slot keys,
+// so any stored pick keyed to a slot the NEW section doesn't define becomes
+// unaddressable — and is then destroyed by submit_picks' catch-all delete on
+// the player's next save. This confirm does not prevent that; it makes the
+// consequence visible before the click, the same job bootPlayer's and
+// setRosterMember's dialogs do.
+//
+// MAINTAINER NOTE, not something to put in the dialog: one_set -> standard
+// currently orphans nothing for Ambassadors Official ONLY because its oneset
+// keys (opener/closer/cover1 + 1 flat) happen to be a subset of its standard
+// keys (opener/closer/encore/cover1 + 2 flats). That is a property of one
+// bracket's current config, not a guarantee — editing the one-set slots to
+// include a type the standard section lacks makes the reverse direction
+// orphan too. Hence the key sets are computed both ways rather than the
+// direction being hardcoded as safe.
 export async function toggleFormat(showId, next){
+  let affected = [];
+  try{
+    const show = await fetchShow(showId);
+    const current = show?.format || "standard";
+    if (current === next){ return; } // clicking the already-active button
+    const { data: brackets, error } = await db.from("brackets")
+      .select("id,name,kind,config").eq("league_id", state.currentLeagueId);
+    if (error) throw new Error(error.message);
+    for (const b of brackets || []){
+      const cur = slotKeysFor(b.config || {}, current);
+      const nxt = slotKeysFor(b.config || {}, next);
+      if (!cur || !nxt) continue;                       // ranked: immune
+      const lost = cur.filter(k => !nxt.includes(k));
+      if (!lost.length) continue;                       // this bracket keeps every key
+      // admin_pick_status is the ONLY count available here: get_show_picks is
+      // cutoff-gated (now() >= cutoff_at) while the shows that matter are by
+      // definition still open, so it returns zero rows for every one of them.
+      // saveConfig's orphan check uses get_show_picks and is silently broken
+      // for exactly that reason — see CLAUDE.md.
+      const rows = await rpc("admin_pick_status", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:b.id, p_show_id:showId });
+      const n = (rows||[]).reduce((sum, r) => sum + (r.picks_count || 0), 0);
+      if (n > 0) affected.push({ name: b.name, n, lost: lost.map(k => slotKeyLabel(b.config, current, k)) });
+    }
+  }catch(e){
+    // Blocks rather than warning-and-allowing, same as bootPlayer and
+    // setRosterMember: the two outcomes differ by "nothing is at risk" and
+    // "N picks lose a slot", and a failed lookup that produced the
+    // reassuring one would be an irreversible action taken under a
+    // reassurance nothing verified.
+    toast("Couldn't check which picks this would orphan — format unchanged. Try again.");
+    return;
+  }
+  if (affected.length){
+    const body = affected.map(a =>
+      `• ${a.name} — ${a.n} pick${a.n === 1 ? "" : "s"} saved; these slots disappear: ${a.lost.join(", ")}`).join("\n");
+    if (!confirm(
+      `Switching this show to ${next === "one_set" ? "1 set" : "2 set"} removes slots that already hold picks.\n\n`
+      + `${body}\n\n`
+      + `Picks on those slots stop being addressable, and are deleted the next time that player saves. `
+      + `Nothing in the app re-keys them.\n\n`
+      + `(The counts are all picks saved for this show in that bracket — the app cannot tell, before cutoff, `
+      + `how many sit specifically on the disappearing slots.)\n\n`
+      + `Switch anyway?`)) return;
+  }
   try{
     await rpc("admin_set_show_format", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_show_id:showId, p_format:next });
     toast("Format: " + (next === "one_set" ? "1 set" : "2 set"), "score");

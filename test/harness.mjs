@@ -163,7 +163,23 @@ const RPC_HANDLERS = {
       name: tables.players_public.find(p => p.id === sr.player_id)?.name,
       added_at: sr.added_at,
     })),
-  admin_pick_status: async () => [{ player_name: "Wooklord", picks_count: 1, last_saved: "2026-07-26T00:00:00Z" }],
+  // Real join against the fixture, not a fixed row. toggleFormat sums
+  // picks_count to decide which brackets to name in its orphan confirm, so a
+  // stub returning 1 would make every bracket look equally affected and the
+  // per-bracket assertions would pass against nothing.
+  admin_pick_status: async ({ p_bracket_id, p_show_id }, tables) => {
+    const byPlayer = {};
+    for (const lm of tables.league_members || []) {
+      const nm = (tables.players_public.find(p => p.id === lm.player_id) || {}).name || "?";
+      byPlayer[nm] = 0;
+    }
+    for (const k of tables.picks || []) {
+      if (k.bracket_id !== p_bracket_id || k.show_id !== p_show_id) continue;
+      const nm = (tables.players_public.find(p => p.id === k.player_id) || {}).name || "?";
+      byPlayer[nm] = (byPlayer[nm] || 0) + 1;
+    }
+    return Object.entries(byPlayer).map(([player_name, picks_count]) => ({ player_name, picks_count, last_saved: null }));
+  },
   // Persists p_data into the fixture's brackets row instead of discarding it.
   // A handler that swallows the payload can't prove anything about
   // saveConfig(): the read-through fallbacks that preserve fields whose
@@ -658,6 +674,95 @@ export async function runNoLeagueScenario({ html, scripts, mode }){
 // contain p1/p2/p4, who are all in a league. That distinction is the test:
 // the predicate is "in NO league", not admin_find_players' "not in THIS
 // league", and at two leagues those diverge.
+// toggleFormat's orphan confirm. This is the control that caused the
+// 2026-08-14 incident and it was the last destructive admin action with no
+// dialog at all. Fixture geometry that makes the assertions meaningful:
+// defCfg's standard section is opener/closer/encore + flat1,flat2 while its
+// oneset is opener + flat1, so standard -> one_set loses closer, encore and
+// flat2. Show 1 is standard/upcoming. Picks for show 1 exist ONLY in Casual,
+// so Official loses the same keys but holds nothing and must be excluded by
+// the n > 0 guard — that exclusion is a real assertion, not a side effect.
+export async function runFormatToggleScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, {});
+  window.localStorage.setItem("ft_session", JSON.stringify(
+    { id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+  clickTab(window, "admin");
+  await tick(); await tick();
+
+  const fmtCalls = () => calls.filter(c => c.type === "rpc" && c.fn === "admin_set_show_format").length;
+
+  // --- Orphaning toggle, cancelled. Must warn AND must not write.
+  const confirms = [];
+  window.confirm = (m) => { confirms.push(m); return false; };
+  const before = fmtCalls();
+  await window.toggleFormat(1, "one_set");
+  await tick(); await tick();
+  const cancelled = { confirm: confirms[0] || "", wrote: fmtCalls() > before };
+
+  // --- Same toggle, accepted. Must write.
+  window.confirm = () => true;
+  const beforeAccept = fmtCalls();
+  await window.toggleFormat(1, "one_set");
+  await tick(); await tick();
+  const accepted = { wrote: fmtCalls() > beforeAccept };
+
+  // --- HARMLESS BRANCH, slots bracket: one_set -> standard loses nothing,
+  // because the fixture's oneset keys (opener, flat1) are a subset of its
+  // standard keys. No dialog may fire even though Casual holds picks for
+  // this show. Without this case the orphan set could be computed as "every
+  // current key" rather than the difference and every other assertion here
+  // would still pass — verified by mutation, which is how this case came to
+  // exist.
+  tables.league_shows.find(l => l.show_id === 1).format = "one_set";
+  const harmlessConfirms = [];
+  window.confirm = (m) => { harmlessConfirms.push(m); return true; };
+  const beforeHarmless = fmtCalls();
+  await window.toggleFormat(1, "standard");
+  await tick(); await tick();
+  const harmless = { confirmCount: harmlessConfirms.length, wrote: fmtCalls() > beforeHarmless };
+
+  // --- Ranked bracket must be excluded entirely: rank keys live at config
+  // top level and never through `oneset`, so a ranked bracket cannot be
+  // orphaned by a format change. Flip Casual (the only bracket with picks)
+  // to ranked and re-toggle — with Official holding no picks, nothing should
+  // be at risk and NO dialog should fire.
+  tables.league_shows.find(l => l.show_id === 1).format = "standard";
+  tables.brackets.find(b => b.kind === "casual").config.mode = "ranked_choice";
+  const rankedConfirms = [];
+  window.confirm = (m) => { rankedConfirms.push(m); return true; };
+  const beforeRanked = fmtCalls();
+  await window.toggleFormat(1, "one_set");
+  await tick(); await tick();
+  const rankedExcluded = { confirmCount: rankedConfirms.length, wrote: fmtCalls() > beforeRanked };
+  tables.brackets.find(b => b.kind === "casual").config.mode = "slots";
+
+  // --- Failed lookup must BLOCK: no confirm, no write, a toast.
+  tables.league_shows.find(l => l.show_id === 1).format = "standard";
+  const origStatus = RPC_HANDLERS.admin_pick_status;
+  RPC_HANDLERS.admin_pick_status = async () => { throw new Error("simulated pick-count failure"); };
+  const failConfirms = [];
+  window.confirm = (m) => { failConfirms.push(m); return true; };
+  window.document.getElementById("toasts").innerHTML = "";
+  const beforeFail = fmtCalls();
+  await window.toggleFormat(1, "one_set");
+  await tick(); await tick();
+  const lookupFailed = {
+    confirmCount: failConfirms.length,
+    wrote: fmtCalls() > beforeFail,
+    toastHtml: window.document.getElementById("toasts")?.innerHTML || "",
+  };
+  RPC_HANDLERS.admin_pick_status = origStatus;
+  window.confirm = () => true;
+
+  return { cancelled, accepted, harmless, rankedExcluded, lookupFailed };
+}
+
 export async function runUnaffiliatedScenario({ html, scripts, mode }){
   const { tables } = makeFixtures();
   const calls = [];
