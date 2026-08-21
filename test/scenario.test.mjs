@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeaguePollScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -697,6 +697,30 @@ async function runMode(mode){
   check("once added, foregrounding transitions into the app with no reload",
     !/not in a league yet/i.test(poll.afterAdd.html) && poll.afterAdd.tabsDisplay === "flex",
     `afterAdd: ${poll.afterAdd.html.slice(0, 200)} tabs: ${poll.afterAdd.tabsDisplay}`);
+
+  // Timer-driven properties the visibilitychange scenario cannot reach.
+  const pollT = await runNoLeaguePollTimersScenario({ html, scripts, mode });
+  // "The poll stops" means the INTERVAL is cleared — a transition only proves
+  // boot() ran. A surviving interval would keep firing against a replaced DOM.
+  check("a successful poll clears the interval, not just transitions",
+    pollT.onSuccess.cleared === true && pollT.onSuccess.tabsDisplay === "flex"
+      && !/not in a league yet/i.test(pollT.onSuccess.html),
+    `onSuccess: ${JSON.stringify({ cleared: pollT.onSuccess.cleared, tabs: pollT.onSuccess.tabsDisplay })}`);
+  check("the attempt cap stops polling and says so",
+    /Stopped checking/i.test(pollT.cap.status) && pollT.cap.cleared === true,
+    `cap: ${JSON.stringify({ status: pollT.cap.status, cleared: pollT.cap.cleared })}`);
+  // Cap assertion is deliberately not encoding NO_LEAGUE_MAX_POLLS: 200 ticks
+  // must produce far fewer calls, whatever the constant is.
+  check("the attempt cap actually bounds the requests",
+    pollT.cap.myLeaguesCalls > 0 && pollT.cap.myLeaguesCalls < 400,
+    `my_leagues calls over 400 ticks: ${pollT.cap.myLeaguesCalls}`);
+  check("Check again still works after the cap stops automatic polling",
+    /location\.reload/.test(pollT.cap.buttonHtml),
+    `buttonHtml: ${pollT.cap.buttonHtml}`);
+  // The abandoned-overnight case: a backgrounded tab must not hit the server.
+  check("a hidden tab makes no my_leagues request at all",
+    pollT.hidden.callsAdded === 0,
+    `callsAdded: ${pollT.hidden.callsAdded}`);
 
   // toggleFormat's orphan confirm — the control behind the 2026-08-14
   // incident, and the last destructive admin action to gain a dialog.

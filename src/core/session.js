@@ -84,7 +84,7 @@ async function renderNoLeague(){
 // building a second, partial one.
 // ---------------------------------------------------------------------
 const NO_LEAGUE_POLL_MS = 15000;
-const NO_LEAGUE_MAX_POLLS = 40;   // ~10 min of FOREGROUND time, see below
+const NO_LEAGUE_MAX_POLLS = 120;  // 120 x 15s = 30 min of FOREGROUND time
 const NO_LEAGUE_MAX_FAILS = 3;
 let nlTimer = null, nlPolls = 0, nlFails = 0, nlVisHandler = null;
 

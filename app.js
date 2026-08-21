@@ -1162,7 +1162,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"d12431a-a5c64f6"}</p>
+      <p class="colophon buildid">build ${"313e96a-10727ca"}</p>
     </div>
   </div>`;
   }
@@ -2302,7 +2302,7 @@ Switch anyway?`
     startNoLeaguePolling();
   }
   var NO_LEAGUE_POLL_MS = 15e3;
-  var NO_LEAGUE_MAX_POLLS = 40;
+  var NO_LEAGUE_MAX_POLLS = 120;
   var NO_LEAGUE_MAX_FAILS = 3;
   var nlTimer = null;
   var nlPolls = 0;

@@ -691,18 +691,40 @@ export async function runNoLeagueScenario({ html, scripts, mode }){
 // 15s interval — that path exists precisely because foregrounding is the
 // case that actually happens (they message an admin, get added, switch back),
 // and it makes the test deterministic instead of timing-dependent.
-export async function runNoLeaguePollScenario({ html, scripts, mode }){
-  const { tables } = makeFixtures();
-  const calls = [];
+// Builds a no-league window with setInterval/clearInterval STUBBED, so the
+// poll can be driven deterministically instead of waited out.
+//
+// Timers are stubbed rather than the poll function being exported: making
+// pollNoLeague public would prove the body while proving nothing about the
+// interval, and "the poll stops" means the interval is CLEARED, not merely
+// that a transition happened. Counting clearInterval calls is the only way to
+// assert that from outside. The stub goes in before window.eval because
+// startNoLeaguePolling runs during boot(), which the eval triggers.
+function noLeagueWindow({ html, scripts, mode, tables, calls, hidden = false }){
   const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
   const { window } = dom;
   installGlobals(window, mode, tables, RPC_HANDLERS, calls, {});
   window.localStorage.setItem("ft_session", JSON.stringify(
     { id: "p3", name: "Wanderer", pin: "1234", is_global_admin: false }));
-  // jsdom's visibilityState is a plain configurable property; document.hidden
-  // derives from it. Same idiom runNonAdminScenario uses.
-  Object.defineProperty(window.document, "visibilityState", { value: "visible", configurable: true });
+  // BOTH must be set. In a real browser `document.hidden` derives from
+  // visibilityState, but jsdom implements it as its own getter, so
+  // overriding visibilityState alone leaves hidden === false and the poll's
+  // guard never trips. Found by this assertion failing at baseline.
+  Object.defineProperty(window.document, "visibilityState",
+    { value: hidden ? "hidden" : "visible", configurable: true });
+  Object.defineProperty(window.document, "hidden",
+    { value: hidden, configurable: true });
+  const timers = { cb: null, sets: 0, clears: 0 };
+  window.setInterval = (fn) => { timers.cb = fn; timers.sets++; return 1; };
+  window.clearInterval = () => { timers.clears++; };
   for (const src of scripts) window.eval(src);
+  return { window, timers };
+}
+
+export async function runNoLeaguePollScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const { window } = noLeagueWindow({ html, scripts, mode, tables, calls });
   await tick(); await tick();
 
   const mainHtmlNow = () => mainHTML(window, mode);
@@ -733,6 +755,72 @@ export async function runNoLeaguePollScenario({ html, scripts, mode }){
   };
 
   return { before, stillWaiting, afterAdd };
+}
+
+// The three properties the visibilitychange-driven scenario above cannot
+// reach: that the interval is actually CLEARED on success, that the attempt
+// cap renders its stopped state with a working button, and that a hidden tab
+// makes no request at all.
+export async function runNoLeaguePollTimersScenario({ html, scripts, mode }){
+  const out = {};
+
+  // --- 1. Interval cleared when a league appears. Asserted by counting
+  // clearInterval, not by observing the transition: a transition proves
+  // boot() ran, not that the timer stopped, and a surviving interval would
+  // keep firing against a screen that no longer exists.
+  {
+    const { tables } = makeFixtures();
+    const calls = [];
+    const { window, timers } = noLeagueWindow({ html, scripts, mode, tables, calls });
+    await tick(); await tick();
+    const clearsBefore = timers.clears;
+    tables.league_members.push({ league_id: 1, player_id: "p3", is_league_admin: false, official_opt_in: true });
+    await timers.cb();                       // one poll tick, driven directly
+    await tick(); await tick(); await tick();
+    out.onSuccess = {
+      cleared: timers.clears > clearsBefore,
+      html: mainHTML(window, mode),
+      tabsDisplay: window.document.getElementById("tabs")?.style.display || "",
+    };
+  }
+
+  // --- 2. Attempt cap. Fired well past any plausible cap so the assertion
+  // does not encode the constant — NO_LEAGUE_MAX_POLLS can change without
+  // rewriting this. The Check again button must survive as the manual
+  // fallback, which is the whole point of stopping rather than spinning.
+  {
+    const { tables } = makeFixtures();
+    const calls = [];
+    const { window, timers } = noLeagueWindow({ html, scripts, mode, tables, calls });
+    await tick(); await tick();
+    for (let i = 0; i < 400; i++){ await timers.cb(); }
+    await tick(); await tick();
+    const btn = [...window.document.querySelectorAll("button")]
+      .map(b => b.outerHTML).find(h => /Check again/.test(h)) || "";
+    out.cap = {
+      status: window.document.getElementById("nl-status")?.textContent || "",
+      cleared: timers.clears > 0,
+      buttonHtml: btn,
+      // Capped, so the call count must be far below the number of ticks.
+      myLeaguesCalls: calls.filter(c => c.type === "rpc" && c.fn === "my_leagues").length,
+    };
+  }
+
+  // --- 3. Hidden tab makes NO request. This is the abandoned-overnight case.
+  {
+    const { tables } = makeFixtures();
+    const calls = [];
+    const { timers } = noLeagueWindow({ html, scripts, mode, tables, calls, hidden: true });
+    await tick(); await tick();
+    const before = calls.filter(c => c.type === "rpc" && c.fn === "my_leagues").length;
+    for (let i = 0; i < 5; i++){ await timers.cb(); }
+    await tick(); await tick();
+    out.hidden = {
+      callsAdded: calls.filter(c => c.type === "rpc" && c.fn === "my_leagues").length - before,
+    };
+  }
+
+  return out;
 }
 
 export async function runFormatToggleScenario({ html, scripts, mode }){
