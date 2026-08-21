@@ -682,6 +682,59 @@ export async function runNoLeagueScenario({ html, scripts, mode }){
 // flat2. Show 1 is standard/upcoming. Picks for show 1 exist ONLY in Casual,
 // so Official loses the same keys but holds nothing and must be excluded by
 // the n > 0 guard — that exclusion is a real assertion, not a side effect.
+// The no-league POLL. Deliberately a different shape from
+// runNoLeagueScenario, which models a reload as a second page load: here the
+// transition must happen in ONE window with no reload at all, which is the
+// whole point of the feature.
+//
+// It is driven by dispatching visibilitychange rather than waiting out the
+// 15s interval — that path exists precisely because foregrounding is the
+// case that actually happens (they message an admin, get added, switch back),
+// and it makes the test deterministic instead of timing-dependent.
+export async function runNoLeaguePollScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, {});
+  window.localStorage.setItem("ft_session", JSON.stringify(
+    { id: "p3", name: "Wanderer", pin: "1234", is_global_admin: false }));
+  // jsdom's visibilityState is a plain configurable property; document.hidden
+  // derives from it. Same idiom runNonAdminScenario uses.
+  Object.defineProperty(window.document, "visibilityState", { value: "visible", configurable: true });
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+
+  const mainHtmlNow = () => mainHTML(window, mode);
+  const before = {
+    html: mainHtmlNow(),
+    status: window.document.getElementById("nl-status")?.textContent || "",
+  };
+
+  // Foreground with membership still absent — must NOT transition, and must
+  // not claim it stopped. This is what proves the poll checks rather than
+  // simply firing boot() on any visibility event.
+  window.document.dispatchEvent(new window.Event("visibilitychange"));
+  await tick(); await tick();
+  const stillWaiting = {
+    html: mainHtmlNow(),
+    myLeaguesCalls: calls.filter(c => c.type === "rpc" && c.fn === "my_leagues").length,
+  };
+
+  // The admin adds them. Same server-side effect admin_add_league_member has.
+  tables.league_members.push({ league_id: 1, player_id: "p3", is_league_admin: false, official_opt_in: true });
+
+  // Foreground again — now it must transition, in this window, no reload.
+  window.document.dispatchEvent(new window.Event("visibilitychange"));
+  await tick(); await tick(); await tick();
+  const afterAdd = {
+    html: mainHtmlNow(),
+    tabsDisplay: window.document.getElementById("tabs")?.style.display || "",
+  };
+
+  return { before, stillWaiting, afterAdd };
+}
+
 export async function runFormatToggleScenario({ html, scripts, mode }){
   const { tables } = makeFixtures();
   const calls = [];

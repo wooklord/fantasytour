@@ -1162,7 +1162,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"b4203ef-3bdd6fe"}</p>
+      <p class="colophon buildid">build ${"d12431a-a5c64f6"}</p>
     </div>
   </div>`;
   }
@@ -2293,12 +2293,62 @@ Switch anyway?`
     <p style="color:var(--coral);font-weight:600;margin:10px 0;padding:10px;border:1px solid var(--coral);border-radius:8px">
       Don't register again \u2014 a second account can't be merged with this one.</p>
     <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell whoever invited you that your nickname is <b>${esc(state.session.name)}</b>.</p>
-    <p class="muted">Once they've added you, tap <b>Check again</b> below \u2014 this screen won't update on its own.</p>
+    <p class="muted" id="nl-status">Checking automatically \u2014 this screen updates itself once you're added.</p>
     <div class="row" style="margin-top:12px">
       <button class="btn" onclick="location.reload()">Check again</button>
       <button class="btn ghost" onclick="logout()">Log out</button>
     </div>
   </div>`;
+    startNoLeaguePolling();
+  }
+  var NO_LEAGUE_POLL_MS = 15e3;
+  var NO_LEAGUE_MAX_POLLS = 40;
+  var NO_LEAGUE_MAX_FAILS = 3;
+  var nlTimer = null;
+  var nlPolls = 0;
+  var nlFails = 0;
+  var nlVisHandler = null;
+  function stopNoLeaguePolling() {
+    if (nlTimer) clearInterval(nlTimer);
+    nlTimer = null;
+    if (nlVisHandler) document.removeEventListener("visibilitychange", nlVisHandler);
+    nlVisHandler = null;
+  }
+  function nlStatus(msg) {
+    const el = document.getElementById("nl-status");
+    if (el) el.textContent = msg;
+  }
+  async function pollNoLeague() {
+    if (document.hidden) return;
+    if (nlPolls >= NO_LEAGUE_MAX_POLLS) {
+      stopNoLeaguePolling();
+      nlStatus("Stopped checking automatically. Tap Check again when you've been added.");
+      return;
+    }
+    nlPolls++;
+    try {
+      const rows = await rpc("my_leagues", { p_name: state.session.name, p_pin: state.session.pin });
+      nlFails = 0;
+      if (rows && rows.length) {
+        stopNoLeaguePolling();
+        await boot();
+      }
+    } catch (e) {
+      if (++nlFails >= NO_LEAGUE_MAX_FAILS) {
+        stopNoLeaguePolling();
+        nlStatus("Couldn't check automatically. Tap Check again once you've been added.");
+      }
+    }
+  }
+  function startNoLeaguePolling() {
+    stopNoLeaguePolling();
+    nlPolls = 0;
+    nlFails = 0;
+    nlTimer = setInterval(pollNoLeague, NO_LEAGUE_POLL_MS);
+    nlVisHandler = () => {
+      if (!document.hidden) pollNoLeague();
+    };
+    document.addEventListener("visibilitychange", nlVisHandler);
   }
   async function boot() {
     document.title = APP_NAME;

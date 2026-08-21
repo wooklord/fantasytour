@@ -1725,7 +1725,38 @@ was created — i.e. the first time any of this could run at all. Written down
 because two of the three findings are counterintuitive and the third is an
 unstated assumption the code silently depends on.
 
-- **🚨 ONBOARDING-CRITICAL: a player added to a league must FULLY RELOAD the
+- **✅ LARGELY FIXED 2026-08-20 for the case that mattered — the NO-LEAGUE
+  screen now polls and updates itself.** `renderNoLeague()` starts a 15s
+  poll of `my_leagues` and re-runs `boot()` the moment membership appears,
+  plus a `visibilitychange` handler so foregrounding checks IMMEDIATELY —
+  which is the real-world sequence (they message an admin, get added, switch
+  back). No reload, no button press.
+  - **Polling here costs nothing for anyone already in a league**, because
+    the screen never renders for them. That is precisely why it lives here
+    rather than in `refreshCurrent()`, which every session runs on every
+    foreground.
+  - **It calls `my_leagues` directly, NOT `resolveLeagues()`** — the latter
+    also rewrites `currentBracketId`/`ft_bracket_id` and does not call
+    `loadConfig`/`subscribeRealtime`, so using it would half-transition the
+    session. Confirm membership, then re-run `boot()`, which is already
+    correct.
+  - **Bounded three ways**: skipped entirely while `document.hidden` (a tab
+    left open overnight makes no requests and burns no budget), a 40-attempt
+    cap on foreground polls, and a stop after 3 consecutive failures. Each
+    terminal state updates `#nl-status` and points at Check again — silently
+    spinning while claiming to check would be the worst outcome.
+  - **Known untested consequence:** the `rows && rows.length` guard before
+    `boot()` is NOT a correctness gate (boot re-checks membership anyway) —
+    its real job is preventing a teardown-and-rebuild per poll. Since
+    `renderNoLeague()` restarts polling, losing that guard resets `nlPolls`
+    every tick and **the 40-attempt cap never fires**. Verified by mutation
+    that no assertion catches this; testing it needs 40 polls or an exposed
+    counter, so it is recorded rather than covered.
+  - **What this does NOT fix**: a player added to a SECOND league
+    mid-session, or REMOVED from one. Both still need a reload, and removal
+    is entirely unhandled — see the scoping note below.
+- **🚨 STILL TRUE FOR THE OTHER CASES — a player already in a league who is
+  added to another, or removed, must FULLY RELOAD the
   app before that league appears. Nothing refreshes it in the background.
   Expect this to be the single most common support question during Facebook
   League recruitment, and note that neither new league admin will have any

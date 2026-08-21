@@ -1,5 +1,5 @@
 import { $, esc } from "./dom.js";
-import { db } from "./supabaseClient.js";
+import { db, rpc } from "./supabaseClient.js";
 import { state } from "./state.js";
 import { renderAuth, renderForceChangePin } from "../features/auth.js";
 import { subscribeRealtime } from "./realtime.js";
@@ -46,21 +46,102 @@ async function renderNoLeague(){
   // load, and nothing here polls or refetches. So after an admin adds them,
   // this screen keeps saying they aren't in a league until the app is fully
   // reloaded — while telling them no further action is needed, and (rightly)
-  // forbidding the one thing they'd otherwise try. The Check again button is
-  // the fix: it turns "fully close and reopen the app" into one tap, using
-  // the reload path that already works rather than new refresh logic.
+  // forbidding the one thing they'd otherwise try.
+  //
+  // Fixed in two steps. First the Check again button, which turned "fully
+  // close and reopen the app" into one tap. Then (2026-08-20) the polling
+  // below, which removes the requirement entirely — the screen now updates
+  // itself, and foregrounding checks immediately. Check again remains as the
+  // manual fallback for when polling has stopped (attempt cap or repeated
+  // failure), which is why the copy still points at it in those states.
   $("#main").innerHTML = `<div class="panel" style="margin-top:30px">
     <h2>You're not in a league yet</h2>
     <p class="muted">Someone has to add you before you can play.</p>
     <p style="color:var(--coral);font-weight:600;margin:10px 0;padding:10px;border:1px solid var(--coral);border-radius:8px">
       Don't register again — a second account can't be merged with this one.</p>
     <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell whoever invited you that your nickname is <b>${esc(state.session.name)}</b>.</p>
-    <p class="muted">Once they've added you, tap <b>Check again</b> below — this screen won't update on its own.</p>
+    <p class="muted" id="nl-status">Checking automatically — this screen updates itself once you're added.</p>
     <div class="row" style="margin-top:12px">
       <button class="btn" onclick="location.reload()">Check again</button>
       <button class="btn ghost" onclick="logout()">Log out</button>
     </div>
   </div>`;
+  startNoLeaguePolling();
+}
+
+// ---------------------------------------------------------------------
+// No-league polling. This screen is a dead end by construction — boot()
+// returns immediately after rendering it — so nothing else is running here
+// and polling costs NOTHING for anyone already in a league, because they
+// never see it. That is the whole reason this is worth doing here rather
+// than in refreshCurrent(), which every session runs on every foreground.
+//
+// It deliberately calls my_leagues DIRECTLY rather than resolveLeagues():
+// resolveLeagues also rewrites currentBracketId/currentLeagueId and
+// ft_bracket_id, and does NOT call loadConfig/subscribeRealtime, so using it
+// here would half-transition the session. Confirming membership first and
+// then re-running boot() reuses the path that is already correct instead of
+// building a second, partial one.
+// ---------------------------------------------------------------------
+const NO_LEAGUE_POLL_MS = 15000;
+const NO_LEAGUE_MAX_POLLS = 40;   // ~10 min of FOREGROUND time, see below
+const NO_LEAGUE_MAX_FAILS = 3;
+let nlTimer = null, nlPolls = 0, nlFails = 0, nlVisHandler = null;
+
+function stopNoLeaguePolling(){
+  if (nlTimer) clearInterval(nlTimer);
+  nlTimer = null;
+  if (nlVisHandler) document.removeEventListener("visibilitychange", nlVisHandler);
+  nlVisHandler = null;
+}
+function nlStatus(msg){
+  const el = document.getElementById("nl-status");
+  if (el) el.textContent = msg;
+}
+
+async function pollNoLeague(){
+  // Backgrounded tabs cost nothing and do not burn the attempt budget — a
+  // player who registers and walks away is not polling overnight, and one
+  // who comes back tomorrow still has their full allowance.
+  if (document.hidden) return;
+  if (nlPolls >= NO_LEAGUE_MAX_POLLS){
+    stopNoLeaguePolling();
+    nlStatus("Stopped checking automatically. Tap Check again when you've been added.");
+    return;
+  }
+  nlPolls++;
+  try{
+    const rows = await rpc("my_leagues", { p_name: state.session.name, p_pin: state.session.pin });
+    nlFails = 0;
+    if (rows && rows.length){
+      // Clear BEFORE booting: boot() replaces #main, and an interval left
+      // running would keep firing against a screen that no longer exists and
+      // stack a new one on every success.
+      stopNoLeaguePolling();
+      await boot();
+    }
+  }catch(e){
+    // A single failure is almost always a transient network blip and is not
+    // worth showing. Repeated failure is not — it means the poll cannot
+    // work (session expired, server down), and silently spinning would be
+    // the worst outcome: the screen would claim it is checking when it is
+    // not.
+    if (++nlFails >= NO_LEAGUE_MAX_FAILS){
+      stopNoLeaguePolling();
+      nlStatus("Couldn't check automatically. Tap Check again once you've been added.");
+    }
+  }
+}
+
+function startNoLeaguePolling(){
+  stopNoLeaguePolling();           // never stack timers across re-renders
+  nlPolls = 0; nlFails = 0;
+  nlTimer = setInterval(pollNoLeague, NO_LEAGUE_POLL_MS);
+  // Foregrounding checks IMMEDIATELY rather than waiting for the next tick.
+  // This is the case that actually happens: they message an admin, the admin
+  // adds them, they switch back to the app.
+  nlVisHandler = () => { if (!document.hidden) pollNoLeague(); };
+  document.addEventListener("visibilitychange", nlVisHandler);
 }
 
 export async function boot(){

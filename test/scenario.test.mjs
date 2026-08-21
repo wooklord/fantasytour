@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeaguePollScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -680,6 +680,24 @@ async function runMode(mode){
   // other's fields. Asserted on the actual admin_update_config payloads, not
   // on rendered values — a reverted field looks identical on screen until the
   // next reload, which is why this was invisible.
+  // The no-league poll: the transition must happen in ONE window, with no
+  // reload. Driven by visibilitychange rather than the 15s timer, because
+  // foregrounding is both the real-world case and the deterministic one.
+  const poll = await runNoLeaguePollScenario({ html, scripts, mode });
+  check("the no-league screen says it checks automatically, not that it won't update",
+    /updates itself/.test(poll.before.status) && !/won't update on its own/.test(poll.before.html),
+    `status: ${JSON.stringify(poll.before.status)}`);
+  check("foregrounding while still not in a league does NOT transition",
+    /not in a league yet/i.test(poll.stillWaiting.html),
+    `html: ${poll.stillWaiting.html.slice(0, 200)}`);
+  // Proves it actually asks rather than booting on any visibility event.
+  check("foregrounding polls my_leagues",
+    poll.stillWaiting.myLeaguesCalls >= 2,
+    `my_leagues calls: ${poll.stillWaiting.myLeaguesCalls}`);
+  check("once added, foregrounding transitions into the app with no reload",
+    !/not in a league yet/i.test(poll.afterAdd.html) && poll.afterAdd.tabsDisplay === "flex",
+    `afterAdd: ${poll.afterAdd.html.slice(0, 200)} tabs: ${poll.afterAdd.tabsDisplay}`);
+
   // toggleFormat's orphan confirm — the control behind the 2026-08-14
   // incident, and the last destructive admin action to gain a dialog.
   const fmt = await runFormatToggleScenario({ html, scripts, mode });
