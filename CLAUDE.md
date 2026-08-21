@@ -147,6 +147,25 @@ directly (lower risk), keep these habits:
      are bounded to what you changed; `git checkout` never is.
    - Related, same family: `git stash`, `git restore .`, and `git clean` all
      have this property at wider scope. None belong in an automated cleanup.
+   - **SECOND INSTANCE, same night, different tool: a line-numbered `sed`
+     revert that can SILENTLY NO-OP.** Reverting a mutation with
+     `sed -i '120s/^$/      stopNoLeaguePolling();/'` only works if line 120
+     is still empty. Any edit that shifted the file leaves the substitution
+     matching nothing, `sed` exits 0, and **the mutation stays in the
+     source**. The suite then passes — because the assertion that catches
+     that mutation only fails when it runs against a correctly reverted
+     file — so a green run would have been read as "reverted and clean"
+     when the code was still mutated.
+   - **The shared shape across both instances: a cleanup command that
+     reports success whether or not it did what you meant.** `git checkout`
+     succeeds while discarding more than intended; line-numbered `sed`
+     succeeds while discarding nothing. Neither failure is visible in the
+     exit code, and both look identical to a correct run.
+   - **Use `str_replace`/Edit for reverts, anchored on the actual text**, so
+     a moved line fails loudly instead of silently. Then **confirm with
+     `git diff <file>` before building** — an empty diff against HEAD is the
+     only real proof the mutation is gone. Do not infer it from a passing
+     suite; a suite that passes is exactly what a failed revert produces.
 7. **Record mentions at the weight they were given.** One offhand comment is a
    mention, not a commitment — and writing it down as a deliverable makes it
    indistinguishable from one later. This project has run the failure in both
@@ -1745,6 +1764,42 @@ unstated assumption the code silently depends on.
     cap on foreground polls, and a stop after 3 consecutive failures. Each
     terminal state updates `#nl-status` and points at Check again — silently
     spinning while claiming to check would be the worst outcome.
+  - **How it is tested, and why the obvious assertion would NOT have
+    worked.** `runNoLeaguePollTimersScenario` stubs `window.setInterval` /
+    `clearInterval` before `window.eval` (the `installGlobals` seam runs
+    first), captures the callback and counts clears. Timers are stubbed
+    rather than `pollNoLeague` being exported: exporting it would prove the
+    body while proving nothing about the interval.
+    - **Mechanism note that makes the assertion possible: the poll calls
+      `boot()` DIRECTLY, not `location.reload()`.** The Check again *button*
+      reloads; the poll transitions in place. So nothing about navigation is
+      observable either way, and the only external evidence that polling
+      stopped is a `clearInterval` call. That is why the assertion counts
+      them.
+    - **Mutations, each by name and what it pins:**
+      - **`document.hidden` guard removed** → fails *"a hidden tab makes no
+        my_leagues request at all"*. Pins the abandoned-overnight case.
+      - **cap check (`nlPolls >= NO_LEAGUE_MAX_POLLS`) removed** → fails
+        *"the attempt cap stops polling and says so"* AND *"the attempt cap
+        actually bounds the requests"*. Pins both that it stops and that it
+        says so, with Check again surviving as the manual fallback.
+      - **`stopNoLeaguePolling()` removed from the success path** → fails
+        *"a successful poll clears the interval, not just transitions"*.
+        **This is the instructive one.** Under that mutation the app is
+        VISIBLY correct — `boot()` runs, the tabs appear, the no-league
+        screen is gone — and the only defect is an orphaned interval firing
+        against a replaced DOM. Phrased the natural way ("after a successful
+        poll the app is no longer on the no-league screen") the assertion
+        would have passed green with the bug present.
+    - The cap assertion deliberately does not encode
+      `NO_LEAGUE_MAX_POLLS`: it fires 400 ticks and requires far fewer
+      calls, so the constant moved 40 → 120 without a test edit.
+    - **jsdom detail worth not rediscovering: `document.hidden` is its own
+      getter there, NOT derived from `visibilityState`.** Overriding
+      `visibilityState` alone leaves `hidden === false` and the guard never
+      trips. Both must be defined — found by this assertion failing at
+      baseline, and recorded so nobody copies the one-property idiom from
+      `runNonAdminScenario` and gets a silently passing test.
   - **Known untested consequence:** the `rows && rows.length` guard before
     `boot()` is NOT a correctness gate (boot re-checks membership anyway) —
     its real job is preventing a teardown-and-rebuild per poll. Since
