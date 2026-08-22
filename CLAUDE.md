@@ -3113,8 +3113,49 @@ for its reasoning; the "no confirm of any kind" half of it is closed.**
   can strand picks that `submit_picks`' catch-all delete then destroys) is
   NOT closed by this.
 
-**⚠️ AND THE BUG IT EXPOSED, STILL OPEN: `saveConfig`'s mode-change orphan
-check can never fire.** It counts at-risk picks via `get_show_picks`,
+**✅ FIXED 2026-08-21 — and the fake that hid it is fixed too. THE FAKE
+BEING MORE PERMISSIVE THAN THE REAL RPC IS WHAT KEPT THIS GREEN FOR MONTHS.**
+The orphan check now counts via `admin_pick_status` (admin-gated, NOT
+cutoff-gated), summing `picks_count` rather than counting rows — the left
+join returns one row per league MEMBER, so a row count reports league size.
+- **Confirmed by mutating the FAKE, not the code.** Adding the real cutoff
+  gate to `get_show_picks`'s fake turned **5 assertions × 2 modes = 10
+  failures** red. So the mode-change warning's entire coverage was passing
+  only because the fake returned pre-cutoff rows the real RPC refuses. The
+  one component that could have revealed the bug was the component modelling
+  it wrongly.
+- **The cutoff gate is now PERMANENT in the fake.** Removing it re-opens
+  exactly this hole. Notably it broke nothing else: the pick board and the
+  frozen breakdown both read post-cutoff shows, so they were never relying
+  on the permissiveness.
+- **Named priors of the same shape (fake more permissive / less faithful
+  than the real RPC), rather than an ordinal:** `get_show_picks` returning
+  `[]` unconditionally until 2026-08-13, which made the pre-scoring pick
+  board unreachable in every scenario; `admin_pick_status` returning a fixed
+  `{picks_count: 1}` row until 2026-08-18, which made every bracket look
+  equally affected in `toggleFormat`'s confirm;
+  `admin_list_unaffiliated_players` stubbed rather than joined, which would
+  have passed either predicate. All three are now real joins.
+- **The assertion needed fixing too, and for a different reason.** It read
+  `/\d+ pick(s)? across \d+ open show(s)?/` — any digits. Under a row-count
+  regression it renders "3 picks" and still matches. Now pinned to the real
+  number (`1 pick across 1 open show` against a 3-member league), so sum and
+  row count are distinguishable. Verified by mutation: `reduce(...)` →
+  `.length` produces "3 picks" and fails.
+- **A rename hazard caught mid-fix, worth its own note: CAPTURE AND RESTORE
+  ARE SEPARATE LINES, and repointing a handler swap has to touch both.**
+  The failed-lookup block captures a fake, replaces it with a thrower, and
+  restores it afterwards. Repointing the capture from `get_show_picks` to
+  `admin_pick_status` while leaving the restore as
+  `RPC_HANDLERS.get_show_picks = origShowPicks` would have written
+  `admin_pick_status`'s implementation INTO `get_show_picks` and left
+  `admin_pick_status` throwing for the remainder of the run — silently, with
+  downstream failures in scenarios that have nothing to do with what the
+  block tests. `grep` for the old variable name after any such rename; one
+  stale reference is enough.
+
+**⚠️ THE ORIGINAL FINDING, kept because the mechanism recurs:
+`saveConfig`'s mode-change orphan check could never fire.** It counts at-risk picks via `get_show_picks`,
 filtered to shows where `showState(sh) === "open"`. But `showState` returns
 `"open"` when `new Date(s.cutoff_at) > new Date()` — cutoff in the FUTURE —
 while `get_show_picks` ends `and ls.cutoff_at is not null and now() >=

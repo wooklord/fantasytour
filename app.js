@@ -1162,7 +1162,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"313e96a-b9d412a"}</p>
+      <p class="colophon buildid">build ${"de5c0ce-f7d7fab"}</p>
     </div>
   </div>`;
   }
@@ -1959,7 +1959,7 @@ Switch anyway?`
     try {
       const shows = await fetchShows((q) => q.gte("showdate", new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10)));
       const open = (shows || []).filter((sh) => showState(sh) === "open");
-      const counts = await Promise.all(open.map((sh) => rpc("get_show_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id }).then((rows) => ({ show: sh, n: (rows || []).length }))));
+      const counts = await Promise.all(open.map((sh) => rpc("admin_pick_status", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id }).then((rows) => ({ show: sh, n: (rows || []).reduce((sum, r) => sum + (r.picks_count || 0), 0) }))));
       atRisk = counts.filter((c) => c.n > 0);
     } catch (e) {
       lookupFailed = true;

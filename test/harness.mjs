@@ -85,6 +85,17 @@ const RPC_HANDLERS = {
     const isMember = (tables.league_members || [])
       .some(lm => lm.league_id === brk.league_id && lm.player_id === (me || {}).id);
     if (!isMember) throw new Error("Not a member of this league");
+    // Mirrors the real RPC's cutoff gate:
+    //   and ls.cutoff_at is not null and now() >= ls.cutoff_at
+    // PERMANENT, not a probe. Its absence is what let saveConfig's
+    // mode-change orphan check pass its tests for years while being dead in
+    // production: the check only ever queries shows that are OPEN (cutoff in
+    // the future), which this RPC refuses by design, so it returned zero
+    // rows every time and the warning never fired. The fake returned rows
+    // regardless, so five assertions went green against a control that could
+    // not work. Removing this line re-opens exactly that hole.
+    const lsRow = (tables.league_shows || []).find(l => l.show_id === p_show_id && l.league_id === brk.league_id);
+    if (!lsRow || !lsRow.cutoff_at || new Date(lsRow.cutoff_at) > new Date()) return [];
     return (tables.picks || [])
       .filter(p => p.bracket_id === p_bracket_id && p.show_id === p_show_id)
       .map(p => ({
@@ -1224,8 +1235,12 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
   // handler throw (the fake turns that into an rpc error, and rpc() throws),
   // then restoring it. The previous block cancelled, so mode is still
   // ranked_choice and this can attempt the same switch again.
-  const origShowPicks = RPC_HANDLERS.get_show_picks;
-  RPC_HANDLERS.get_show_picks = async () => { throw new Error("simulated lookup failure"); };
+  // Repointed 2026-08-21: the orphan check counts via admin_pick_status now,
+  // not get_show_picks — the latter is cutoff-gated and returned nothing for
+  // the open shows this check examines, which is why it was dead. Throwing
+  // on the old RPC would simulate a failure the code no longer performs.
+  const origPickStatus = RPC_HANDLERS.admin_pick_status;
+  RPC_HANDLERS.admin_pick_status = async () => { throw new Error("simulated lookup failure"); };
   const failedLookupConfirms = [];
   window.confirm = (m) => { failedLookupConfirms.push(m); return false; }; // cancel
   q("c-mode").value = "slots";
@@ -1234,7 +1249,7 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
   await window.saveMasterSwitch();
   await tick(); await tick();
   window.confirm = () => true;
-  RPC_HANDLERS.get_show_picks = origShowPicks;
+  RPC_HANDLERS.admin_pick_status = origPickStatus;
   const lookupFailWarning = {
     fired: failedLookupConfirms.some(m => /Couldn't check/i.test(m)),
     // Must be the couldn't-check wording, NOT the orphan one — a lookup

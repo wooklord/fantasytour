@@ -485,8 +485,20 @@ async function runMode(mode){
   // Matched on structure, not the full string — the copy embeds live counts
   // and venue names, so asserting the whole message would break on every
   // wording change and on any fixture edit.
-  check("the warning names how many picks across how many open shows",
-    /\d+ pick(s)? across \d+ open show(s)?/.test(ranked.modeWarning.message),
+  // Pins the actual NUMBER, not just that digits appear. The fixture has
+  // p1 holding 2 Casual picks for the open show while p2 and p4 are members
+  // with zero — so summing picks_count gives 2 and counting rows gives 3
+  // (league size). The old regex /\d+ pick(s)?/ matched either, so a
+  // row-count regression rendered "3 picks" and passed. This is the
+  // count-vs-coverage substitution in assertion form.
+  // Pins the actual NUMBER, not just that digits appear. At this point in
+  // the scenario the open show holds exactly 1 pick (the sheet save earlier
+  // in this run replaced its fixture picks), while the league has 3 members
+  // — so summing picks_count gives 1 and counting rows gives 3. The old
+  // regex /\d+ pick(s)?/ matched either, so a row-count regression rendered
+  // "3 picks" and passed. Count-vs-coverage substitution, in assertion form.
+  check("the warning names the real at-risk pick count, not the member count",
+    /1 pick across 1 open show/.test(ranked.modeWarning.message),
     `message: ${JSON.stringify(ranked.modeWarning.message)}`);
   check("cancelling the warning leaves the stored mode unchanged",
     ranked.modeWarning.modeAfterCancel === "ranked_choice",

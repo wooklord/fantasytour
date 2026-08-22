@@ -949,9 +949,22 @@ async function confirmModeChange(mode){
   try{
     const shows = await fetchShows(q => q.gte("showdate", new Date(Date.now()-2*864e5).toISOString().slice(0,10)));
     const open = (shows||[]).filter(sh => showState(sh) === "open");
+    // admin_pick_status, NOT get_show_picks — this check was silently dead
+    // until 2026-08-21 and the reason is worth keeping: get_show_picks ends
+    // `and ls.cutoff_at is not null and now() >= ls.cutoff_at`, while every
+    // show reaching this line is `showState(sh) === "open"`, i.e. cutoff in
+    // the FUTURE. Mutually exclusive, so it returned zero rows for every
+    // show, atRisk was always empty, and the warning never once fired in
+    // production. admin_pick_status is admin-gated but NOT cutoff-gated,
+    // which is exactly what a pre-cutoff count needs.
+    //
+    // SUM picks_count; do not count rows. It returns one row per league
+    // MEMBER via a left join, so members with zero picks are included and
+    // a row count reports league size rather than picks at risk. Same trap
+    // toggleFormat already handles.
     const counts = await Promise.all(open.map(sh =>
-      rpc("get_show_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id })
-        .then(rows => ({ show: sh, n: (rows||[]).length }))));
+      rpc("admin_pick_status", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id })
+        .then(rows => ({ show: sh, n: (rows||[]).reduce((sum, r) => sum + (r.picks_count || 0), 0) }))));
     atRisk = counts.filter(c => c.n > 0);
   }catch(e){ lookupFailed = true; }
   // A failed lookup gets its own confirm rather than falling through
