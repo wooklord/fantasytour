@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -831,6 +831,29 @@ async function runMode(mode){
   check("submitting a matching new PIN clears must_change_pin in the stored session",
     forcedPin.storedSession && forcedPin.storedSession.must_change_pin === false && forcedPin.storedSession.pin === "4321",
     `storedSession: ${JSON.stringify(forcedPin.storedSession)}`);
+
+  // Zero-overlay league — see runNoOverlayScenario's header for what this
+  // pins and what it cannot (the scorer). The fixture's two shows are
+  // today's and five days ago; neither has a league_shows row here.
+  const noOv = await runNoOverlayScenario({ html, scripts, mode });
+  check("zero-overlay: shows are still LISTED (they come from the global shows table)",
+    noOv.list.rowCount > 0 && noOv.list.venues.includes("The Barn"),
+    `rows: ${noOv.list.rowCount}, venues: ${JSON.stringify(noOv.list.venues)}`);
+  check("zero-overlay: every listed show's pill reads 'no cutoff'",
+    noOv.list.pills.length > 0 && noOv.list.pills.every(p => p === "no cutoff"),
+    `pills: ${JSON.stringify(noOv.list.pills)}`);
+  check("zero-overlay: every show button says 'Score', none says 'Pick'",
+    noOv.list.buttonLabels.length > 0 && noOv.list.buttonLabels.every(b => b === "Score"),
+    `buttons: ${JSON.stringify(noOv.list.buttonLabels)}`);
+  check("zero-overlay: opening a show renders the detail view, not a pick sheet",
+    noOv.detail.sheetInputCount === 0 && /no cutoff/.test(noOv.detail.html) && /← shows/.test(noOv.detail.html),
+    `sheet inputs: ${noOv.detail.sheetInputCount}, html: ${noOv.detail.html.slice(0, 300)}`);
+  check("zero-overlay: submit_picks (fake mirroring the real RPC) rejects a show with no overlay row",
+    noOv.submitErrorNoRow === "This show is not on this league's schedule",
+    `error: ${noOv.submitErrorNoRow}`);
+  check("zero-overlay positive control: the identical submit succeeds once the row exists",
+    noOv.submitWithRow && noOv.submitWithRow.ok === true && noOv.submitWithRow.saved === 1,
+    `submitWithRow: ${JSON.stringify(noOv.submitWithRow)}`);
 
   return failures.length;
 }

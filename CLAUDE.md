@@ -598,8 +598,50 @@ before assuming a change is covered just because the suite is green:
        Eggs show has scored cleanly.** Folds into the `CRON_SECRET`
        dual-path change below (the "DECIDED 2026-08-17, NOT STARTED"
        entry), not a separate change.
-    5. **A zero-overlay test fixture** is wanted — every current fixture has
-       overlay rows, so this path has never rendered in the suite.
+    5. **A zero-overlay test fixture — ✅ BUILT 2026-10-11, test files
+       only.** `runNoOverlayScenario` (`test/harness.mjs`): `makeFixtures()`
+       with `league_shows` emptied and a live Official season injected off
+       `Date.now()`. Six checks in `test/scenario.test.mjs`: shows still
+       LISTED (they come from the global table), every pill "no cutoff",
+       every button "Score", opening a show renders the detail view with
+       zero `.slotline` inputs, the `submit_picks` fake rejects with the
+       real message, and a POSITIVE CONTROL — the identical call succeeds
+       once the row is restored — so the rejection is pinned to the missing
+       row and not to anything else.
+       - **The `submit_picks` fake had NO schedule check at all** until this
+         day — a league with zero overlay rows could "save" picks the real
+         RPC rejects. Now mirrors the real block in the real order:
+         bracket, show, overlay row ("This show is not on this league's
+         schedule"), `voting_override` locked/open, null cutoff ("Picks are
+         not open for this show yet"), passed cutoff. Suite stayed green
+         with no fixture changes, so no existing scenario depended on the
+         permissiveness. Same family as the `get_show_picks` cutoff gate.
+       - **`can_submit_picks` was deliberately NOT tightened.** The plan said
+         "both"; the real one runs only `_official_gate` and never reads
+         `league_shows`, so adding the check there would make the fake
+         STRICTER than production — the opposite error. Plan corrected
+         against the SQL before writing.
+       - **Mutation** (restore the fixture's overlay rows): pill, button,
+         detail-view and rejection checks fail in both modes — 8 failures —
+         while "still listed" and the positive control correctly survive,
+         since both hold either way. Reverted by anchored edit, confirmed
+         by case-sensitive grep for the marker.
+       - **The scorer skip is NOT exercised and is stated as such** in the
+         scenario header: `eligibleLeagueShows()` lives in `index.ts`,
+         off-limits this week and not unit-testable until the shared-module
+         move. Verified by reading only.
+    6. **THE POST-FIRST-SHOW BATCH — one batch, one deploy, after the first
+       Green Eggs show scores cleanly. Decided 2026-10-11; nothing in it
+       ships before then.** Contents: (a) apply Stage R; (b) the
+       `CRON_SECRET` dual-path change WITH hourly `sync_shows`; (c) the
+       Shows-panel "Not on this league's schedule" label (part E, approved
+       as a plan, HELD — the state it handles no longer exists in either
+       league); (d) the admin cutoff-fallback DST fix (part F, approved as a
+       plan, HELD — see the Frontend/CSS gotchas entry). (c) and (d) both
+       touch `admin.js`, i.e. a rebuilt bundle on `main` and a Pages
+       deploy, which is exactly what this week excludes. `src/` and the
+       bundle were not touched on 2026-10-11, verified by `git status`
+       before each commit.
   - **PRE-SYNC SAFETY CHECK, 2026-10-11 (read-only) — VERDICT: SAFE TO
     PRESS "Sync shows". Approved by the dev the same day.** What was
     checked, so the next data fix of this kind can reuse the list:
@@ -1825,7 +1867,10 @@ before assuming a change is covered just because the suite is green:
     Change cutoff is off-limits for November and December shows in both
     leagues.** Technically only the two null-timezone shows are exposed;
     the blanket rule is the dev's call and stands.
-  - **Fix, plan only, not yet approved:** make the fallback use the device
+  - **Fix — APPROVED AS A PLAN 2026-10-11, HELD for the post-first-show
+    batch (item 6 of the 🚨 entry's LOCKED list). Not written: it changes
+    `admin.js`, so a rebuilt bundle and a deploy, excluded this week.**
+    Make the fallback use the device
     zone the same way the known-zone branch uses the venue zone — pass
     `Intl.DateTimeFormat().resolvedOptions().timeZone` to
     `venueLocalInputValue` for display and `venueLocalToUTC` for save, so

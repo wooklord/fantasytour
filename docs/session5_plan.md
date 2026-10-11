@@ -62,10 +62,12 @@ league's creation.
   `venueCutoffISO` exactly; state whether SQL and TS can drift and how to
   pin them. Name the migration file and the catalog check that proves it
   applied (Stage F turned out never to have been).
-- **C. Zero-overlay fixture.** League with members and an active season but
-  no `league_shows` rows: assert "no cutoff" renders, `submit_picks` raises,
-  scorer skips. Mutation-test by giving the fixture overlay rows and
-  confirming the test fails.
+- **C. Zero-overlay fixture — ✅ DONE 2026-10-11, test files only.**
+  `runNoOverlayScenario` + six checks; `submit_picks` fake now mirrors the
+  real schedule/cutoff block (`can_submit_picks` left alone — the real one
+  has no such check). Mutation: restoring the rows fails 4 checks × 2 modes,
+  the two that hold either way survive. Scorer skip NOT exercised, stated in
+  the scenario header. Details in CLAUDE.md's 🚨 entry, item 5.
 - **D. Cron — HELD. ✅ Documented 2026-10-11.** The `CRON_SECRET` dual-path
   change is documented in CLAUDE.md under "DECIDED 2026-08-17, NOT STARTED:
   `sync_shows`, `sync_songs` and `score` ... are COMPLETELY UNAUTHENTICATED"
@@ -73,7 +75,19 @@ league's creation.
   **schedule `sync_shows` hourly, after the first Green Eggs show scores.**
   Nothing implemented, nothing scheduled. When it is done, the cron work
   and Stage R's apply happen in the same batch.
-- **E. Shows panel label** for a missing overlay row. Plan only.
+- **E. Shows panel label** for a missing overlay row — **APPROVED AS A
+  PLAN 2026-10-11, HELD.** Detect a missing row by `sh.status === undefined`
+  after `fetchShows`' spread (real rows always carry a status); render "Not
+  on this league's schedule — run Sync shows" instead of the input and omit
+  Change cutoff and the format switcher (both RPCs raise "Show not found"
+  on a missing row). `admin_set_cutoff` stays update-only. Not written: it
+  changes `admin.js`, and the state no longer exists in either league.
+
+**THE POST-FIRST-SHOW BATCH (decided 2026-10-11): one batch, one deploy,
+after the first Green Eggs show scores cleanly.** (a) apply Stage R;
+(b) `CRON_SECRET` dual path + hourly `sync_shows`; (c) part E label;
+(d) part F display fix. Nothing in it ships before then. `src/` and the
+bundle untouched this week.
 - **F. (added 2026-10-11) Admin cutoff fallback shows the wrong hour** on
   null-timezone shows when device DST ≠ show-date DST — the two D.C. shows
   read 7:00 PM for a 6:00 PM Eastern cutoff. Display-only; the write path is

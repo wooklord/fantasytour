@@ -124,6 +124,30 @@ const RPC_HANDLERS = {
   // saved slots with whatever was just submitted, not a merge.
   submit_picks: async ({ p_name, p_bracket_id, p_show_id, p_picks }, tables) => {
     const player = tables.players_public.find(p => p.name === p_name);
+    // Mirrors the real RPC's schedule/cutoff block (sql/stage_o_ranked_
+    // submit_picks.sql), in the real order and with the real messages.
+    // Until 2026-10-11 this fake had NO schedule check at all, so a league
+    // with zero league_shows rows — Green Eggs' state for two months — could
+    // "save" picks here that production rejects. A fake more permissive than
+    // the RPC is the shape that hid the orphan-check bug; this closes the
+    // same gap for the overlay row. (can_submit_picks is deliberately NOT
+    // given this check: the real one runs only _official_gate and never
+    // reads league_shows, so adding it there would make the fake STRICTER
+    // than production — the opposite error.)
+    const brk = tables.brackets.find(b => b.id === p_bracket_id);
+    if (!brk) throw new Error("Bracket not found");
+    const sh = tables.shows.find(s => s.id === p_show_id);
+    if (!sh) throw new Error("Show not found");
+    const ls = tables.league_shows.find(l => l.league_id === brk.league_id && l.show_id === p_show_id);
+    if (!ls) throw new Error("This show is not on this league's schedule");
+    const ov = (brk.config && brk.config.voting_override) || "auto";
+    if (ov === "locked") throw new Error("Voting is locked by the admin");
+    if (ov === "open"){
+      if (sh.showdate < new Date().toLocaleDateString("sv")) throw new Error("That show already happened");
+    } else {
+      if (!ls.cutoff_at) throw new Error("Picks are not open for this show yet");
+      if (Date.now() >= new Date(ls.cutoff_at).getTime()) throw new Error("Picks are locked for this show");
+    }
     tables.picks = tables.picks.filter(pk =>
       !(pk.player_id === player.id && pk.bracket_id === p_bracket_id && pk.show_id === p_show_id));
     const saved = (p_picks || []).filter(p => (p.songname || "").trim());
@@ -1637,4 +1661,77 @@ export async function runCatalogWhitespaceScenario({ html, scripts, mode }){
   await tick(); await tick();
 
   return { confirmCalls, openerValue, coverValue, savedPicks: tables.picks };
+}
+
+// A league with members and a LIVE Official season but NO league_shows rows
+// — the exact state Green Eggs sat in from 2026-08-17 to 2026-10-11, found
+// only when a player noticed every button said "Score" three days before the
+// season started. Every other fixture has overlay rows, so this path had
+// never rendered in the suite.
+//
+// What this pins, and what it cannot:
+//   * Client: showState() returns "no cutoff" when the overlay row is absent
+//     (cutoff_at undefined), shows.js labels the button "Score", the pill
+//     reads "no cutoff", the show is still LISTED (it comes from the global
+//     shows table), and openShow() renders the detail view, never the pick
+//     sheet.
+//   * RPC fake: submit_picks rejects with the real RPC's message. Calling the
+//     fake directly asserts the FAKE's fidelity, not the SQL — stated rather
+//     than dressed up as coverage. The positive control (same call succeeds
+//     once a row exists) is what makes the negative meaningful: it proves the
+//     rejection is BECAUSE of the missing row, not for some unrelated reason.
+//   * Scorer: NOT exercised. eligibleLeagueShows() lives in index.ts (Deno)
+//     and filters league_shows rows; with no rows there is nothing to score.
+//     That stays verified by reading until venueCutoffISO/scoring helpers
+//     move to a shared module in the post-first-show batch.
+export async function runNoOverlayScenario({ html, scripts, mode }){
+  const { tables } = makeFixtures();
+  const calls = [];
+  const originalOverlay = tables.league_shows.slice();
+  tables.league_shows.length = 0; // the zero-overlay state
+  // A live Official season, so "no season" cannot be the reason anything is
+  // withheld. Dates off the real clock, never hardcoded.
+  const now = Date.now();
+  const d = (off) => new Date(now + off * 864e5).toISOString().slice(0, 10);
+  tables.seasons.push({ id: 503, bracket_id: 11, name: "Live Season", start_date: d(-3), end_date: d(3), roster_locked_at: null });
+
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const { window } = dom;
+  installGlobals(window, mode, tables, RPC_HANDLERS, calls, {});
+  window.localStorage.setItem("ft_session", JSON.stringify(
+    { id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+  for (const src of scripts) window.eval(src);
+  await tick(); await tick();
+  clickTab(window, "shows");
+  await tick(); await tick();
+
+  const rows = [...window.document.querySelectorAll(".showrow")];
+  const list = {
+    rowCount: rows.length,
+    venues: rows.map(r => r.querySelector(".venue")?.textContent || ""),
+    pills: rows.map(r => r.querySelector(".pill")?.textContent.trim() || ""),
+    buttonLabels: rows.map(r => r.querySelector("button")?.textContent.trim() || ""),
+  };
+
+  window.openShow(1);
+  await tick(); await tick();
+  const detail = {
+    sheetInputCount: window.document.querySelectorAll(".slotline input").length,
+    html: mainHTML(window, mode),
+  };
+
+  // Direct calls against the fake — see the header comment for what this
+  // does and does not prove. Casual bracket (10) so _official_gate cannot
+  // be the reason either way.
+  const picks = [{ slot: "opener", songname: "Rambling Boy" }];
+  let submitErrorNoRow = null;
+  try{ await RPC_HANDLERS.submit_picks({ p_name: "Wooklord", p_bracket_id: 10, p_show_id: 1, p_picks: picks }, tables); }
+  catch(e){ submitErrorNoRow = e.message; }
+  // Positive control: restore show 1's row and the identical call succeeds.
+  tables.league_shows.push(originalOverlay.find(l => l.show_id === 1));
+  let submitWithRow = null;
+  try{ submitWithRow = await RPC_HANDLERS.submit_picks({ p_name: "Wooklord", p_bracket_id: 10, p_show_id: 1, p_picks: picks }, tables); }
+  catch(e){ submitWithRow = { error: e.message }; }
+
+  return { list, detail, submitErrorNoRow, submitWithRow };
 }
