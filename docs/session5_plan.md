@@ -114,11 +114,18 @@ bundle untouched this week.
   out** — they see "Wrong name or PIN" until they log out and back in;
   playbook step 1 exists for this. **(3) PROPOSED PIN BATCH, separate and
   AFTER the post-first-show batch, none of it approved:** (a) audit log
-  for resets and boots; (b) admins-resetting-admins policy, PENDING the
-  dev's answer, allow-plus-log vs restrict-to-global; (c) weak-PIN denylist
-  on `change_own_pin`, filed with the rate-limiting item; (d) `random()`
-  for the temporary PIN ACCEPTED as is. Design decisions happen in Chat;
-  nothing ships this week.
+  for resets and boots; (b) admins-resetting-admins policy — **DECIDED
+  2026-10-11: ALLOW-PLUS-LOG** (rejected restrict-to-global: closes the
+  peer route but makes the dev the only recovery for a locked-out league
+  admin; so (b) rides on (a), the RPC does not change); (c) weak-PIN
+  denylist on `change_own_pin`, filed with the rate-limiting item; (d)
+  `random()` for the temporary PIN ACCEPTED as is; (e) client-only hint on
+  "Wrong name or PIN" for a session that previously worked — an admin may
+  have reset your PIN, log out and use the temporary one; (f)
+  `renderBoard` has no catch, so a failed RPC leaves Standings silently
+  stale — add error handling to match the other tabs, client-only, not
+  PIN-specific, filed here because it surfaced here. Design decisions
+  happen in Chat; nothing ships this week.
 
 **B status, 2026-10-11:** `sql/stage_r_seed_league_shows_on_create.sql`
 WRITTEN, NOT APPLIED (first lines of the file say so). Live

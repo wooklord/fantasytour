@@ -3764,14 +3764,17 @@ Read-only; nothing changed. Playbook for admins:
     player, actor, league, timestamp, written INSIDE `admin_reset_player_pin`
     and `admin_league_boot` so it cannot be skipped. Proposed, not
     approved.
-  - **(b) Policy on league admins resetting other league admins — PENDING
-    the dev's answer.** Two options: *allow-plus-log* (keeps the
-    recovery path symmetric when one admin is the one locked out, and (a)
-    makes it visible after the fact) versus *restrict-to-global* (one
-    line in the RPC, closes a peer-takeover route, but makes the dev the
-    only recovery for a locked-out league admin — the admin-reset
-    fallback the "Resolved (Session 4)" entry says must exist). Record the
-    choice here when made.
+  - **(b) Policy on league admins resetting other league admins —
+    DECIDED 2026-10-11 (dev): ALLOW-PLUS-LOG.** League admins keep the
+    ability to reset each other; (a)'s audit log is what makes it
+    accountable after the fact. The recovery path stays symmetric when
+    one admin is the one locked out. **Rejected: restrict-to-global** —
+    one line in the RPC and it closes the peer-takeover route, but it
+    makes the dev the only recovery for a locked-out league admin, which
+    is exactly the admin-reset fallback the "Resolved (Session 4)" entry
+    says must exist. So (b) depends on (a): the RPC does not change, the
+    log is the control. Until (a) ships, the current behaviour (allowed,
+    unlogged) stands as the accepted state.
   - **(c) Weak-PIN denylist on `change_own_pin`** (repeated digits,
     straight sequences, 1234 and friends, plausible birth years). Proposed;
     it is part (3) of the login rate-limiting item (Pre-Session-5 gate
@@ -3779,6 +3782,19 @@ Read-only; nothing changed. Playbook for admins:
   - **(d) `random()` is Postgres's non-cryptographic PRNG. ACCEPTED** for a
     six-digit temporary PIN that must be changed on first login and is
     relayed by a human — not worth `gen_random_bytes` until (c) exists.
+  - **(e) "Your PIN may have been reset" hint — client-only, from the
+    session trace above.** When an RPC fails with "Wrong name or PIN" for
+    a session that previously worked (i.e. `state.session` exists, so the
+    PIN once authenticated), show a one-line hint next to the error: an
+    admin may have reset your PIN — log out and log in with the temporary
+    one. Today the old device gets the bare error on four different
+    surfaces and nothing says why. Proposed, not approved.
+  - **(f) `renderBoard` (Standings) has NO catch — client-only, not
+    PIN-specific, filed here because it surfaced here.** A failed
+    `get_bracket_scores` leaves the board silently stale with only a
+    console error, where every other tab renders a visible failure
+    (`boot()`'s panel, `renderShowDetailError`, `#p-err`). Add error
+    handling to match. Proposed, not approved.
   - Side note from the same read: `admin_reset_player_pin` carries the
     default PUBLIC execute grant alongside its anon grant. Harmless here
     (the body authenticates; anon has it anyway), same gap the
