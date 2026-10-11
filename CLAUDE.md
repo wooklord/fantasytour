@@ -566,6 +566,49 @@ before assuming a change is covered just because the suite is green:
        entry), not a separate change.
     5. **A zero-overlay test fixture** is wanted — every current fixture has
        overlay rows, so this path has never rendered in the suite.
+  - **PRE-SYNC SAFETY CHECK, 2026-10-11 (read-only) — VERDICT: SAFE TO
+    PRESS "Sync shows". Approved by the dev the same day.** What was
+    checked, so the next data fix of this kind can reuse the list:
+    - **Window contents, from The Carton itself, not the DB** — the sync
+      writes whatever the API returns, so the DB alone cannot predict it.
+      200 rows returned; 16 survive the 14-day floor; same 16 ids as
+      `shows`; earliest 2026-10-15, so NO past show gets a Green Eggs row.
+      Festival-tag query empty.
+    - **New rows carry `status = 'upcoming'` (column default) and NULL
+      announcement flags** — the insert writes only league/show/cutoff/
+      format. Harmless for future shows. For a PAST show it would be:
+      older than yesterday → never scored (eligibility floor), lock notice
+      skipped (`showdate < easternDate(-1)`), never finalized, sits
+      `upcoming` forever; yesterday/today → scores with zero picks and
+      posts "0 sheets in".
+    - **League 1 untouched in `league_shows`**: 0 missing overlays, 0 null
+      cutoffs, no festival ids, so all three write paths are no-ops. The
+      `shows` upsert rewrites 16 rows with values compared field-by-field
+      (venue after entity decoding, city, state, permalink, timezone) and
+      found identical; `created_at` is not in the payload. Only effect: 16
+      UPDATE events on `shows`, which nothing in `realtime.js` subscribes
+      to. `sync_shows` runs no scoring, and the next cron tick has nothing
+      to fire (no cutoff within 1h or passed).
+    - **Null-state shows 1786388421/1786388443 (Washington, D.C.)** get the
+      Eastern fallback: 18:00 ET = 23:00 UTC on Nov 20/21 (EST). Correct by
+      luck of geography and identical to league 1's rows. `admin_set_cutoff`
+      works once the row exists; the panel shows device-local with the
+      "timezone unknown" caveat.
+    - **The one production-behaviour change the data fix UNLOCKS — Discord
+      routing. DECIDED 2026-10-11: provision `DISCORD_WEBHOOK_GREEN_EGGS`
+      before 2026-10-15 21:00 UTC.** `supabase secrets list` (names only)
+      shows `DISCORD_WEBHOOK` and the platform defaults — no per-league
+      secret for Green Eggs — so `notifyLeague` falls back to the global
+      hook, i.e. the Ambassadors channel. Without the secret, from the first
+      show that channel gets Green Eggs' 1-hour reminder (naming Green Eggs
+      non-voters), lock notice and winner, and every song-by-song post
+      TWICE (once per league, both resolving to the same hook). There is no
+      mute value: an empty secret is falsy and falls through. A secret, not
+      code — no deploy.
+    - **Side observation, not for this week:** The Carton's `shows.json`
+      rows now carry a `timezone` field per show. It could replace
+      `STATE_TZ` and the null-state fallback outright. Unverified beyond
+      the field's presence.
   - **Three secondary findings from the same read, each its own thing:**
     - **Stage F was never applied.** `league_members.official_opt_in` has
       `column_default = false` in the live catalog, though

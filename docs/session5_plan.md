@@ -38,13 +38,22 @@ league's creation.
 - Review-before-edit for every code change: plan shown, approval, then edit.
 
 **Work plan, A → E, each as plan-then-approve:**
-- **A. Pre-sync safety check (read-only).** Which window shows lack a
-  league-2 row and which already happened; what `syncShows` does to the
-  announcement flags on a new row for a PAST show and what the scorer and
-  notifier then do with a zero-pick show; what the sync does to league 1
-  (expected: nothing); what cutoff the two null-state shows (ids
-  1786388421, 1786388443) receive and that `admin_set_cutoff` can correct
-  it; then a plain safe/not-safe verdict.
+- **A. Pre-sync safety check — ✅ DONE 2026-10-11, verdict SAFE, dev
+  approved pressing "Sync shows".** 16 window shows, all future, same ids
+  on The Carton and in `shows`; league 1 gets zero `league_shows` writes and
+  a byte-identical `shows` upsert; null-state shows land on 23:00 UTC
+  (Eastern fallback, correct for D.C.). Full list in CLAUDE.md's 🚨 entry.
+  - **Decision folded in: provision `DISCORD_WEBHOOK_GREEN_EGGS` before
+    2026-10-15 21:00 UTC** (the first reminder). No per-league secret
+    exists today, so Green Eggs' messages would fall back to the Ambassadors
+    channel and song-by-song posts would double up. This is the old step 4
+    of "Next steps", now dated.
+  - **Post-sync verification to run (read-only):** `league_shows` for
+    league 2 should hold exactly 16 rows, 0 null cutoffs, all
+    `status = 'upcoming'`, all flags null; league 1 still 37 rows; the
+    sync's response should read `overlays_created: 16, cutoffs_defaulted:
+    16`. The two D.C. shows should show `23:00:00+00`. Then confirm the
+    button label flips to "Pick" in the app.
 - **B. Seed overlays in `global_create_league`.** One row per existing show
   at creation, `cutoff_at` = 6 PM in `coalesce(shows.timezone,
   'America/New_York')`, past-show flags stamped as Stage A did. Must match
