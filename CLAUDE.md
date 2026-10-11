@@ -605,6 +605,15 @@ before assuming a change is covered just because the suite is green:
       TWICE (once per league, both resolving to the same hook). There is no
       mute value: an empty secret is falsy and falls through. A secret, not
       code — no deploy.
+    - **✅ SYNC PRESSED AND VERIFIED 2026-10-11 ~17:00Z.** League 2: 16
+      rows, 0 null cutoffs, 16 × `upcoming`, 0 flags set, and a row-by-row
+      join against league 1 for the same 16 shows found zero cutoff or
+      format differences. D.C. shows at `23:00:00+00` on 2026-11-20/21 in
+      both leagues. League 1: still 37 rows, 0 null cutoffs, the 16 window
+      rows byte-identical to the pre-press reading. `shows`: still 37,
+      `max(created_at)` still 2026-08-15 (the upsert added nothing). Cron
+      responses after the press: still `"note":"no eligible shows"`.
+      **Green Eggs' first season can now take picks.**
     - **Side observation, not for this week:** The Carton's `shows.json`
       rows now carry a `timezone` field per show. It could replace
       `STATE_TZ` and the null-state fallback outright. Unverified beyond
@@ -2783,7 +2792,8 @@ rather than being deleted.
 |---|---|---|---|
 | **2026-08-14** | ✅ **DONE** | **Ranked-choice deploy batch** — carton-sync deployed, Stage O applied, verified end to end (ranked save accepted, duplicate rejected, slots-mode save unaffected) | "✅ RESOLVED 2026-08-14 — ranked-choice deploy batch…" in Postgres/Supabase gotchas |
 | **2026-08-14** | ✅ **DONE** | **Test 3 roster check** — activated 04:00:04Z, 14 rows, all 13 originals kept their timestamps, the new row landed 0.1s before the stamp | "✅ VERIFIED 2026-08-14: Test 3 activated cleanly…" in Postgres/Supabase gotchas |
-| **2026-10-14** | ⏳ **OPEN** | **Green Eggs' first season starts — its 16 upcoming shows must have `league_shows` rows (with cutoffs) before then.** Zero exist as of 2026-10-11. Fix is the data-only "Sync shows" press after a read-only pre-sync check; nothing else changes that week | "🚨 FOUND 2026-10-11 — A NEW LEAGUE GETS ZERO `league_shows` ROWS" at the top of Postgres/Supabase gotchas |
+| **2026-10-14** | ✅ **DONE 2026-10-11** | **Green Eggs' first season starts — its 16 upcoming shows must have `league_shows` rows (with cutoffs) before then.** "Sync shows" pressed ~17:00Z after the read-only pre-sync check; verified: 16 rows, 0 null cutoffs, all `upcoming`, all flags null, cutoffs identical to league 1's for the same 16 shows; league 1 still 37 rows and unchanged; cron still "no eligible shows" | "🚨 FOUND 2026-10-11 — A NEW LEAGUE GETS ZERO `league_shows` ROWS" at the top of Postgres/Supabase gotchas |
+| **2026-10-15 21:00 UTC** | ⏳ **OPEN** | **`DISCORD_WEBHOOK_GREEN_EGGS` must exist before Green Eggs' first 1-hour reminder fires** (show 1786387666, cutoff 22:00Z). Without it `notifyLeague` falls back to the global hook — the Ambassadors channel — which then gets Green Eggs' reminder naming non-voters, lock, winner, and every song post twice. Dev sets it in the dashboard; verify by NAME only, never print or ask for the value | "PRE-SYNC SAFETY CHECK, 2026-10-11" sub-bullet inside the 🚨 entry |
 | **2026-08-14** (checked 2026-08-15) | ✅ **DONE** | **First production run of `scoreRankedPicks`** — Casual, show `1765912122`, finalized 12:00:04Z. All five checks pass: ladder values per row (`rank1` paid 6, not 1), no Any Debut row, perfect-sheet correctly withheld, totals reconcile. Rank ordering passes but is verified by test only — see the caveat, it is not a pending task | "✅ VERIFIED 2026-08-15 — FIRST PRODUCTION RUN OF `scoreRankedPicks`…" in Postgres/Supabase gotchas |
 
 **Every 2026-08-14 item closed.** The ranked-choice deploy batch met its hard

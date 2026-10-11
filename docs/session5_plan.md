@@ -48,12 +48,14 @@ league's creation.
     exists today, so Green Eggs' messages would fall back to the Ambassadors
     channel and song-by-song posts would double up. This is the old step 4
     of "Next steps", now dated.
-  - **Post-sync verification to run (read-only):** `league_shows` for
-    league 2 should hold exactly 16 rows, 0 null cutoffs, all
-    `status = 'upcoming'`, all flags null; league 1 still 37 rows; the
-    sync's response should read `overlays_created: 16, cutoffs_defaulted:
-    16`. The two D.C. shows should show `23:00:00+00`. Then confirm the
-    button label flips to "Pick" in the app.
+  - **✅ Post-sync verification PASSED 2026-10-11 ~17:00Z:** league 2 holds
+    exactly 16 rows, 0 null cutoffs, all `upcoming`, all flags null, cutoffs
+    identical to league 1's for the same 16 shows; D.C. shows at
+    `23:00:00+00`; league 1 still 37 rows, window rows unchanged; cron still
+    "no eligible shows". Not yet eyeballed: the button label flipping to
+    "Pick" in the app (needs a reload — `max-age=600`).
+  - **⏳ OPEN, dated 2026-10-15 21:00 UTC:** `DISCORD_WEBHOOK_GREEN_EGGS`
+    set in the dashboard by the dev. Verify by name only.
 - **B. Seed overlays in `global_create_league`.** One row per existing show
   at creation, `cutoff_at` = 6 PM in `coalesce(shows.timezone,
   'America/New_York')`, past-show flags stamped as Stage A did. Must match
