@@ -3090,6 +3090,16 @@ The shape of the fix is settled; only the implementation is outstanding.
   (Scheduling `sync_shows` would make the cron-only version viable and is
   independently worth doing — see the zero-overlay finding — but it is a
   separate change and does not replace this decision.)
+- **SCOPE ADDED 2026-10-11, HELD: schedule `sync_shows` hourly on the cron,
+  AFTER the first Green Eggs show has scored cleanly.** Same change, not a
+  separate one: the cron SQL is being touched anyway for the secret header,
+  and an hourly `sync_shows` is what makes the "Sync shows" button a
+  convenience instead of the only way a new show or a new league ever gets
+  overlay rows (Green Eggs ran two months with none — see the 🚨 entry in
+  Postgres/Supabase gotchas). Stage R seeds a league at creation; this
+  covers shows that appear afterwards. **Do not implement or schedule
+  before that first clean score** — the dev's explicit hold, so a scoring
+  problem on opening night is never confounded with a cron change.
 - **PRIORITY: below gate items #1 (login rate-limiting) and #2 (`ft_session`
   plaintext PIN).** Those yield account and admin takeover — persistent,
   silent, targeted. This one yields availability degradation only: no data

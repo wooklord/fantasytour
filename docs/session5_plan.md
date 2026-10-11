@@ -66,8 +66,13 @@ league's creation.
   no `league_shows` rows: assert "no cutoff" renders, `submit_picks` raises,
   scorer skips. Mutation-test by giving the fixture overlay rows and
   confirming the test fails.
-- **D. Cron — HELD.** Document only: add "schedule `sync_shows` hourly,
-  after first Green Eggs show scores" to the `CRON_SECRET` change's scope.
+- **D. Cron — HELD. ✅ Documented 2026-10-11.** The `CRON_SECRET` dual-path
+  change is documented in CLAUDE.md under "DECIDED 2026-08-17, NOT STARTED:
+  `sync_shows`, `sync_songs` and `score` ... are COMPLETELY UNAUTHENTICATED"
+  (it has no section of its own in this file). Its scope now carries:
+  **schedule `sync_shows` hourly, after the first Green Eggs show scores.**
+  Nothing implemented, nothing scheduled. When it is done, the cron work
+  and Stage R's apply happen in the same batch.
 - **E. Shows panel label** for a missing overlay row. Plan only.
 - **F. (added 2026-10-11) Admin cutoff fallback shows the wrong hour** on
   null-timezone shows when device DST ≠ show-date DST — the two D.C. shows
