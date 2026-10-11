@@ -99,7 +99,26 @@ bundle untouched this week.
   correct, but a no-edit re-save shifts the cutoff +1h. Players unaffected.
   Full entry at the top of CLAUDE.md's Frontend/CSS gotchas. **Rule until
   fixed: Change cutoff is off-limits for Nov/Dec shows in both leagues.**
-  Fix plan only, not approved.
+  Fix APPROVED AS A PLAN 2026-10-11, HELD for the post-first-show batch
+  (item (d) above). (This line read "not approved" until later the same
+  day — stale, corrected 2026-10-11 to match CLAUDE.md.)
+- **G. (added 2026-10-11) Admin PIN reset, read from the live catalog —
+  read-only, nothing changed.** Green Eggs has three league admins; this is
+  their recovery path. Playbook written for them:
+  `docs/admin_playbook_forgot_pin.md`. Full findings in CLAUDE.md's
+  "ADMIN PIN RESET — READ FROM THE LIVE CATALOG 2026-10-11" entry. Three
+  things to carry: **(1) CORRECTION** — the Chat-relayed claim that an
+  `admin_set_player_pin` skipped `must_change_pin` was wrong; the function
+  never existed, `admin_reset_player_pin` has always set the flag. **(2) A
+  reset breaks the player's sessions on every device without logging them
+  out** — they see "Wrong name or PIN" until they log out and back in;
+  playbook step 1 exists for this. **(3) PROPOSED PIN BATCH, separate and
+  AFTER the post-first-show batch, none of it approved:** (a) audit log
+  for resets and boots; (b) admins-resetting-admins policy, PENDING the
+  dev's answer, allow-plus-log vs restrict-to-global; (c) weak-PIN denylist
+  on `change_own_pin`, filed with the rate-limiting item; (d) `random()`
+  for the temporary PIN ACCEPTED as is. Design decisions happen in Chat;
+  nothing ships this week.
 
 **B status, 2026-10-11:** `sql/stage_r_seed_league_shows_on_create.sql`
 WRITTEN, NOT APPLIED (first lines of the file say so). Live

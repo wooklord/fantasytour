@@ -3697,6 +3697,93 @@ RPC, differing only in `p_league_id`. That RPC sets
 statement in non-archive SQL that writes `pin_hash` is `change_own_pin`,
 which clears the flag. There is no second path to miss.
 
+**ADMIN PIN RESET — READ FROM THE LIVE CATALOG 2026-10-11, because three
+Green Eggs league admins now exist and this is the path they will use.
+Read-only; nothing changed. Playbook for admins:
+`docs/admin_playbook_forgot_pin.md`.**
+- **⚠️ CORRECTION, RECORDED AT FULL WEIGHT: a claim circulated in Claude
+  Chat — relayed from an August chat transcript, never from the repo — that
+  `resetMemberPin` called an `admin_set_player_pin` which did NOT set
+  `must_change_pin`, so a league admin kept permanent knowledge of a reset
+  player's PIN. THAT CLAIM WAS WRONG; THE CODE WAS RIGHT.** The live
+  catalog has no `admin_set_player_pin`; `git log --all -S` finds the name
+  in no commit, ever; no file in the repo and no commit carries the date
+  the claim was attributed to (2026-08-22). The only reset RPC is
+  `admin_reset_player_pin`, and its live body sets `must_change_pin =
+  true` in the same UPDATE that writes the hash — as the "NOT a bug"
+  entry immediately above already recorded on 2026-08-17. Same family as
+  the false-memory entries elsewhere in this file: a transcript read back
+  as the repo. **A claim about what a function does is settled by
+  `pg_get_functiondef`, not by any chat.**
+- **What the reset actually is (live body):** caller authenticates and
+  passes `_reject_if_must_change_pin`; `_is_league_admin_or_global(caller,
+  p_league_id)` gates it; target must exist; a global-admin target needs a
+  global-admin caller; a non-global caller's target must have a
+  `league_members` row in `p_league_id`. Then a six-digit temporary PIN
+  (`lpad(floor(random()*1000000), 6, '0')`), bcrypt-hashed, flag set,
+  `new_pin` returned once. Frontend: one `confirm()`, then a blocking
+  `alert()` with the PIN (`resetMemberPin`, `admin.js`). The admin never
+  chooses the PIN and knows the temporary one only until the player's
+  next login; `change_own_pin` (`^\d{4,8}$`, no denylist) replaces it and
+  clears the flag.
+- **Scope, by target:** another league's member — blocked ("That player
+  is not in this league"); **another league admin in the same league —
+  ALLOWED, nothing checks the target's admin flag**, so the three Green
+  Eggs admins can reset each other; a global admin — blocked for a league
+  admin. One global admin exists.
+- **Accountability: NONE.** No audit table, no trigger in `public`, no
+  `updated_at` on `players`, no reset timestamp, no actor. The dashboard
+  API log sees a `POST .../rpc/admin_reset_player_pin` with the shared
+  anon key and cannot say which admin pressed it.
+- **The button:** one confirm, plain `.btn.ghost.small` — indistinguishable
+  from any small button, while Boot beside it is coral with two confirms.
+  Already flagged in the "Members panel signalling" entry above.
+- **A RESET BREAKS THE PLAYER'S EXISTING SESSIONS ON EVERY DEVICE, BUT
+  DOES NOT LOG THEM OUT — traced 2026-10-11.** `ft_session` stores the
+  plaintext PIN and every RPC sends `state.session.pin`; 31 of the 35
+  public RPCs call `_auth_player`, which recomputes `crypt(p_pin,
+  pin_hash)` against the NEW hash and raises "Wrong name or PIN". The four
+  that don't (`get_league_shows`, `get_bracket_seasons`,
+  `register_player`, `rls_auto_enable`) take no PIN. Nothing server-side
+  pushes a logout and the stored session's `must_change_pin` is the OLD
+  login's `false`, so the forced-change screen never appears on the old
+  device. **What the player sees there, by surface:** the shows list still
+  renders (public read); opening a show → "Couldn't load this show /
+  Wrong name or PIN" (`can_submit_picks`); saving picks → "Wrong name or
+  PIN" in `#p-err`; Standings → stops updating silently (`renderBoard`
+  has no catch); a full reload → "Something broke loading the app / Wrong
+  name or PIN" with Reload and Log out (`my_leagues` in `boot()`).
+  Realtime toasts keep arriving (anon key, no PIN). Recovery is Log out →
+  log in with the temporary PIN → forced change. No message says "your
+  PIN was reset". The playbook's step 1 ("only reset someone who
+  genuinely cannot log in") exists because of this.
+- **PROPOSED — a separate PIN batch, AFTER the post-first-show batch, NOT
+  added to it. Recorded 2026-10-11; none of it approved, none of it
+  scheduled:**
+  - **(a) Audit log for admin resets and boots.** A table with target
+    player, actor, league, timestamp, written INSIDE `admin_reset_player_pin`
+    and `admin_league_boot` so it cannot be skipped. Proposed, not
+    approved.
+  - **(b) Policy on league admins resetting other league admins — PENDING
+    the dev's answer.** Two options: *allow-plus-log* (keeps the
+    recovery path symmetric when one admin is the one locked out, and (a)
+    makes it visible after the fact) versus *restrict-to-global* (one
+    line in the RPC, closes a peer-takeover route, but makes the dev the
+    only recovery for a locked-out league admin — the admin-reset
+    fallback the "Resolved (Session 4)" entry says must exist). Record the
+    choice here when made.
+  - **(c) Weak-PIN denylist on `change_own_pin`** (repeated digits,
+    straight sequences, 1234 and friends, plausible birth years). Proposed;
+    it is part (3) of the login rate-limiting item (Pre-Session-5 gate
+    #1) and belongs with it, not alone.
+  - **(d) `random()` is Postgres's non-cryptographic PRNG. ACCEPTED** for a
+    six-digit temporary PIN that must be changed on first login and is
+    relayed by a human — not worth `gen_random_bytes` until (c) exists.
+  - Side note from the same read: `admin_reset_player_pin` carries the
+    default PUBLIC execute grant alongside its anon grant. Harmless here
+    (the body authenticates; anon has it anyway), same gap the
+    `_auth_player` entry documents, worth revoking in the same batch.
+
 **FIX CANDIDATE: there are TWO fallbacks for a missing `oneset` config
 section, and they disagree with each other. That disagreement is the bug —
 not either fallback on its own.** Found 2026-08-17 on the newly-created
