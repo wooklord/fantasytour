@@ -237,7 +237,27 @@ const RPC_HANDLERS = {
   global_create_league: async ({ p_league_name }, tables) => {
     const id = Math.max(0, ...tables.leagues.map(l => l.id)) + 1;
     tables.leagues.push({ id, name: p_league_name });
-    return { ok: true, league_id: id };
+    // Stage R (sql/stage_r_seed_league_shows_on_create.sql): the real RPC
+    // seeds one league_shows row per existing show, so the fake must too —
+    // a fake that leaves the new league with no overlay rows is MORE
+    // permissive than production and would hide exactly the bug Stage R
+    // fixes (Green Eggs ran two months with zero rows). Same lesson as the
+    // get_show_picks cutoff gate: the fake has to be at least as strict as
+    // the real thing. Cutoff is a stand-in (22:00Z), not venueCutoffISO —
+    // the test asserts presence and shape, not the hour.
+    const today = new Date().toLocaleDateString("sv");
+    const stamp = new Date().toISOString();
+    let seeded = 0;
+    for (const s of tables.shows){
+      const past = s.showdate < today;
+      tables.league_shows.push({
+        league_id: id, show_id: s.id, cutoff_at: `${s.showdate}T22:00:00.000Z`,
+        format: "standard", status: past ? "final" : "upcoming",
+        remind_sent: past ? stamp : null, lock_sent: past ? stamp : null, winner_sent: past ? stamp : null,
+      });
+      seeded++;
+    }
+    return { ok: true, league_id: id, shows_seeded: seeded };
   },
   global_appoint_league_admin: async ({ p_league_id, p_player_id }, tables) => {
     const existing = tables.league_members.find(lm => lm.league_id === p_league_id && lm.player_id === p_player_id);
@@ -407,7 +427,20 @@ export async function runGlobalAdminScenario({ html, scripts, mode }){
   const wandererIsAdminOfNewLeague = tables.league_members.some(
     lm => lm.league_id === newLeagueId && lm.player_id === "p3" && lm.is_league_admin === true);
 
-  return { adminHtml, sharedTabLabel, leagueCountAfterCreate, appointResultsHtml, wandererIsAdminOfNewLeague };
+  // Stage R: a created league must be on the schedule immediately — one
+  // league_shows row per show, every cutoff set. Shape is asserted against
+  // the fixture's show count (coverage, not a magic number) and against
+  // null cutoffs specifically, because "no cutoff" is the exact state that
+  // left Green Eggs unplayable for two months. Compared to the shows table
+  // rather than to a literal so the check follows the fixture.
+  const newLeagueOverlay = tables.league_shows.filter(ls => ls.league_id === newLeagueId);
+  const newLeagueOverlayRows = newLeagueOverlay.length;
+  const newLeagueOverlayShowIds = newLeagueOverlay.map(ls => ls.show_id).sort();
+  const fixtureShowIds = tables.shows.map(s => s.id).sort();
+  const newLeagueOverlayNullCutoffs = newLeagueOverlay.filter(ls => !ls.cutoff_at).length;
+
+  return { adminHtml, sharedTabLabel, leagueCountAfterCreate, appointResultsHtml, wandererIsAdminOfNewLeague,
+           newLeagueOverlayRows, newLeagueOverlayShowIds, fixtureShowIds, newLeagueOverlayNullCutoffs };
 }
 
 // bootPlayer's confirm — three branches, none of which had ANY coverage

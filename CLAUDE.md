@@ -559,7 +559,41 @@ before assuming a change is covered just because the suite is green:
        except the data fix** — pressing "Sync shows" to create league 2's
        rows, after a read-only pre-sync safety check.
     3. **Seed overlays in `global_create_league`** so a league is correct at
-       creation (plan in `docs/session5_plan.md`; not built).
+       creation. **✍️ WRITTEN 2026-10-11 as
+       `sql/stage_r_seed_league_shows_on_create.sql` — NOT APPLIED. Apply
+       after the first Green Eggs show scores, alongside the cron change.**
+       Until the file's SECTION 3 catalog check passes (body of
+       `global_create_league` contains `insert into league_shows`), the live
+       function is still the stage N body and a new league still starts
+       with zero overlay rows. The file says so in its first lines; this
+       entry says so here, so it cannot be mistaken for live the way Stage
+       F was. Change both together when it is applied.
+       - **Based on the LIVE body, not the stage file**: `pg_get_functiondef`
+         was read 2026-10-11 and diffed, whitespace/CRLF-normalised, against
+         `sql/stage_n_reject_pending_pin_change_writes.sql` — **identical**,
+         so stage N is genuinely applied and nothing drifted in between.
+       - Cutoff computed in SQL as 18:00 in `coalesce(shows.timezone,
+         'America/New_York')`. **It can drift from `venueCutoffISO()`** —
+         the hour and fallback zone are duplicated literals, and the DST
+         probe method differs (TS at 12:00Z, SQL at 18:00 local; equal for
+         any zone whose transitions are at 02:00 local). Pinned at apply
+         time by the file's step 3: every upcoming overlay row, all of
+         which TS wrote, must equal the SQL helper — expected 0 drifted
+         across 32 rows covering both DST offsets and the null-zone
+         fallback. Ongoing pin is four literal asserts, to be mirrored in a
+         node test when `venueCutoffISO` moves to a shared module
+         (post-first-show batch; `supabase/functions` untouched this week).
+       - Past shows seeded `final` with flags stamped (Stage A copied old
+         statuses instead) — so a league created mid-season can still get
+         its champion announced; format always `standard`.
+       - **Harness fake updated the same day** (`test/harness.mjs`,
+         `global_create_league`) to seed overlay rows too, so the fake is no
+         more permissive than the real RPC will be. Two assertions added:
+         overlay show ids equal the fixture's show ids exactly, and zero
+         null cutoffs. **Mutation-tested**: emptying the seed loop fails
+         exactly those two checks in both modes (4 failures), nothing else.
+         Note the fake now models the INTENDED behaviour, not the live one,
+         until Stage R is applied.
     4. **Scheduling `sync_shows` on the cron is HELD until the first Green
        Eggs show has scored cleanly.** Folds into the `CRON_SECRET`
        dual-path change below (the "DECIDED 2026-08-17, NOT STARTED"
@@ -1757,6 +1791,53 @@ before assuming a change is covered just because the suite is green:
 ---
 
 ## Frontend/CSS gotchas learned the hard way
+
+- **BUG, found 2026-10-11, NOT YET FIXED — the admin Shows panel's
+  "Device time — venue timezone unknown" fallback shows the wrong hour
+  whenever the device's DST state today differs from the show date's.**
+  Reported as: the two D.C. shows (1786388421, 1786388443; `shows.state`
+  blank, `shows.timezone` null) render 7:00 PM while the stored value is
+  23:00 UTC = 6:00 PM Eastern in November, and timezone-known shows render
+  6:00 PM correctly. Reproduced in node with `TZ=America/New_York`.
+  - **Display path, the bug** — `src/features/admin.js:397`:
+    `new Date(new Date(sh.cutoff_at).getTime() - new Date().getTimezoneOffset()*6e4)`.
+    `new Date().getTimezoneOffset()` is the device's offset **today** (EDT,
+    240), applied to a November instant where the device offset is EST
+    (300). 23:00Z − 4h = 19:00. The offset-at-that-instant form,
+    `new Date(sh.cutoff_at).getTimezoneOffset()`, gives 18:00.
+  - **Write path does NOT share it** — `saveCutoff`, `admin.js:1171`:
+    `new Date(input.value).toISOString()`. A `datetime-local` string with
+    no zone is parsed as device-local **at that date**, so typing 6:00 PM
+    on a November show stores 23:00Z, correct. **But pressing Change cutoff
+    without editing re-saves the wrongly displayed 19:00 → 00:00Z the next
+    day, a silent one-hour shift.** With a KNOWN timezone both directions
+    go through `venueTime.js` (`venueLocalInputValue` / `venueLocalToUTC`)
+    and are correct for the date.
+  - **Player-facing paths are unaffected, for every show.** `fmtCutoff`
+    (`src/core/format.js`) uses `toLocaleString`, which applies the offset
+    at the instant: "Nov 20, 6:00 PM EST". `shows.js` renders only the
+    countdown; `picks.js` uses `fmtCutoff`.
+  - **Scope, stated precisely:** admin panel only, display only, null-
+    timezone shows only, and only while the device's DST differs from the
+    show date's (each year roughly the second week of October to the first
+    Sunday of November, and the matching March window). Today that is
+    exactly the two D.C. shows. **Dev's rule until fixed (2026-10-11):
+    Change cutoff is off-limits for November and December shows in both
+    leagues.** Technically only the two null-timezone shows are exposed;
+    the blanket rule is the dev's call and stands.
+  - **Fix, plan only, not yet approved:** make the fallback use the device
+    zone the same way the known-zone branch uses the venue zone — pass
+    `Intl.DateTimeFormat().resolvedOptions().timeZone` to
+    `venueLocalInputValue` for display and `venueLocalToUTC` for save, so
+    one code path serves both branches and the device-time branch is
+    DST-correct by the same mechanism. The one-line alternative
+    (`new Date(sh.cutoff_at).getTimezoneOffset()`) fixes display alone and
+    leaves two paths. Test: a `test/venueTime.test.mjs` case for a
+    November instant with a device zone, plus the round-trip (display →
+    save unchanged → same instant). Node honours `TZ` for this, as the
+    repro showed — though on an Eastern machine that cannot be
+    distinguished from the default, so the test should assert against a
+    non-device zone too.
 
 - **`.sheet` (the pick sheet paper card) is theme-invariant — always cream
   paper with dark ink, regardless of which app theme is active.**

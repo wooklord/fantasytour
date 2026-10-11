@@ -307,6 +307,19 @@ async function runMode(mode){
   check("appointing via the Global console makes Wanderer an admin of the new league",
     globalAdmin.wandererIsAdminOfNewLeague === true,
     `wandererIsAdminOfNewLeague: ${globalAdmin.wandererIsAdminOfNewLeague}`);
+  // Stage R — a new league is on the schedule from creation. Coverage, not a
+  // count: the overlay's show ids must equal the fixture's show ids exactly
+  // (so an extra or missing row both fail), and no cutoff may be null (the
+  // state that made Green Eggs unplayable). The fake global_create_league
+  // seeds these; the real RPC does once sql/stage_r_* is APPLIED — until
+  // then this pins the fake to the intended behaviour, not the live one.
+  check("a created league gets one league_shows row per existing show (ids match exactly)",
+    JSON.stringify(globalAdmin.newLeagueOverlayShowIds) === JSON.stringify(globalAdmin.fixtureShowIds)
+      && globalAdmin.fixtureShowIds.length > 0,
+    `overlay show ids: ${JSON.stringify(globalAdmin.newLeagueOverlayShowIds)} vs shows: ${JSON.stringify(globalAdmin.fixtureShowIds)}`);
+  check("a created league's seeded rows all have a cutoff (zero null cutoff_at)",
+    globalAdmin.newLeagueOverlayRows > 0 && globalAdmin.newLeagueOverlayNullCutoffs === 0,
+    `rows: ${globalAdmin.newLeagueOverlayRows}, null cutoffs: ${globalAdmin.newLeagueOverlayNullCutoffs}`);
 
   // Module B — ranked-choice scoring on Casual, slots still on Official.
   const ranked = await runRankedChoiceScenario({ html, scripts, mode });

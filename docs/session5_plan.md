@@ -69,6 +69,20 @@ league's creation.
 - **D. Cron — HELD.** Document only: add "schedule `sync_shows` hourly,
   after first Green Eggs show scores" to the `CRON_SECRET` change's scope.
 - **E. Shows panel label** for a missing overlay row. Plan only.
+- **F. (added 2026-10-11) Admin cutoff fallback shows the wrong hour** on
+  null-timezone shows when device DST ≠ show-date DST — the two D.C. shows
+  read 7:00 PM for a 6:00 PM Eastern cutoff. Display-only; the write path is
+  correct, but a no-edit re-save shifts the cutoff +1h. Players unaffected.
+  Full entry at the top of CLAUDE.md's Frontend/CSS gotchas. **Rule until
+  fixed: Change cutoff is off-limits for Nov/Dec shows in both leagues.**
+  Fix plan only, not approved.
+
+**B status, 2026-10-11:** `sql/stage_r_seed_league_shows_on_create.sql`
+WRITTEN, NOT APPLIED (first lines of the file say so). Live
+`global_create_league` body diffed against stage N: identical. Harness fake
+seeds overlay rows; two new assertions; mutation-tested (emptying the seed
+loop → exactly those two fail, both modes). Apply after the first Green Eggs
+show scores, with the cron change.
 
 **Secondary findings from the same read (details in the CLAUDE.md entry):**
 Stage F's opt-in default was never applied (live default is `false`; all 18
