@@ -12,6 +12,63 @@ by role only. Resolve identities with a query at the time you need them.
 
 ---
 
+## 🚨 Status as of 2026-10-11 — Green Eggs has NO schedule rows; season starts 2026-10-14
+
+**Read this first; everything below it is older.** Green Eggs (league 2,
+Official = bracket 3, Casual = bracket 4) is live, has 18 members (3 admins)
+and a locked 18-row roster for season 11 ("The Final Tour", 2026-10-14 →
+2026-12-06). It also has **zero rows in `league_shows`**, so every show reads
+"no cutoff", every button says "Score", `submit_picks` raises, and the scorer
+skips it. Full root cause and evidence in CLAUDE.md, Postgres/Supabase
+gotchas, the "🚨 FOUND 2026-10-11" entry. Short form: `global_create_league`
+never creates overlay rows, only `syncShows()` does, and nothing but the
+manual "Sync shows" button ever invokes it. Last `sync_shows` predates the
+league's creation.
+
+**Decisions locked 2026-10-11, in the dev's words where they matter:**
+- **Nothing may change production behaviour this week except the data fix**
+  — pressing "Sync shows" to create the 16 overlay rows, after a read-only
+  pre-sync safety check (plan A below).
+- **No second creator of overlay rows.** `admin_set_cutoff` is NOT to become
+  an upsert. The Shows panel gets a "Not on this league's schedule" label
+  instead of a blank input — plan only (E).
+- **Cron scheduling of `sync_shows` is HELD** until the first Green Eggs show
+  has scored cleanly. Scope folds into the `CRON_SECRET` dual-path change
+  (CLAUDE.md "DECIDED 2026-08-17, NOT STARTED") — plan only (D).
+- Review-before-edit for every code change: plan shown, approval, then edit.
+
+**Work plan, A → E, each as plan-then-approve:**
+- **A. Pre-sync safety check (read-only).** Which window shows lack a
+  league-2 row and which already happened; what `syncShows` does to the
+  announcement flags on a new row for a PAST show and what the scorer and
+  notifier then do with a zero-pick show; what the sync does to league 1
+  (expected: nothing); what cutoff the two null-state shows (ids
+  1786388421, 1786388443) receive and that `admin_set_cutoff` can correct
+  it; then a plain safe/not-safe verdict.
+- **B. Seed overlays in `global_create_league`.** One row per existing show
+  at creation, `cutoff_at` = 6 PM in `coalesce(shows.timezone,
+  'America/New_York')`, past-show flags stamped as Stage A did. Must match
+  `venueCutoffISO` exactly; state whether SQL and TS can drift and how to
+  pin them. Name the migration file and the catalog check that proves it
+  applied (Stage F turned out never to have been).
+- **C. Zero-overlay fixture.** League with members and an active season but
+  no `league_shows` rows: assert "no cutoff" renders, `submit_picks` raises,
+  scorer skips. Mutation-test by giving the fixture overlay rows and
+  confirming the test fails.
+- **D. Cron — HELD.** Document only: add "schedule `sync_shows` hourly,
+  after first Green Eggs show scores" to the `CRON_SECRET` change's scope.
+- **E. Shows panel label** for a missing overlay row. Plan only.
+
+**Secondary findings from the same read (details in the CLAUDE.md entry):**
+Stage F's opt-in default was never applied (live default is `false`; all 18
+Green Eggs members opted out; harmless today because the roster is locked);
+season 11's roster locked 2026-08-17, two months before its start, so anyone
+added since is not on it (18 = 18 today); bracket 3 now carries the
+fabricated `oneset` section the admin fallback invents, bracket 4 is still
+raw `def_cfg`.
+
+---
+
 ## Status as of 2026-08-16
 
 **Done tonight:**
@@ -40,7 +97,9 @@ by role only. Resolve identities with a query at the time you need them.
    - Resolved ids, so they don't have to be looked up under pressure:
      **league_id 2**, **Official = bracket 3**, **Casual = bracket 4**.
      (Ambassadors remains league_id 1, Official 1, Casual 2.)
-   - **Neither Green Eggs bracket has a `oneset` config section**, because
+   - **(No longer true for bracket 3 as of 2026-10-11 — a save materialised
+     the admin panel's invented section. Bracket 4 is still as described.)**
+     **Neither Green Eggs bracket has a `oneset` config section**, because
      `def_cfg` does not define one. See the gap recorded below — it is
      display-only today but one save away from being a scoring change.
 3. **Dev added himself** to the new league — see "Why appointing yourself

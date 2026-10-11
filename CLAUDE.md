@@ -515,6 +515,77 @@ before assuming a change is covered just because the suite is green:
 
 ## Postgres / Supabase gotchas learned the hard way
 
+- **🚨 FOUND 2026-10-11 — A NEW LEAGUE GETS ZERO `league_shows` ROWS, SO
+  EVERY SHOW READS "no cutoff", EVERY BUTTON SAYS "Score", NOBODY CAN
+  SUBMIT, AND THE SCORER SKIPS IT. Green Eggs sat in this state from its
+  creation on 2026-08-17 until found 2026-10-11, three days before its
+  first season starts (2026-10-14). This is a CODE-PATH GAP that recurs
+  for every future league, not a one-off data accident.**
+  - **Root cause.** `global_create_league` (`sql/stage_c1_rpcs.sql`)
+    inserts the league and two brackets and nothing else. The ONLY creator
+    of `league_shows` rows is `syncShows()` in the edge function
+    (`index.ts`, the per-league overlay loop), and the only thing that
+    invokes `sync_shows` is the global-admin "Sync shows" button — the cron
+    body is `{"action":"score"}` and nothing else, verified in `cron.job`.
+    Nobody pressed the button after creating the league, so the loop never
+    ran for league 2.
+  - **Evidence, all read-only via psql 2026-10-11:** league 2 has 0
+    `league_shows` rows against league 1's 37 (0 null cutoffs). All 16
+    upcoming shows lack a league-2 row; all 16 fall inside `syncShows`'
+    fetch window. Latest `shows.created_at` is 2026-08-15, two days before
+    the league existed — the last `sync_shows` predates it. The cron has
+    43,200 straight successes in 30 days and every recent response reads
+    `"note":"no eligible shows"`, because `eligibleLeagueShows` filters
+    `cutoff_at not null`.
+  - **How it presents, so the next person recognises it:** `showState()`
+    (`src/core/format.js:29`) returns `"no cutoff"` when `cutoff_at` is
+    falsy, and `shows.js:64` labels anything not `"open"` as "Score".
+    `fetchShows` (`src/core/leagueShows.js`) spreads the overlay row over
+    the base show, so a missing row leaves `cutoff_at`/`status`/`format` all
+    undefined — the show still LISTS (it comes from the global `shows`
+    table), it just has no league state. `submit_picks` and
+    `can_submit_picks` both raise on a missing row ("not on this league's
+    schedule"), so `voting_override = open` would not rescue it either.
+  - **The admin panel CANNOT repair it.** `admin_set_cutoff` is an UPDATE
+    that raises "Show not found for this league" when no row exists; the
+    Shows panel renders a blank cutoff input for such a show and saving
+    fails. The input looks like "no cutoff set yet" when the real state is
+    "no row at all" — two different things with one rendering.
+  - **LOCKED 2026-10-11 (dev):**
+    1. **No second creator of overlay rows.** `admin_set_cutoff` stays
+       UPDATE-only; the Shows panel is to say "Not on this league's
+       schedule" instead of a blank input (plan only, not built).
+    2. **Nothing changes production behaviour the week of 2026-10-11
+       except the data fix** — pressing "Sync shows" to create league 2's
+       rows, after a read-only pre-sync safety check.
+    3. **Seed overlays in `global_create_league`** so a league is correct at
+       creation (plan in `docs/session5_plan.md`; not built).
+    4. **Scheduling `sync_shows` on the cron is HELD until the first Green
+       Eggs show has scored cleanly.** Folds into the `CRON_SECRET`
+       dual-path change below (the "DECIDED 2026-08-17, NOT STARTED"
+       entry), not a separate change.
+    5. **A zero-overlay test fixture** is wanted — every current fixture has
+       overlay rows, so this path has never rendered in the suite.
+  - **Three secondary findings from the same read, each its own thing:**
+    - **Stage F was never applied.** `league_members.official_opt_in` has
+      `column_default = false` in the live catalog, though
+      `sql/stage_f_official_default_optin.sql` sets it `true` — see the
+      correction on the Stage F bullet in the 2.0 key decisions. All 18
+      Green Eggs members are opted OUT. Not blocking today, because season
+      11's roster is locked so `_official_gate` reads `season_rosters`.
+      Another committed-but-not-applied stage file; the catalog, not the
+      commit, is the record.
+    - **Green Eggs' season (id 11) has `roster_locked_at` =
+      2026-08-17 15:34Z, two months BEFORE its 2026-10-14 start.** Roster
+      is frozen at 18 rows = 18 members, so consistent today, but anyone
+      added to the league after that moment is NOT on the roster. How it
+      activated early was not investigated.
+    - **Bracket 3 (Green Eggs Official) now carries the FABRICATED `oneset`
+      section** (opener/closer/cover1, `flat_picks: 3`) that the admin
+      panel's hardcoded fallback invents and a save materialises — exactly
+      the outcome the "two fallbacks disagree" entry below predicted.
+      Bracket 4 (Casual) is still raw `def_cfg`: no `mode`, `oneset`,
+      `tiebreakers` or `custom_rules`.
 - **pgcrypto lives in the `extensions` schema** on Supabase. Every `SECURITY DEFINER`
   function that uses `gen_salt`/`crypt` must `set search_path = public, extensions`
   or it throws "function gen_salt does not exist".
@@ -2052,6 +2123,16 @@ Full spec in `docs/MULTITENANT_SPEC.md`. Summary:
   memberships. Enables global stats (e.g. total shows voted across leagues).
 - **Official participation is opt-IN**, and the toggle is **locked while a season runs**
   — no opting in mid-season. League admin can override.
+  **⚠️ CORRECTION 2026-10-11: the Stage F paragraph below describes a
+  change that was WRITTEN but NEVER APPLIED.** The live catalog has
+  `column_default = false` on `league_members.official_opt_in` (read via
+  `information_schema.columns`, 2026-10-11), and all 18 Green Eggs members
+  carry `false`. Whether the Ambassadors backfill ran is moot (all 14 are
+  `true`, but they were grandfathered `true` by Stage A anyway). So the
+  default is still opt-OUT, exactly the "revisit before the semi-public
+  league" state this bullet asked for — by accident, not decision. Same
+  class as the Stage Q lesson: a stage file in `sql/` proves it was written,
+  never that it ran.
   **Reversed for beta, Stage F (`sql/stage_f_official_default_optin.sql`):**
   `league_members.official_opt_in` now defaults to `true` (was `false`), and
   every existing row was backfilled to `true`, so `admin_add_league_member`
@@ -2616,6 +2697,10 @@ this is the condensed, durable record so the roadmap survives a context boundary
     interstitial uses. **Login rate-limiting and the Official opt-in-default
     revisit stay genuinely deferred** — each gets its own follow-up session,
     see the two gotcha bullets above for why they weren't folded in here.
+- **⚠️ 2026-10-11: the league created here ("Green Eggs") had NO
+  `league_shows` rows for two months — no cutoffs, no picks, no scoring.
+  See the 🚨 entry at the top of Postgres/Supabase gotchas before touching
+  anything else about this league.**
 - **Session 5 — Facebook League launch: PARTIALLY DONE 2026-08-16.** The
   league was created via the real Global console and the dev appointed
   himself to it; **no season, no other admin appointments, and the Discord
@@ -2655,6 +2740,7 @@ rather than being deleted.
 |---|---|---|---|
 | **2026-08-14** | ✅ **DONE** | **Ranked-choice deploy batch** — carton-sync deployed, Stage O applied, verified end to end (ranked save accepted, duplicate rejected, slots-mode save unaffected) | "✅ RESOLVED 2026-08-14 — ranked-choice deploy batch…" in Postgres/Supabase gotchas |
 | **2026-08-14** | ✅ **DONE** | **Test 3 roster check** — activated 04:00:04Z, 14 rows, all 13 originals kept their timestamps, the new row landed 0.1s before the stamp | "✅ VERIFIED 2026-08-14: Test 3 activated cleanly…" in Postgres/Supabase gotchas |
+| **2026-10-14** | ⏳ **OPEN** | **Green Eggs' first season starts — its 16 upcoming shows must have `league_shows` rows (with cutoffs) before then.** Zero exist as of 2026-10-11. Fix is the data-only "Sync shows" press after a read-only pre-sync check; nothing else changes that week | "🚨 FOUND 2026-10-11 — A NEW LEAGUE GETS ZERO `league_shows` ROWS" at the top of Postgres/Supabase gotchas |
 | **2026-08-14** (checked 2026-08-15) | ✅ **DONE** | **First production run of `scoreRankedPicks`** — Casual, show `1765912122`, finalized 12:00:04Z. All five checks pass: ladder values per row (`rank1` paid 6, not 1), no Any Debut row, perfect-sheet correctly withheld, totals reconcile. Rank ordering passes but is verified by test only — see the caveat, it is not a pending task | "✅ VERIFIED 2026-08-15 — FIRST PRODUCTION RUN OF `scoreRankedPicks`…" in Postgres/Supabase gotchas |
 
 **Every 2026-08-14 item closed.** The ranked-choice deploy batch met its hard
