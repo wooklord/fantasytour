@@ -54,8 +54,13 @@ league's creation.
     `23:00:00+00`; league 1 still 37 rows, window rows unchanged; cron still
     "no eligible shows". Not yet eyeballed: the button label flipping to
     "Pick" in the app (needs a reload — `max-age=600`).
-  - **⏳ OPEN, dated 2026-10-15 21:00 UTC:** `DISCORD_WEBHOOK_GREEN_EGGS`
-    set in the dashboard by the dev. Verify by name only.
+  - **⏸️ PAUSED 2026-10-11 (dev's call) — was OPEN, dated 2026-10-15 21:00
+    UTC:** `DISCORD_WEBHOOK_GREEN_EGGS` is on hold; nobody is using the
+    Green Eggs Discord yet. Verified by name only the same day: the secret
+    does not exist. Accepted consequence until it does: Green Eggs'
+    reminder (naming non-voters), lock, winner and song-by-song posts fall
+    back to the Ambassadors channel, song posts doubled. Kept here and in
+    CLAUDE.md's DATED DEADLINES so it is not forgotten.
 - **B. Seed overlays in `global_create_league`.** One row per existing show
   at creation, `cutoff_at` = 6 PM in `coalesce(shows.timezone,
   'America/New_York')`, past-show flags stamped as Stage A did. Must match

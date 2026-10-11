@@ -681,6 +681,13 @@ before assuming a change is covered just because the suite is green:
       TWICE (once per league, both resolving to the same hook). There is no
       mute value: an empty secret is falsy and falls through. A secret, not
       code — no deploy.
+      - **⏸️ PAUSED 2026-10-11, dev's call, same day:** nobody is using the
+        Green Eggs Discord yet, so the secret is on hold. Verified by name
+        only that it does not exist. The fallback above is the ACCEPTED
+        consequence for now — Green Eggs' reminder (naming its non-voters),
+        lock, winner and doubled song posts go to the Ambassadors channel
+        until the secret is set. Tracked in DATED DEADLINES as PAUSED, not
+        closed.
     - **✅ SYNC PRESSED AND VERIFIED 2026-10-11 ~17:00Z.** League 2: 16
       rows, 0 null cutoffs, 16 × `upcoming`, 0 flags set, and a row-by-row
       join against league 1 for the same 16 shows found zero cutoff or
@@ -2919,7 +2926,7 @@ rather than being deleted.
 | **2026-08-14** | ✅ **DONE** | **Ranked-choice deploy batch** — carton-sync deployed, Stage O applied, verified end to end (ranked save accepted, duplicate rejected, slots-mode save unaffected) | "✅ RESOLVED 2026-08-14 — ranked-choice deploy batch…" in Postgres/Supabase gotchas |
 | **2026-08-14** | ✅ **DONE** | **Test 3 roster check** — activated 04:00:04Z, 14 rows, all 13 originals kept their timestamps, the new row landed 0.1s before the stamp | "✅ VERIFIED 2026-08-14: Test 3 activated cleanly…" in Postgres/Supabase gotchas |
 | **2026-10-14** | ✅ **DONE 2026-10-11** | **Green Eggs' first season starts — its 16 upcoming shows must have `league_shows` rows (with cutoffs) before then.** "Sync shows" pressed ~17:00Z after the read-only pre-sync check; verified: 16 rows, 0 null cutoffs, all `upcoming`, all flags null, cutoffs identical to league 1's for the same 16 shows; league 1 still 37 rows and unchanged; cron still "no eligible shows" | "🚨 FOUND 2026-10-11 — A NEW LEAGUE GETS ZERO `league_shows` ROWS" at the top of Postgres/Supabase gotchas |
-| **2026-10-15 21:00 UTC** | ⏳ **OPEN** | **`DISCORD_WEBHOOK_GREEN_EGGS` must exist before Green Eggs' first 1-hour reminder fires** (show 1786387666, cutoff 22:00Z). Without it `notifyLeague` falls back to the global hook — the Ambassadors channel — which then gets Green Eggs' reminder naming non-voters, lock, winner, and every song post twice. Dev sets it in the dashboard; verify by NAME only, never print or ask for the value | "PRE-SYNC SAFETY CHECK, 2026-10-11" sub-bullet inside the 🚨 entry |
+| **2026-10-15 21:00 UTC** | ⏸️ **PAUSED 2026-10-11 (dev's call)** | **`DISCORD_WEBHOOK_GREEN_EGGS` — on hold; nobody is using the Green Eggs Discord yet.** Verified by name only 2026-10-11 (`supabase secrets list`): the secret does NOT exist — `DISCORD_WEBHOOK` and the platform defaults only. **Accepted consequence, stated plainly: until the secret exists, Green Eggs' 1-hour reminder (which names Green Eggs non-voters), lock notice, winner announcement and every song-by-song post fall back to the global hook, i.e. the Ambassadors channel — and the song posts land there twice (once per league).** First exposure: show 1786387666, cutoff 22:00Z, reminder ~21:00Z on 2026-10-15. Row kept so this is not forgotten; when the secret is set, verify by NAME only, never print or ask for the value | "PRE-SYNC SAFETY CHECK, 2026-10-11" sub-bullet inside the 🚨 entry |
 | **2026-08-14** (checked 2026-08-15) | ✅ **DONE** | **First production run of `scoreRankedPicks`** — Casual, show `1765912122`, finalized 12:00:04Z. All five checks pass: ladder values per row (`rank1` paid 6, not 1), no Any Debut row, perfect-sheet correctly withheld, totals reconcile. Rank ordering passes but is verified by test only — see the caveat, it is not a pending task | "✅ VERIFIED 2026-08-15 — FIRST PRODUCTION RUN OF `scoreRankedPicks`…" in Postgres/Supabase gotchas |
 
 **Every 2026-08-14 item closed.** The ranked-choice deploy batch met its hard
