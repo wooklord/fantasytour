@@ -91,8 +91,14 @@ league's creation.
 **THE POST-FIRST-SHOW BATCH (decided 2026-10-11): one batch, one deploy,
 after the first Green Eggs show scores cleanly.** (a) apply Stage R;
 (b) `CRON_SECRET` dual path + hourly `sync_shows`; (c) part E label;
-(d) part F display fix. Nothing in it ships before then. `src/` and the
-bundle untouched this week.
+(d) part F display fix; **(e) apply Stage F
+(`sql/stage_f_official_default_optin.sql`) — added 2026-10-12, the dev
+reaffirmed Official opt-in defaults to TRUE.** Catalog check after
+applying: `column_default` on `league_members.official_opt_in` = `true`,
+and `count(*) from league_members where not official_opt_in` = 0. No
+effect on season 11 (roster locked; the gate reads `season_rosters`).
+Nothing in it ships before then. `src/` and the bundle untouched this
+week.
 - **F. (added 2026-10-11) Admin cutoff fallback shows the wrong hour** on
   null-timezone shows when device DST ≠ show-date DST — the two D.C. shows
   read 7:00 PM for a 6:00 PM Eastern cutoff. Display-only; the write path is
@@ -133,6 +139,19 @@ WRITTEN, NOT APPLIED (first lines of the file say so). Live
 seeds overlay rows; two new assertions; mutation-tested (emptying the seed
 loop → exactly those two fail, both modes). Apply after the first Green Eggs
 show scores, with the cron change.
+
+**Stage F: DECISION REAFFIRMED 2026-10-12 — default TRUE, Stage F stands,
+now item (e) of the post-first-show batch (above).** Season 11 early lock:
+**INVESTIGATED 2026-10-12 (read-only).** The only writer of
+`roster_locked_at` is the cron's `activateSeasons`, gated on `start_date <=
+today`; `admin_save_season` re-dates a season without clearing the lock. So
+the season was saved on 2026-08-17 with a start date on or before that day,
+activated by the next tick (stamp 15:34:01Z, one second past a minute
+boundary), and re-dated afterwards. Its activation snapshot wrote nothing
+that survives (all 23 roster rows are hand-adds with distinct timestamps;
+all 23 members are opt-in `false`). It will not activate again on 10-14, so
+the roster stays manual-only. **The next season saved with a start date on
+or before today will lock the same way within a minute.** No fix proposed.
 
 **Secondary findings from the same read (details in the CLAUDE.md entry):**
 Stage F's opt-in default was never applied (live default is `false`; all 18

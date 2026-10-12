@@ -637,7 +637,19 @@ before assuming a change is covered just because the suite is green:
        Shows-panel "Not on this league's schedule" label (part E, approved
        as a plan, HELD — the state it handles no longer exists in either
        league); (d) the admin cutoff-fallback DST fix (part F, approved as a
-       plan, HELD — see the Frontend/CSS gotchas entry). (c) and (d) both
+       plan, HELD — see the Frontend/CSS gotchas entry); **(e) apply
+       Stage F, `sql/stage_f_official_default_optin.sql` — added
+       2026-10-12 after the dev REAFFIRMED that Official opt-in defaults
+       to TRUE; the file stands as the fix.** Catalog check that proves it
+       applied, run AFTER the file: `column_default` on
+       `league_members.official_opt_in` reads `true` (via
+       `information_schema.columns`), and
+       `select count(*) from league_members where not official_opt_in`
+       returns 0 (the file backfills; a non-zero count means the backfill
+       half did not run). **No effect on season 11**: its roster is
+       locked, so `_official_gate` reads `season_rosters` and never the
+       flag — the default only matters for the NEXT season's activation
+       snapshot and for `admin_add_league_member`. (c) and (d) both
        touch `admin.js`, i.e. a rebuilt bundle on `main` and a Pages
        deploy, which is exactly what this week excludes. `src/` and the
        bundle were not touched on 2026-10-11, verified by `git status`
@@ -713,8 +725,57 @@ before assuming a change is covered just because the suite is green:
     - **Green Eggs' season (id 11) has `roster_locked_at` =
       2026-08-17 15:34Z, two months BEFORE its 2026-10-14 start.** Roster
       is frozen at 18 rows = 18 members, so consistent today, but anyone
-      added to the league after that moment is NOT on the roster. How it
-      activated early was not investigated.
+      added to the league after that moment is NOT on the roster.
+      **✅ INVESTIGATED 2026-10-12, read-only — what stamped it, and it
+      WILL recur for the next season created the same way.**
+      - **Only one writer exists.** `roster_locked_at` is written in
+        exactly one place in the whole system: `activateSeasons()`
+        (`index.ts:362`), which the cron runs every minute. No SQL
+        function writes it (`_official_gate` and `get_bracket_seasons`
+        only read it), there are no triggers in `public`, and the admin
+        tab has no lock/activate control — `admin.js` touches
+        `roster_locked_at` once, to word the roster-removal confirm.
+      - **Its gate is `start_date <= today` (Eastern) and `roster_locked_at
+        is null`.** So at 15:34:01Z on 2026-08-17 the season's
+        `start_date` was on or before 2026-08-17. It is 2026-10-14 now.
+        **`admin_save_season` updates `start_date`/`end_date` and never
+        clears `roster_locked_at`**, so the inference is: the season was
+        created on 2026-08-17 with a start date on or before that day
+        (`leagues.created_at` puts the league at 04:06Z the same day),
+        the next cron tick activated it within the minute, and the dates
+        were edited to Oct 14 → Dec 6 afterwards with the lock left in
+        place. No row history exists to confirm the original dates; this
+        is the only chain consistent with the one writer. (A hand-run
+        SQL update cannot be ruled out, but nothing suggests one.)
+      - **The timing corroborates the cron, not a batch of hand-adds:**
+        the stamp is 15:34:01.287Z, one second after a minute boundary,
+        and the roster's first row sits 29.7s BEFORE it — a single manual
+        `admin_set_season_roster` add, not activation's own write (that
+        lands ~0.1s before the stamp, per the Test 3 record). The
+        activation snapshot itself wrote NOTHING that survives: every one
+        of today's 23 roster rows has a distinct `added_at` — 1 on
+        2026-08-17, 17 on 2026-10-11 ~16:46Z a second apart, 5 on
+        2026-10-12 ~20:49Z — i.e. all hand-added, and consistent with an
+        empty snapshot since all 23 members carry `official_opt_in =
+        false` (Stage F unapplied) and only 1 member existed at the lock.
+      - **Consequence for season 11:** activation will NOT run again on
+        2026-10-14 (the `is null` half of the gate fails), so no member is
+        ever auto-added; the roster is manual-only for the whole season,
+        and the dev has been keeping it in step by hand (23 members, 23
+        roster rows, 0 missing as of 2026-10-12 20:56Z). Applying Stage F
+        changes none of this.
+      - **Would it happen to the next season? YES, by the same route.**
+        Any season saved with `start_date` on or before today's Eastern
+        date is activated by the next cron tick, within 60 seconds, and
+        editing the dates afterwards does not undo it. A season created
+        "for today" as a placeholder and re-dated later is locked for
+        good with whatever snapshot existed in that minute. Season 10
+        (Ambassadors, 2026-10-15 → 12-05) is NOT in this state — still
+        unlocked, will activate 2026-10-15 04:00Z normally.
+      - **Only in-app signal of the lock** is the roster-removal confirm's
+        "already activated" sentence; the Seasons panel shows nothing
+        otherwise. No fix proposed here; recorded so the next early lock
+        is recognised in a minute rather than two months.
     - **Bracket 3 (Green Eggs Official) now carries the FABRICATED `oneset`
       section** (opener/closer/cover1, `flat_picks: 3`) that the admin
       panel's hardcoded fallback invents and a save materialises — exactly
@@ -2318,6 +2379,12 @@ Full spec in `docs/MULTITENANT_SPEC.md`. Summary:
   league" state this bullet asked for — by accident, not decision. Same
   class as the Stage Q lesson: a stage file in `sql/` proves it was written,
   never that it ran.
+  **✅ DECISION REAFFIRMED 2026-10-12 (dev): Official opt-in defaults to
+  TRUE. Stage F stands as the fix and is item (e) of the post-first-show
+  batch** (see the 🚨 entry's LOCKED item 6 for the catalog check that
+  proves it applied). The "revisit before the semi-public league" question
+  below is therefore answered, not reopened: the default is a conscious
+  choice now, where before 2026-10-11 the live `false` was an accident.
   **Reversed for beta, Stage F (`sql/stage_f_official_default_optin.sql`):**
   `league_members.official_opt_in` now defaults to `true` (was `false`), and
   every existing row was backfilled to `true`, so `admin_add_league_member`
@@ -2969,7 +3036,7 @@ no home bullet elsewhere, so its reasoning lives directly below the table.)
 | 3 | ✅ **DONE 2026-08-15** — **Domain move to a `wooklord.net` subdomain**, live at `fantasyeggy.wooklord.net` | Same section, the roadmap bullet after #2 | Origin isolation for #2, and PWA installs become expensive to move *after* recruitment. Row kept rather than deleted so the numbering and the ordering note below stay valid |
 | 4 | **Ladder-mutability revisit** (Module B) | "Alternate scoring modes" → Module B locked decisions → "Decided: mid-season ladder edits stay unguarded" | Unguarded config edits silently rewrite already-published scores; acceptable only while one trusted person can edit |
 | 5 | **Appointing any non-dev league admin** | Cross-cuts #4 and the `admin_update_config`/`admin_set_season_roster` integrity notes | This is the event that invalidates "only the dev can do damage," which several decisions currently rest on |
-| 6 | **Official opt-in default revisit** (Stage F flipped it to `true` for beta convenience) | 2.0 rebuild key decisions — the `official_opt_in` bullet | Opt-in-by-default was a closed-group convenience; a semi-public pool should choose deliberately |
+| 6 | ✅ **DECIDED 2026-10-12** — **Official opt-in default revisit**: the dev reaffirmed default `true`; Stage F (never actually applied — found 2026-10-11) stands as the fix and is item (e) of the post-first-show batch | 2.0 rebuild key decisions — the `official_opt_in` bullet | Opt-in-by-default was a closed-group convenience; the dev chose it deliberately for the semi-public pool too. Row kept so the numbering holds |
 | 7 | ✅ **DONE 2026-08-16** — **`get_show_picks` is now membership-gated**, matching `get_bracket_scores`; `player_id` dropped from the payload in favour of a server-computed `is_mine`. Reveal-after-cutoff unchanged | The bullet immediately below this table, and `sql/stage_p_get_show_picks_membership.sql` | Anyone with the publishable key could scrape every player's nickname, UUID and full pick history; at ~50 semi-strangers that stopped being a closed-group detail |
 
 **#7 in full — ✅ RESOLVED 2026-08-16 by `sql/stage_p_get_show_picks_membership.sql`.
