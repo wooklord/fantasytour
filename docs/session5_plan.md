@@ -61,6 +61,24 @@ league's creation.
     reminder (naming non-voters), lock, winner and song-by-song posts fall
     back to the Ambassadors channel, song posts doubled. Kept here and in
     CLAUDE.md's DATED DEADLINES so it is not forgotten.
+  - **🔇 SILENCED 2026-10-14 (dev's call) — supersedes the PAUSED bullet.
+    ALL Discord posts for BOTH leagues are off: the global
+    `DISCORD_WEBHOOK` secret was deleted. Config only, no code, no deploy.**
+    Verified by name only the same day: platform defaults only, no
+    `DISCORD_WEBHOOK`, no `DISCORD_WEBHOOK_*`. **Reason:** nobody reads
+    either channel yet, and the message templates carry no league name
+    (the name only selects the webhook, `index.ts:101`), so the shared
+    fallback would have put every post in one channel twice with no way to
+    tell the leagues apart — including non-voter nicknames from both
+    leagues in the 1-hour reminder. **Stamps still advance** with no hook
+    (`remind_sent` `:440`, `lock_sent` `:460`, `winner_sent` `:496`, season
+    `:527`, `setlist_songs` upsert `:604`), so nothing replays on restore.
+    **Residual:** Supabase documents that NEW secrets apply without
+    redeploy, not deletions. **The 2026-10-15 21:00Z reminder for show
+    1786387666 (league 1) is the test** — if it posts, the deletion did not
+    propagate; record that and reassess. **Re-enabling is post-first-show
+    batch item (f)** below. Full entry: CLAUDE.md, "🔇 SILENCED 2026-10-14"
+    sub-bullet inside the 🚨 entry.
 - **B. Seed overlays in `global_create_league`.** One row per existing show
   at creation, `cutoff_at` = 6 PM in `coalesce(shows.timezone,
   'America/New_York')`, past-show flags stamped as Stage A did. Must match
@@ -97,6 +115,11 @@ reaffirmed Official opt-in defaults to TRUE.** Catalog check after
 applying: `column_default` on `league_members.official_opt_in` = `true`,
 and `count(*) from league_members where not official_opt_in` = 0. No
 effect on season 11 (roster locked; the gate reads `season_rosters`).
+**(f) Re-enable Discord — added 2026-10-14, plan only.** Before any
+webhook is set again: `DISCORD_WEBHOOK_GREEN_EGGS` AND a per-league
+Ambassadors secret (no global fallback), plus a league-name prefix on
+every `notifyLeague` message — the templates carry none today. Needs an
+edge-function deploy for the prefix; the secrets are config.
 Nothing in it ships before then. `src/` and the bundle untouched this
 week.
 - **F. (added 2026-10-11) Admin cutoff fallback shows the wrong hour** on
@@ -152,6 +175,28 @@ that survives (all 23 roster rows are hand-adds with distinct timestamps;
 all 23 members are opt-in `false`). It will not activate again on 10-14, so
 the roster stays manual-only. **The next season saved with a start date on
 or before today will lock the same way within a minute.** No fix proposed.
+
+**Discord silenced 2026-10-14 (dev's call, config only):** the global
+`DISCORD_WEBHOOK` secret was deleted; verified by name only that no
+`DISCORD_WEBHOOK` or `DISCORD_WEBHOOK_*` name remains. Reason, residual and
+the re-enable plan are in the 🔇 SILENCED bullet under item A above.
+**Correction recorded the same day:** a `leagues.discord_webhook` column
+was referred to in conversation as if an earlier plan note described one.
+No tracked file mentions such a column (grepped CLAUDE.md and `docs/`), and
+the live `leagues` table has `id`, `name`, `created_at` only. It never
+existed. **Season 10 (Ambassadors) context, read 2026-10-14 ~03:11Z:** not
+yet activated, 0 roster rows; league 1 has 14 members, all 14 opted in and
+unbanned, so the first tick after 04:00Z on 2026-10-15 writes 14 roster
+rows and locks. The cron is every minute (`cron.job` schedule `* * * * *`).
+
+**CHECK FOR FRIDAY 2026-10-16's POST-SHOW PROMPT:** (1) no Discord post
+appeared in the Ambassadors channel for show 1786387666; (2) `remind_sent`,
+`lock_sent`, `winner_sent` advanced normally on that show's `league_shows`
+row in BOTH league 1 and league 2; (3) `setlist_songs` holds the show's
+rows; (4) season 10 has `roster_locked_at` ≈ 04:00Z on 10-15 and 14 roster
+rows. Stamps present + no post = the silence worked and nothing is queued
+to replay. Stamps absent = a different problem; the missing webhook cannot
+throw (`index.ts:102-107`) and is not the cause.
 
 **Secondary findings from the same read (details in the CLAUDE.md entry):**
 Stage F's opt-in default was never applied (live default is `false`; all 18
@@ -462,6 +507,15 @@ misrouted messages are noise nobody hears.
 members would then see another league's announcements. Provision the secret
 before recruitment starts. Name derivation:
 `"DISCORD_WEBHOOK_" + name.toUpperCase().replace(/[^A-Z0-9]+/g, "_")`.
+
+**UPDATE 2026-10-14: moot for now — the global `DISCORD_WEBHOOK` secret was
+deleted, so neither league posts anything.** See the 🔇 SILENCED bullet
+under work-plan item A. When Discord comes back (post-first-show batch
+item (f)), BOTH leagues get their own secret and every message gets a
+league-name prefix; the global fallback is not to be restored.
+**Correction:** there is no `leagues.discord_webhook` column and never was
+— the live table is `id`, `name`, `created_at` (read 2026-10-14); routing
+is the env-var lookup above and nothing else.
 
 ---
 

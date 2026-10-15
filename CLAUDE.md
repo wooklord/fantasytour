@@ -649,11 +649,17 @@ before assuming a change is covered just because the suite is green:
        half did not run). **No effect on season 11**: its roster is
        locked, so `_official_gate` reads `season_rosters` and never the
        flag — the default only matters for the NEXT season's activation
-       snapshot and for `admin_add_league_member`. (c) and (d) both
-       touch `admin.js`, i.e. a rebuilt bundle on `main` and a Pages
-       deploy, which is exactly what this week excludes. `src/` and the
-       bundle were not touched on 2026-10-11, verified by `git status`
-       before each commit.
+       snapshot and for `admin_add_league_member`. **(f) Re-enable
+       Discord — added 2026-10-14, plan only.** Before any webhook is set
+       again: set `DISCORD_WEBHOOK_GREEN_EGGS` AND a per-league
+       Ambassadors secret (no global fallback), and prefix every
+       `notifyLeague` message with the league name — the templates carry
+       none today, so a shared channel cannot tell the leagues apart. See
+       the "🔇 SILENCED 2026-10-14" sub-bullet below for why. (c), (d) and
+       (f) all touch code, i.e. a rebuilt bundle on `main` and a Pages
+       deploy (or, for (f), an edge-function deploy), which is exactly
+       what this week excludes. `src/` and the bundle were not touched on
+       2026-10-11, verified by `git status` before each commit.
   - **PRE-SYNC SAFETY CHECK, 2026-10-11 (read-only) — VERDICT: SAFE TO
     PRESS "Sync shows". Approved by the dev the same day.** What was
     checked, so the next data fix of this kind can reuse the list:
@@ -700,6 +706,56 @@ before assuming a change is covered just because the suite is green:
         lock, winner and doubled song posts go to the Ambassadors channel
         until the secret is set. Tracked in DATED DEADLINES as PAUSED, not
         closed.
+      - **🔇 SILENCED 2026-10-14 (dev's call): ALL Discord posts for BOTH
+        leagues are off, by deleting the global `DISCORD_WEBHOOK` secret.
+        Config only, no code, no deploy.** Verified by name only the same
+        day: the secrets list holds the seven platform defaults and NO
+        `DISCORD_WEBHOOK` and no `DISCORD_WEBHOOK_*` name. **Reason:**
+        nobody reads either channel yet, and the message templates
+        (`index.ts:437-439`, `:458-459`, `:623-637`, `:490-494`) carry no
+        league name — the name is used only to pick the webhook
+        (`:101`), never in the text — so the shared fallback would have
+        put every post in one channel twice with no way to tell the
+        leagues apart, including non-voter nicknames from both leagues
+        in the 1-hour reminder. This supersedes the PAUSED bullet's
+        accepted consequence: the fallback it describes no longer posts
+        anything.
+        - **Nothing replays on restore.** `notifyLeague` returns at
+          `index.ts:102` when no hook exists, and every stamp is written
+          unconditionally after it: `remind_sent` `:440`, `lock_sent`
+          `:460`, `winner_sent` `:496`, season champion `:527`. Song-by-song
+          advances via the `setlist_songs` upsert at `:604`, which runs
+          before the post block and is what the next pass diffs against.
+          Restoring the secret later announces only what happens after
+          that moment.
+        - **Residual, stated plainly:** Supabase documents that a NEW
+          secret is read by functions immediately with no redeploy; it
+          does not say the same for a DELETED one. The code reads the env
+          at call time (`:101`), so the only dependency is the platform's
+          injection into the worker. **The test is the 2026-10-15 21:00Z
+          reminder for show 1786387666 (league 1).** If it posts, the
+          deletion did not propagate — record that here and reassess
+          (a redeploy of the unchanged function is the likely fix).
+        - **Re-enabling is item (f) of the post-first-show batch** (above):
+          per-league secrets for BOTH leagues and a league-name prefix on
+          every message, before any webhook is set again.
+        - **CORRECTION, recorded at the weight it carries:** on 2026-10-14
+          a `leagues.discord_webhook` column was referred to in
+          conversation as if an earlier plan note described one. The live
+          `leagues` table has `id`, `name`, `created_at` only (read via
+          `information_schema.columns` the same day); a grep of CLAUDE.md
+          and `docs/` finds no tracked note mentioning such a column. It
+          never existed anywhere — the only routing is the env-var lookup
+          in `notifyLeague`. Same family as the other transcript-read-as-
+          repo entries in this file.
+        - **CHECK FOR THE POST-SHOW PROMPT ON FRIDAY 2026-10-16:** confirm
+          no Discord post appeared in the Ambassadors channel, and that
+          `remind_sent`, `lock_sent` and `winner_sent` advanced normally
+          for show 1786387666 in BOTH league 1 and league 2 (Green Eggs'
+          row for the same show), and that `setlist_songs` holds the
+          show's rows. Stamps present + no post = the silence worked and
+          nothing is queued to replay. Stamps absent = something else is
+          wrong; the webhook is not the cause, since it cannot throw.
     - **✅ SYNC PRESSED AND VERIFIED 2026-10-11 ~17:00Z.** League 2: 16
       rows, 0 null cutoffs, 16 × `upcoming`, 0 flags set, and a row-by-row
       join against league 1 for the same 16 shows found zero cutoff or
@@ -2993,7 +3049,7 @@ rather than being deleted.
 | **2026-08-14** | ✅ **DONE** | **Ranked-choice deploy batch** — carton-sync deployed, Stage O applied, verified end to end (ranked save accepted, duplicate rejected, slots-mode save unaffected) | "✅ RESOLVED 2026-08-14 — ranked-choice deploy batch…" in Postgres/Supabase gotchas |
 | **2026-08-14** | ✅ **DONE** | **Test 3 roster check** — activated 04:00:04Z, 14 rows, all 13 originals kept their timestamps, the new row landed 0.1s before the stamp | "✅ VERIFIED 2026-08-14: Test 3 activated cleanly…" in Postgres/Supabase gotchas |
 | **2026-10-14** | ✅ **DONE 2026-10-11** | **Green Eggs' first season starts — its 16 upcoming shows must have `league_shows` rows (with cutoffs) before then.** "Sync shows" pressed ~17:00Z after the read-only pre-sync check; verified: 16 rows, 0 null cutoffs, all `upcoming`, all flags null, cutoffs identical to league 1's for the same 16 shows; league 1 still 37 rows and unchanged; cron still "no eligible shows" | "🚨 FOUND 2026-10-11 — A NEW LEAGUE GETS ZERO `league_shows` ROWS" at the top of Postgres/Supabase gotchas |
-| **2026-10-15 21:00 UTC** | ⏸️ **PAUSED 2026-10-11 (dev's call)** | **`DISCORD_WEBHOOK_GREEN_EGGS` — on hold; nobody is using the Green Eggs Discord yet.** Verified by name only 2026-10-11 (`supabase secrets list`): the secret does NOT exist — `DISCORD_WEBHOOK` and the platform defaults only. **Accepted consequence, stated plainly: until the secret exists, Green Eggs' 1-hour reminder (which names Green Eggs non-voters), lock notice, winner announcement and every song-by-song post fall back to the global hook, i.e. the Ambassadors channel — and the song posts land there twice (once per league).** First exposure: show 1786387666, cutoff 22:00Z, reminder ~21:00Z on 2026-10-15. Row kept so this is not forgotten; when the secret is set, verify by NAME only, never print or ask for the value | "PRE-SYNC SAFETY CHECK, 2026-10-11" sub-bullet inside the 🚨 entry |
+| **2026-10-15 21:00 UTC** | 🔇 **SILENCED 2026-10-14 (dev's call) — supersedes PAUSED 2026-10-11** | **All Discord posts for BOTH leagues are off: the global `DISCORD_WEBHOOK` secret was deleted 2026-10-14.** Verified by name only the same day: no `DISCORD_WEBHOOK`, no `DISCORD_WEBHOOK_*`, platform defaults only. The fallback the PAUSED row described (Green Eggs' posts landing in the Ambassadors channel, song posts doubled) **no longer posts anything**. Stamps still advance (`index.ts:440`, `:460`, `:496`, `:527`, `:604`), so nothing replays on restore. **This date is now the propagation TEST, not an exposure:** the 21:00Z reminder for show 1786387666 (league 1) must NOT appear. If it does, the deletion did not reach the running function — record and reassess. **Before Discord is re-enabled** (post-first-show batch item (f), plan only): set `DISCORD_WEBHOOK_GREEN_EGGS` AND a per-league Ambassadors secret, and prefix every `notifyLeague` message with the league name. Verify any new secret by NAME only, never print or ask for the value | "🔇 SILENCED 2026-10-14" sub-bullet inside the 🚨 entry |
 | **2026-08-14** (checked 2026-08-15) | ✅ **DONE** | **First production run of `scoreRankedPicks`** — Casual, show `1765912122`, finalized 12:00:04Z. All five checks pass: ladder values per row (`rank1` paid 6, not 1), no Any Debut row, perfect-sheet correctly withheld, totals reconcile. Rank ordering passes but is verified by test only — see the caveat, it is not a pending task | "✅ VERIFIED 2026-08-15 — FIRST PRODUCTION RUN OF `scoreRankedPicks`…" in Postgres/Supabase gotchas |
 
 **Every 2026-08-14 item closed.** The ranked-choice deploy batch met its hard
