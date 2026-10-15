@@ -76,8 +76,25 @@ league's creation.
     **Residual:** Supabase documents that NEW secrets apply without
     redeploy, not deletions. **The 2026-10-15 21:00Z reminder for show
     1786387666 (league 1) is the test** — if it posts, the deletion did not
-    propagate; record that and reassess. **Re-enabling is post-first-show
-    batch item (f)** below. Full entry: CLAUDE.md, "🔇 SILENCED 2026-10-14"
+    propagate; record that and reassess. **Re-enabling AMBASSADORS is
+    post-first-show batch item (f)** below (narrowed the same day — see the
+    next bullet). Full entry: CLAUDE.md, "🔇 SILENCED 2026-10-14"
+    sub-bullet inside the 🚨 entry.
+  - **🔔 ENABLED 2026-10-14 (later the same day) — GREEN EGGS POSTS AGAIN,
+    PER-LEAGUE; AMBASSADORS REMAINS SILENCED.** The dev set
+    `DISCORD_WEBHOOK_GREEN_EGGS` in the dashboard. Config only, no code, no
+    deploy. Verified by name only (`supabase secrets list -o json`, names
+    extracted, nothing else printed): 8 names = seven platform defaults +
+    `DISCORD_WEBHOOK_GREEN_EGGS`; `DISCORD_WEBHOOK` absent;
+    `DISCORD_WEBHOOK_AMBASSADORS` absent. The name was derived from
+    `leagueWebhookEnvKey` (`index.ts:96-97`) against the live
+    `leagues.name` for id 2 (`Green Eggs`, plain ASCII) before it was set.
+    League 1 resolves to no hook (neither of its two candidate names
+    exists) and stays silent; the env is read per call at `:101`, nothing
+    caches it, so a secret set tonight is live for tomorrow's reminder.
+    **The 2026-10-15 21:00Z reminder for show 1786387666 is now a TWO-SIDED
+    test: league 2 posts, league 1 does not, BOTH rows stamp
+    `remind_sent`.** Full entry: CLAUDE.md, "🔔 ENABLED 2026-10-14"
     sub-bullet inside the 🚨 entry.
 - **B. Seed overlays in `global_create_league`.** One row per existing show
   at creation, `cutoff_at` = 6 PM in `coalesce(shows.timezone,
@@ -115,11 +132,16 @@ reaffirmed Official opt-in defaults to TRUE.** Catalog check after
 applying: `column_default` on `league_members.official_opt_in` = `true`,
 and `count(*) from league_members where not official_opt_in` = 0. No
 effect on season 11 (roster locked; the gate reads `season_rosters`).
-**(f) Re-enable Discord — added 2026-10-14, plan only.** Before any
-webhook is set again: `DISCORD_WEBHOOK_GREEN_EGGS` AND a per-league
-Ambassadors secret (no global fallback), plus a league-name prefix on
-every `notifyLeague` message — the templates carry none today. Needs an
-edge-function deploy for the prefix; the secrets are config.
+**(f) Re-enable Discord for AMBASSADORS — added 2026-10-14, NARROWED the
+same day.** Green Eggs is already enabled per-league
+(`DISCORD_WEBHOOK_GREEN_EGGS` set 2026-10-14, verified by name — see the
+🔔 ENABLED bullet under item A). (f) now covers only: a per-league
+Ambassadors secret (`DISCORD_WEBHOOK_AMBASSADORS`; the global fallback is
+not to be restored) plus the league-name prefix on every `notifyLeague`
+message. **The prefix is no longer blocking for Green Eggs** — its channel
+is single-league, so unlabelled posts are unambiguous there; it stays in
+(f) as insurance before Ambassadors comes back. Needs an edge-function
+deploy for the prefix; the secret is config.
 Nothing in it ships before then. `src/` and the bundle untouched this
 week.
 - **F. (added 2026-10-11) Admin cutoff fallback shows the wrong hour** on
@@ -180,6 +202,10 @@ or before today will lock the same way within a minute.** No fix proposed.
 `DISCORD_WEBHOOK` secret was deleted; verified by name only that no
 `DISCORD_WEBHOOK` or `DISCORD_WEBHOOK_*` name remains. Reason, residual and
 the re-enable plan are in the 🔇 SILENCED bullet under item A above.
+**Then, later on 2026-10-14: Green Eggs ENABLED per-league** —
+`DISCORD_WEBHOOK_GREEN_EGGS` set and verified by name only; the global
+secret stays deleted and Ambassadors stays silent. See the 🔔 ENABLED
+bullet under item A.
 **Correction recorded the same day:** a `leagues.discord_webhook` column
 was referred to in conversation as if an earlier plan note described one.
 No tracked file mentions such a column (grepped CLAUDE.md and `docs/`), and
@@ -189,14 +215,18 @@ yet activated, 0 roster rows; league 1 has 14 members, all 14 opted in and
 unbanned, so the first tick after 04:00Z on 2026-10-15 writes 14 roster
 rows and locks. The cron is every minute (`cron.job` schedule `* * * * *`).
 
-**CHECK FOR FRIDAY 2026-10-16's POST-SHOW PROMPT:** (1) no Discord post
-appeared in the Ambassadors channel for show 1786387666; (2) `remind_sent`,
+**CHECK FOR FRIDAY 2026-10-16's POST-SHOW PROMPT (updated 2026-10-14 for
+the Green Eggs enable):** (1) a Discord post APPEARED in the Green Eggs
+channel for show 1786387666 (the 21:00Z reminder at minimum, then lock and
+winner); (2) NO post appeared in the Ambassadors channel; (3) `remind_sent`,
 `lock_sent`, `winner_sent` advanced normally on that show's `league_shows`
-row in BOTH league 1 and league 2; (3) `setlist_songs` holds the show's
-rows; (4) season 10 has `roster_locked_at` ≈ 04:00Z on 10-15 and 14 roster
-rows. Stamps present + no post = the silence worked and nothing is queued
-to replay. Stamps absent = a different problem; the missing webhook cannot
-throw (`index.ts:102-107`) and is not the cause.
+row in BOTH league 1 and league 2; (4) `setlist_songs` holds the show's
+rows; (5) season 10 has `roster_locked_at` ≈ 04:00Z on 10-15 and 14 roster
+rows. Both stamps + Green Eggs posted + Ambassadors silent = both halves
+worked and nothing is queued to replay. Stamps absent = a different
+problem; the webhook cannot throw (`index.ts:102-107`) and is not the
+cause. Stamps present but Green Eggs silent = the secret was not read;
+check the exact name (`DISCORD_WEBHOOK_GREEN_EGGS`) before anything else.
 
 **Secondary findings from the same read (details in the CLAUDE.md entry):**
 Stage F's opt-in default was never applied (live default is `false`; all 18
@@ -508,11 +538,15 @@ members would then see another league's announcements. Provision the secret
 before recruitment starts. Name derivation:
 `"DISCORD_WEBHOOK_" + name.toUpperCase().replace(/[^A-Z0-9]+/g, "_")`.
 
-**UPDATE 2026-10-14: moot for now — the global `DISCORD_WEBHOOK` secret was
-deleted, so neither league posts anything.** See the 🔇 SILENCED bullet
-under work-plan item A. When Discord comes back (post-first-show batch
-item (f)), BOTH leagues get their own secret and every message gets a
-league-name prefix; the global fallback is not to be restored.
+**UPDATE 2026-10-14: the global `DISCORD_WEBHOOK` secret was deleted, so
+the fallback above no longer posts anything.** See the 🔇 SILENCED bullet
+under work-plan item A. **Later the same day, Green Eggs got its own
+secret** — `DISCORD_WEBHOOK_GREEN_EGGS`, verified by name only — so league
+2 posts to its own channel and league 1 (no per-league secret, no global)
+stays silent. See the 🔔 ENABLED bullet under item A. When Ambassadors
+comes back (post-first-show batch item (f)), it gets its own per-league
+secret and every message gets a league-name prefix; the global fallback is
+not to be restored.
 **Correction:** there is no `leagues.discord_webhook` column and never was
 — the live table is `id`, `name`, `created_at` (read 2026-10-14); routing
 is the env-var lookup above and nothing else.

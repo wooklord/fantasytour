@@ -650,16 +650,21 @@ before assuming a change is covered just because the suite is green:
        locked, so `_official_gate` reads `season_rosters` and never the
        flag — the default only matters for the NEXT season's activation
        snapshot and for `admin_add_league_member`. **(f) Re-enable
-       Discord — added 2026-10-14, plan only.** Before any webhook is set
-       again: set `DISCORD_WEBHOOK_GREEN_EGGS` AND a per-league
-       Ambassadors secret (no global fallback), and prefix every
-       `notifyLeague` message with the league name — the templates carry
-       none today, so a shared channel cannot tell the leagues apart. See
-       the "🔇 SILENCED 2026-10-14" sub-bullet below for why. (c), (d) and
-       (f) all touch code, i.e. a rebuilt bundle on `main` and a Pages
-       deploy (or, for (f), an edge-function deploy), which is exactly
-       what this week excludes. `src/` and the bundle were not touched on
-       2026-10-11, verified by `git status` before each commit.
+       Discord for AMBASSADORS — added 2026-10-14, NARROWED the same
+       day.** Green Eggs is already enabled per-league (secret
+       `DISCORD_WEBHOOK_GREEN_EGGS` set 2026-10-14, see the "🔔 ENABLED"
+       sub-bullet below), so (f) now covers only: a per-league
+       Ambassadors secret (`DISCORD_WEBHOOK_AMBASSADORS`; the global
+       `DISCORD_WEBHOOK` is NOT to be restored) and the league-name prefix
+       on every `notifyLeague` message. **The prefix is no longer blocking
+       for Green Eggs** — its channel receives exactly one league's posts,
+       so unlabelled messages are unambiguous there. It still matters
+       before Ambassadors comes back, as insurance against any future
+       shared channel. (c), (d) and (f) all touch code, i.e. a rebuilt
+       bundle on `main` and a Pages deploy (or, for (f), an edge-function
+       deploy), which is exactly what this week excludes. `src/` and the
+       bundle were not touched on 2026-10-11, verified by `git status`
+       before each commit.
   - **PRE-SYNC SAFETY CHECK, 2026-10-11 (read-only) — VERDICT: SAFE TO
     PRESS "Sync shows". Approved by the dev the same day.** What was
     checked, so the next data fix of this kind can reuse the list:
@@ -733,12 +738,55 @@ before assuming a change is covered just because the suite is green:
           does not say the same for a DELETED one. The code reads the env
           at call time (`:101`), so the only dependency is the platform's
           injection into the worker. **The test is the 2026-10-15 21:00Z
-          reminder for show 1786387666 (league 1).** If it posts, the
-          deletion did not propagate — record that here and reassess
-          (a redeploy of the unchanged function is the likely fix).
-        - **Re-enabling is item (f) of the post-first-show batch** (above):
-          per-league secrets for BOTH leagues and a league-name prefix on
-          every message, before any webhook is set again.
+          reminder for show 1786387666 — now TWO-SIDED, since Green Eggs
+          was enabled the same day (next sub-bullet): league 2 posts,
+          league 1 does NOT, and BOTH rows stamp `remind_sent`.** League 1
+          posting = the deletion did not propagate — record that here and
+          reassess (a redeploy of the unchanged function is the likely
+          fix). League 2 silent = the new secret was not read; check the
+          name first (`DISCORD_WEBHOOK_GREEN_EGGS`, exact), then the stamp.
+        - **Re-enabling AMBASSADORS is item (f) of the post-first-show
+          batch** (above), narrowed 2026-10-14: a per-league Ambassadors
+          secret and the league-name prefix. Green Eggs is no longer part
+          of (f).
+        - **🔔 ENABLED 2026-10-14 — GREEN EGGS (league 2) POSTS AGAIN,
+          PER-LEAGUE. AMBASSADORS (league 1) REMAINS SILENCED.** The dev set
+          `DISCORD_WEBHOOK_GREEN_EGGS` in the dashboard; config only, no
+          code, no deploy. Verified by NAME only the same evening via
+          `supabase secrets list -o json` with names extracted and nothing
+          else printed: 8 names — the seven platform defaults plus
+          `DISCORD_WEBHOOK_GREEN_EGGS`; `DISCORD_WEBHOOK` absent;
+          `DISCORD_WEBHOOK_AMBASSADORS` absent.
+          - **The name was derived before it was set, not guessed:**
+            `leagueWebhookEnvKey` (`index.ts:96-97`) upper-cases the live
+            `leagues.name`, collapses each non-alphanumeric run to `_` and
+            strips edge underscores. Live name for id 2 is `Green Eggs`
+            (10 bytes, hex `477265656e2045676773`, plain ASCII, one space),
+            so the key is `DISCORD_WEBHOOK_GREEN_EGGS`. Replicated in
+            PowerShell with the same two regexes. The name is re-read from
+            `leagues` at the top of every `announcements()` run
+            (`index.ts:416-417`), so a league rename silently changes the
+            key — rename the secret with it.
+          - **Why league 1 stays silent with this set:** the lookup at
+            `:101` is `env(DISCORD_WEBHOOK_AMBASSADORS) || env(DISCORD_WEBHOOK)`
+            for league 1, and neither name exists. Every call site passes
+            its own league's name, so league 1's posts never route through
+            league 2's key.
+          - **Why a secret added tonight is read tomorrow:** the file has
+            exactly three `Deno.env.get` calls — `SUPABASE_URL` and
+            `SUPABASE_SERVICE_ROLE_KEY` at module load (`:52-53`), and the
+            webhook read inside `notifyLeague` (`:101`), per call. Nothing
+            caches it. The deployed function is the committed source (last
+            change `1dec497`, before the 2026-08-14 deploy that was verified
+            byte-identical by download; nothing since).
+          - **A `supabase secrets list` gotcha, so names-only stays
+            names-only:** the CLI's default output in this environment is
+            JSON with a `value` field per secret holding a SHA-256 digest
+            (a hash, not the secret, but still not to be printed). Use
+            `-o json`, which returns a BARE ARRAY (not `{secrets:[...]}`),
+            and map `.name` off each element. A first attempt this evening
+            indexed `.secrets` on the array and got 8 nulls, which read as
+            "name absent" — count the names before trusting a `False`.
         - **CORRECTION, recorded at the weight it carries:** on 2026-10-14
           a `leagues.discord_webhook` column was referred to in
           conversation as if an earlier plan note described one. The live
@@ -748,14 +796,19 @@ before assuming a change is covered just because the suite is green:
           never existed anywhere — the only routing is the env-var lookup
           in `notifyLeague`. Same family as the other transcript-read-as-
           repo entries in this file.
-        - **CHECK FOR THE POST-SHOW PROMPT ON FRIDAY 2026-10-16:** confirm
-          no Discord post appeared in the Ambassadors channel, and that
-          `remind_sent`, `lock_sent` and `winner_sent` advanced normally
-          for show 1786387666 in BOTH league 1 and league 2 (Green Eggs'
-          row for the same show), and that `setlist_songs` holds the
-          show's rows. Stamps present + no post = the silence worked and
-          nothing is queued to replay. Stamps absent = something else is
-          wrong; the webhook is not the cause, since it cannot throw.
+        - **CHECK FOR THE POST-SHOW PROMPT ON FRIDAY 2026-10-16 (updated
+          2026-10-14 for the Green Eggs enable):** confirm (1) a Discord
+          post APPEARED in the Green Eggs channel for show 1786387666 (the
+          21:00Z reminder at minimum, then lock and winner); (2) NO post
+          appeared in the Ambassadors channel; (3) `remind_sent`,
+          `lock_sent` and `winner_sent` advanced normally for that show in
+          BOTH league 1 and league 2; (4) `setlist_songs` holds the show's
+          rows. Both stamps present + Green Eggs posted + Ambassadors
+          silent = both halves worked and nothing is queued to replay.
+          Stamps absent = something else is wrong; the webhook is not the
+          cause, since it cannot throw (`index.ts:102-107`). Stamps present
+          but Green Eggs silent = the secret was not read; check the exact
+          name before anything else.
     - **✅ SYNC PRESSED AND VERIFIED 2026-10-11 ~17:00Z.** League 2: 16
       rows, 0 null cutoffs, 16 × `upcoming`, 0 flags set, and a row-by-row
       join against league 1 for the same 16 shows found zero cutoff or
@@ -3049,7 +3102,7 @@ rather than being deleted.
 | **2026-08-14** | ✅ **DONE** | **Ranked-choice deploy batch** — carton-sync deployed, Stage O applied, verified end to end (ranked save accepted, duplicate rejected, slots-mode save unaffected) | "✅ RESOLVED 2026-08-14 — ranked-choice deploy batch…" in Postgres/Supabase gotchas |
 | **2026-08-14** | ✅ **DONE** | **Test 3 roster check** — activated 04:00:04Z, 14 rows, all 13 originals kept their timestamps, the new row landed 0.1s before the stamp | "✅ VERIFIED 2026-08-14: Test 3 activated cleanly…" in Postgres/Supabase gotchas |
 | **2026-10-14** | ✅ **DONE 2026-10-11** | **Green Eggs' first season starts — its 16 upcoming shows must have `league_shows` rows (with cutoffs) before then.** "Sync shows" pressed ~17:00Z after the read-only pre-sync check; verified: 16 rows, 0 null cutoffs, all `upcoming`, all flags null, cutoffs identical to league 1's for the same 16 shows; league 1 still 37 rows and unchanged; cron still "no eligible shows" | "🚨 FOUND 2026-10-11 — A NEW LEAGUE GETS ZERO `league_shows` ROWS" at the top of Postgres/Supabase gotchas |
-| **2026-10-15 21:00 UTC** | 🔇 **SILENCED 2026-10-14 (dev's call) — supersedes PAUSED 2026-10-11** | **All Discord posts for BOTH leagues are off: the global `DISCORD_WEBHOOK` secret was deleted 2026-10-14.** Verified by name only the same day: no `DISCORD_WEBHOOK`, no `DISCORD_WEBHOOK_*`, platform defaults only. The fallback the PAUSED row described (Green Eggs' posts landing in the Ambassadors channel, song posts doubled) **no longer posts anything**. Stamps still advance (`index.ts:440`, `:460`, `:496`, `:527`, `:604`), so nothing replays on restore. **This date is now the propagation TEST, not an exposure:** the 21:00Z reminder for show 1786387666 (league 1) must NOT appear. If it does, the deletion did not reach the running function — record and reassess. **Before Discord is re-enabled** (post-first-show batch item (f), plan only): set `DISCORD_WEBHOOK_GREEN_EGGS` AND a per-league Ambassadors secret, and prefix every `notifyLeague` message with the league name. Verify any new secret by NAME only, never print or ask for the value | "🔇 SILENCED 2026-10-14" sub-bullet inside the 🚨 entry |
+| **2026-10-15 21:00 UTC** | 🔔 **GREEN EGGS ENABLED per-league 2026-10-14; AMBASSADORS still 🔇 SILENCED (2026-10-14, dev's call) — supersedes PAUSED 2026-10-11** | **League 2 posts to its own channel via `DISCORD_WEBHOOK_GREEN_EGGS` (set 2026-10-14). League 1 has no per-league secret and the global `DISCORD_WEBHOOK` stays deleted, so it posts nothing.** Verified by name only the same day: 8 names = seven platform defaults + `DISCORD_WEBHOOK_GREEN_EGGS`; no `DISCORD_WEBHOOK`; no `DISCORD_WEBHOOK_AMBASSADORS`. Stamps advance with or without a hook (`index.ts:440`, `:460`, `:496`, `:527`, `:604`), so nothing replays on restore. **This date is a TWO-SIDED propagation TEST:** the 21:00Z reminder for show 1786387666 must appear in the Green Eggs channel and must NOT appear in the Ambassadors channel, and BOTH `league_shows` rows must stamp `remind_sent`. League 1 posting = the deletion did not reach the running function; league 2 silent = the new secret was not read (check the exact name first). Record either outcome and reassess. **Before Ambassadors is re-enabled** (post-first-show batch item (f), narrowed 2026-10-14 to Ambassadors only): set a per-league Ambassadors secret and prefix every `notifyLeague` message with the league name — the prefix is no longer blocking for Green Eggs, whose channel is single-league. Verify any new secret by NAME only, never print or ask for the value or its digest | "🔔 ENABLED 2026-10-14" and "🔇 SILENCED 2026-10-14" sub-bullets inside the 🚨 entry |
 | **2026-08-14** (checked 2026-08-15) | ✅ **DONE** | **First production run of `scoreRankedPicks`** — Casual, show `1765912122`, finalized 12:00:04Z. All five checks pass: ladder values per row (`rank1` paid 6, not 1), no Any Debut row, perfect-sheet correctly withheld, totals reconcile. Rank ordering passes but is verified by test only — see the caveat, it is not a pending task | "✅ VERIFIED 2026-08-15 — FIRST PRODUCTION RUN OF `scoreRankedPicks`…" in Postgres/Supabase gotchas |
 
 **Every 2026-08-14 item closed.** The ranked-choice deploy batch met its hard
