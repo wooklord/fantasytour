@@ -340,6 +340,9 @@ duplicates off by default; `sync_shows` maps `permalink`. Also there: the
 `oneset` two-fallbacks fix, perfect-sheet count-vs-coverage, the "Perfect"
 rename rule and the format-change design question.
 
+2026-10-15 footnote incident (2-point Any Debut swing; "FTP" never matched) and
+the open debut/finalize rules questions: `docs/history/2026-10-15-wild-mountain-honey-footnote.md`.
+
 ### Stage C design notes (frontend)
 
 Build log for C1 / C2a / C2b, Official gating, the no-season warning, the
@@ -580,7 +583,9 @@ Each file opens with the `CLAUDE.md` lines it came from. New records go here
 by default (durability rule 4).
 
 `docs/decisions/` (binding): `admin-panel` · `auth-security` · `backups` ·
-`boot-removed-at` · `cron-secret-edge-auth` · `deferred` · `deploy-cache` ·
+`boot-removed-at` · `cron-secret-edge-auth` · `deferred` (plus two 2026-10-18
+scoring bugs: stale `setlist_songs` footnote/cover, score-write diff never
+matches — full text in `scoring-rules`) · `deploy-cache` ·
 `discord-routing` · `edge-function` · `frontend-css` ·
 `multi-league-switcher` · `official-opt-in-default` ·
 `post-first-show-batch` (the 🚨 overlay entry, LOCKED list, batch (a)–(f),
@@ -592,6 +597,7 @@ DST bug) · `postgres-rules` · `realtime` · `scoring-modes` ·
 `2026-08-copy-changes` · `2026-08-domain-move` · `2026-08-mutation-log` ·
 `2026-08-orphan-checks` · `2026-08-ranked-choice-deploy` ·
 `2026-08-test3-activation` · `2026-10-green-eggs-overlay` ·
+`2026-10-15-wild-mountain-honey-footnote` (2-point Any Debut swing) ·
 `closed-deadlines` · `pre-2.0-feature-snapshot` (not current) ·
 `pre-2.0-pending-work` · `rebuild-session-log` (Sessions 0–5) ·
 `stage-a-and-build-sequence` · `stage-c-build-log`.

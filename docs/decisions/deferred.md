@@ -53,3 +53,12 @@ game numbering past 12 shows (revisit only if a season actually gets there).
   wildcards, the duplicates warning above, the best-result-across-replays rule,
   master override, format toggle, and (in 2.0) the Official opt-out mechanic.
   Important because 2.0 delegates leagues to admins who didn't build the game.
+
+---
+
+**Two scoring-pipeline bugs found 2026-10-18, recorded in
+`docs/decisions/scoring-rules.md` under "Known bugs — found 2026-10-18":**
+the sync diff ignores `footnote`/`is_cover` (stale `setlist_songs`, UI shows
+a debut the scorer no longer credits), and the score-write change check
+never matches (every pass rewrites every row, `updated_at` is meaningless).
+Fix shapes are there; neither is scheduled.

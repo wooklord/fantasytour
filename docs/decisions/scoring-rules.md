@@ -265,3 +265,107 @@ caveats — two of the three do less than they look like they do:**
      ability to clear a pick — a save that should empty a slot leaves the
      old value in place. Server tolerant of both shapes first, client
      second, catch-all removed last.
+
+---
+
+## Debut detection — how it actually works (2026-10-18)
+
+Recorded from a read-only trace during the Wild Mountain Honey incident
+(`docs/history/2026-10-15-wild-mountain-honey-footnote.md`).
+
+- **There is no stored debut flag.** Every consumer runs `/debut/i` over the
+  Carton footnote text at the moment it needs it: `scoring.js:47` (the
+  `debut_call` slot), `:56` (`debut_call` impossible), `:83` (`anyDebut`,
+  which drives the Any Debut wildcard), `:272` (the `+debut` bonus on a hit
+  pick); and outside the scorer, `index.ts:633` (the Discord song post),
+  `src/features/picks.js:447` (the setlist view's DEBUT tag) and
+  `src/core/realtime.js:74` (the live toast).
+- **"FTP" has never matched anything.** The regex is the only pattern; a
+  footnote of `FTP, Steve Miller Band cover` contains no "debut", so a
+  cover's first performance is not a debut today — by accident of the regex,
+  not by decision.
+- **`is_cover` comes from `isoriginal`** (`index.ts:578`: `!Number(r.isoriginal)`),
+  independent of the footnote. The same Carton edit that removed "Debut"
+  also flipped `isoriginal` to 0.
+- **Scoring reads the live Carton fetch, never `setlist_songs`.** Every pass
+  refetches `/setlists/showdate/<date>.json` (`index.ts:566`), rebuilds
+  `songs` from the response (`:572-590`, footnote joined and entity-decoded at
+  `:579`), and passes that array to `deriveSlotFacts(songs, isFinal)` (`:613`)
+  and `scoreBracket({... songs ...})` (`:664`). The stored table is written for
+  the UI and the song-by-song diff only; the scorer does not read it back.
+- **Finalized shows are never rescored.** The cron scores only
+  `eligibleLeagueShows()` (`index.ts:372-376`): `status != 'final'`, cutoff
+  not null and passed, showdate within the last day. `status` becomes `final`
+  per league, either by the manual `finalize` action (`:779-790`) or by
+  `autoFinalize` at 8 AM Eastern the next morning (`:398-408`); each runs one
+  last pass with `isFinal = true` first. Until that moment scores float with
+  every Carton edit; after it they are frozen.
+- **Reopen is the only path back** (`index.ts:732-749`): it deletes that
+  league's `scores` for the show, sets status to `live` and `winner_sent`
+  null, and the next cron tick rescores the whole league against current
+  Carton data. There is no per-player or per-song correction.
+
+### OPEN RULES DECISIONS — undecided 2026-10-18, admins to weigh in
+
+**(a) Does a cover's first performance (Carton "FTP") count as a debut for
+the wildcard and bonus?** Options on the table:
+1. **Originals only** — the current behaviour, by accident of the regex, not
+   by decision. "Debut" in Carton usage is a first-ever performance of an
+   original; "FTP" (first time played) is the tapers' term for a cover's
+   first appearance.
+2. **FTP counts** — extend the match to `/debut|\bFTP\b/i`. Makes the
+   wildcard and bonus pay on a first-time cover too.
+3. **Derive first-time-played from Carton history instead of the footnote** —
+   a song is a debut if it has no earlier `setlist_songs`/Carton appearance.
+   Removes the dependency on taper wording entirely, but needs the full
+   setlist-history backfill that Module A also needs (`scoring-modes.md`);
+   `setlist_songs` holds only the rolling sync window today.
+Not decided. Note that whichever way it goes, the stored `scores.breakdown`
+of already-final shows will not change (see (b)).
+
+**(b) Finalize policy — scores float until finalize, then freeze; Reopen is
+the override.** That is what the code does today and it is how a
+post-finalize Carton correction is handled: an admin presses Reopen, the
+league rescores, the admin finalizes again. **Proposed: keep it, but state it
+in the Rules card** so players know that (1) scores can move until the show
+is finalized, including on Carton edits, and (2) after that they move only
+if an admin reopens. Undecided — the Rules card copy is not written and the
+question of whether a Carton correction *should* trigger a reopen is the
+admins' call, not the code's.
+
+## Known bugs — found 2026-10-18
+
+**(i) The sync diff ignores `footnote` and `is_cover`, so `setlist_songs`
+goes stale while the scorer uses live data.** `index.ts:597` selects only
+`position, songname, setnumber, is_encore, segue` from the stored rows and
+`:599-601` compares only those five fields, so a Carton edit that changes
+only the footnote or the cover flag is never written back. The scorer does
+not care (it reads the live fetch, above), but the UI does: after the
+2026-10-15 edit the setlist view (`picks.js:447`) still showed a DEBUT tag on
+Wild Mountain Honey while the scorer had stopped crediting it, and the stored
+row still reads `footnote = "Debut", is_cover = false` against a live
+`FTP, Steve Miller Band cover` / `isoriginal = 0`. Three other footnotes on
+the same show are stale the same way. **Fix shape:** add `is_cover` and
+`footnote` to both the `select` at `:597` and the comparison at `:601`.
+Cosmetic until the debut rule above is decided, because scoring is
+unaffected; worth doing in the same change as that decision.
+
+**(ii) The score-write change check never matches, so every pass rewrites
+every row and pings realtime; `updated_at` is meaningless.** `index.ts:720`
+compares `JSON.stringify(prev.breakdown)` against `JSON.stringify(breakdown)`.
+`prev.breakdown` comes back from Postgres `jsonb`, which stores object keys
+in its own order (shortest first, then bytewise: `hit, slot, points, reason,
+songname`), while the fresh object is built in insertion order (`slot,
+songname, hit, points, reason`). The two strings never agree, so the
+"write only on change" branch always writes, `score_writes` is always
+non-zero, `pingRealtime` fires on every pass of every live show, and
+`scores.updated_at` records the last scoring pass rather than the last real
+change. Observed directly: every `scores` row for show 1786387666 in brackets
+3 and 4 carries an `updated_at` inside the 04:10:18–22Z finalize window and
+both bracket-2 rows sit at 12:00:01–02Z, i.e. each league's final pass.
+**Fix shape:** compare canonicalised JSON (stringify with sorted keys on both
+sides) or compare field-by-field per breakdown row (`slot`, `songname`,
+`hit`, `points`, `reason`) plus `points`. Add a scenario/unit case that
+scores the same picks twice against the same setlist and asserts zero
+writes on the second pass. Points were never wrong — this is a wasted-write,
+wasted-ping and lost-history bug, not a scoring bug.
