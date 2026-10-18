@@ -25,7 +25,7 @@ You have two options:
        git clone <your-repo-url>
        cd <your-repo>
 2. Copy the contents of this package into it. The important additions are:
-   - `CLAUDE.md`  (the full project playbook — this is the key file)
+   - `CLAUDE.md`  (the project playbook — binding rules plus an index; the full decision records are in `docs/decisions/` and the history in `docs/history/`)
    - `README.md`  (refreshed)
    - `SETUP_CLAUDE_CODE.md`  (this file)
    - `.gitignore`

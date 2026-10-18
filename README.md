@@ -22,8 +22,9 @@ setlist after each show. Standings, seasons, an admin panel, and notifications i
 - `supabase/functions/carton-sync/` — the Deno edge function (sync + scoring + announce).
 - `docs/MULTITENANT_SPEC.md` — the full spec for the "2.0" multi-tenant rebuild.
 - `assets/` — icons (app, favicon, PWA, Discord).
-- `CLAUDE.md` — the engineering playbook and full project context. **Read this first
-  if you're picking the project up.**
+- `CLAUDE.md` — the engineering playbook: binding rules, ways of working, and an index. **Read this first
+  if you're picking the project up.** Full decision records live in `docs/decisions/`; resolved
+  checkpoints and dated verifications in `docs/history/`.
 
 ## Deploy
 

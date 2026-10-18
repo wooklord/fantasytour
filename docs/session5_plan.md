@@ -1,9 +1,9 @@
 # Session 5 — Facebook League launch: state, deferrals, accepted risks
 
 Working plan file for the Facebook League launch. Started 2026-08-16.
-Read alongside `CLAUDE.md`'s "Session 5" roadmap bullet and the
-PRE-SESSION-5 GATE table — this file carries the current state and the
-decisions; CLAUDE.md carries the durable reasoning.
+Read alongside the "Session 5" bullet in `docs/history/rebuild-session-log.md`
+and `CLAUDE.md`'s PRE-SESSION-5 GATE table — this file carries the current
+state and the decisions; `docs/decisions/` carries the durable reasoning.
 
 **Standing rule observed throughout: no player nicknames in this file.**
 Nicknames are the login identifier — half of the name+PIN credential pair —
@@ -19,8 +19,8 @@ Official = bracket 3, Casual = bracket 4) is live, has 18 members (3 admins)
 and a locked 18-row roster for season 11 ("The Final Tour", 2026-10-14 →
 2026-12-06). It also has **zero rows in `league_shows`**, so every show reads
 "no cutoff", every button says "Score", `submit_picks` raises, and the scorer
-skips it. Full root cause and evidence in CLAUDE.md, Postgres/Supabase
-gotchas, the "🚨 FOUND 2026-10-11" entry. Short form: `global_create_league`
+skips it. Full root cause and evidence in `docs/decisions/post-first-show-batch.md`,
+the "🚨 FOUND 2026-10-11" entry. Short form: `global_create_league`
 never creates overlay rows, only `syncShows()` does, and nothing but the
 manual "Sync shows" button ever invokes it. Last `sync_shows` predates the
 league's creation.
@@ -34,7 +34,7 @@ league's creation.
   instead of a blank input — plan only (E).
 - **Cron scheduling of `sync_shows` is HELD** until the first Green Eggs show
   has scored cleanly. Scope folds into the `CRON_SECRET` dual-path change
-  (CLAUDE.md "DECIDED 2026-08-17, NOT STARTED") — plan only (D).
+  (`docs/decisions/cron-secret-edge-auth.md`, "DECIDED 2026-08-17, NOT STARTED") — plan only (D).
 - Review-before-edit for every code change: plan shown, approval, then edit.
 
 **Work plan, A → E, each as plan-then-approve:**
@@ -42,7 +42,7 @@ league's creation.
   approved pressing "Sync shows".** 16 window shows, all future, same ids
   on The Carton and in `shows`; league 1 gets zero `league_shows` writes and
   a byte-identical `shows` upsert; null-state shows land on 23:00 UTC
-  (Eastern fallback, correct for D.C.). Full list in CLAUDE.md's 🚨 entry.
+  (Eastern fallback, correct for D.C.). Full list in `docs/history/2026-10-green-eggs-overlay.md` (the pre-sync check).
   - **Decision folded in: provision `DISCORD_WEBHOOK_GREEN_EGGS` before
     2026-10-15 21:00 UTC** (the first reminder). No per-league secret
     exists today, so Green Eggs' messages would fall back to the Ambassadors
@@ -78,8 +78,8 @@ league's creation.
     1786387666 (league 1) is the test** — if it posts, the deletion did not
     propagate; record that and reassess. **Re-enabling AMBASSADORS is
     post-first-show batch item (f)** below (narrowed the same day — see the
-    next bullet). Full entry: CLAUDE.md, "🔇 SILENCED 2026-10-14"
-    sub-bullet inside the 🚨 entry.
+    next bullet). Full entry: `docs/decisions/discord-routing.md`, "🔇 SILENCED 2026-10-14"
+    sub-bullet.
   - **🔔 ENABLED 2026-10-14 (later the same day) — GREEN EGGS POSTS AGAIN
     via its own secret, BUT INTO THE AMBASSADORS CHANNEL; AMBASSADORS
     REMAINS SILENCED.** The dev set `DISCORD_WEBHOOK_GREEN_EGGS` in the
@@ -104,8 +104,8 @@ league's creation.
     1786387666 is a TWO-SIDED test observed in ONE channel: EXACTLY ONE
     reminder post there (Green Eggs'), BOTH rows stamp `remind_sent`. Two
     posts = league 1's hook is live (deletion did not propagate); zero =
-    the new secret was not read.** Full entry: CLAUDE.md, "🔔 ENABLED
-    2026-10-14" sub-bullet inside the 🚨 entry.
+    the new secret was not read.** Full entry: `docs/decisions/discord-routing.md`, "🔔 ENABLED
+    2026-10-14" sub-bullet.
 - **B. Seed overlays in `global_create_league`.** One row per existing show
   at creation, `cutoff_at` = 6 PM in `coalesce(shows.timezone,
   'America/New_York')`, past-show flags stamped as Stage A did. Must match
@@ -117,9 +117,9 @@ league's creation.
   real schedule/cutoff block (`can_submit_picks` left alone — the real one
   has no such check). Mutation: restoring the rows fails 4 checks × 2 modes,
   the two that hold either way survive. Scorer skip NOT exercised, stated in
-  the scenario header. Details in CLAUDE.md's 🚨 entry, item 5.
+  the scenario header. Details in `docs/decisions/post-first-show-batch.md`, LOCKED item 5.
 - **D. Cron — HELD. ✅ Documented 2026-10-11.** The `CRON_SECRET` dual-path
-  change is documented in CLAUDE.md under "DECIDED 2026-08-17, NOT STARTED:
+  change is documented in `docs/decisions/cron-secret-edge-auth.md` under "DECIDED 2026-08-17, NOT STARTED:
   `sync_shows`, `sync_songs` and `score` ... are COMPLETELY UNAUTHENTICATED"
   (it has no section of its own in this file). Its scope now carries:
   **schedule `sync_shows` hourly, after the first Green Eggs show scores.**
@@ -166,7 +166,7 @@ week.
   null-timezone shows when device DST ≠ show-date DST — the two D.C. shows
   read 7:00 PM for a 6:00 PM Eastern cutoff. Display-only; the write path is
   correct, but a no-edit re-save shifts the cutoff +1h. Players unaffected.
-  Full entry at the top of CLAUDE.md's Frontend/CSS gotchas. **Rule until
+  Full entry in `docs/decisions/post-first-show-batch.md` (the admin DST bug, batch part F). **Rule until
   fixed: Change cutoff is off-limits for Nov/Dec shows in both leagues.**
   Fix APPROVED AS A PLAN 2026-10-11, HELD for the post-first-show batch
   (item (d) above). (This line read "not approved" until later the same
@@ -174,8 +174,8 @@ week.
 - **G. (added 2026-10-11) Admin PIN reset, read from the live catalog —
   read-only, nothing changed.** Green Eggs has three league admins; this is
   their recovery path. Playbook written for them:
-  `docs/admin_playbook_forgot_pin.md`. Full findings in CLAUDE.md's
-  "ADMIN PIN RESET — READ FROM THE LIVE CATALOG 2026-10-11" entry. Three
+  `docs/admin_playbook_forgot_pin.md`. Full findings in `docs/decisions/auth-security.md`,
+  the "ADMIN PIN RESET — READ FROM THE LIVE CATALOG 2026-10-11" entry. Three
   things to carry: **(1) CORRECTION** — the Chat-relayed claim that an
   `admin_set_player_pin` skipped `must_change_pin` was wrong; the function
   never existed, `admin_reset_player_pin` has always set the flag. **(2) A
@@ -546,7 +546,7 @@ Official season exists, and Green Eggs has none. It becomes hard to undo the
 moment one activates, because `activateSeasons` snapshots every
 `official_opt_in = true` member into `season_rosters` and stamps
 `roster_locked_at` — after which removal is the messy, partly irreversible
-path documented in CLAUDE.md's boot entry.
+path documented in `docs/decisions/boot-removed-at.md`.
 
 ### 3. Discord webhook secret skipped
 
@@ -613,7 +613,7 @@ nothing to destroy. The real problem is simply that the panel is laid out
 poorly and hard to hand to someone who did not build it.
 
 Those hazards do become real once the new league has picks and scores. They
-are tracked in CLAUDE.md's deferred list; they are not what is gating the
+are tracked in `docs/decisions/scoring-rules.md` and `docs/decisions/deferred.md`; they are not what is gating the
 appointments.
 
 ---
@@ -637,7 +637,7 @@ appointments.
      league, the bracket name alone identifies nothing, which is why the
      line names both.
 1. **Admin tab reorg — arrangement DONE 2026-08-17 and shipped** (commit
-   `170851c`). See CLAUDE.md's "The admin tab is GROUPED BY SCOPE" entry for
+   `170851c`). See `docs/decisions/admin-panel.md`, "The admin tab is GROUPED BY SCOPE", for
    the order and why it is load-bearing. **What remains is the Members
    section**, decided but not built — see the next item.
 2. **Members section rework — DECIDED, NOT BUILT. Resume here.**
@@ -671,8 +671,8 @@ appointments.
 3. Appoint the two league admins via the Global console. **Blocked on step 2.**
 3. **Brief them on the reload requirement before they add anyone** — every
    player added must fully close and reopen the app before the league
-   appears; foregrounding is not enough. See CLAUDE.md, "Multi-league
-   switcher behavior." This will be the most common support question during
+   appears; foregrounding is not enough. See `docs/decisions/multi-league-switcher.md` ("Multi-league
+   switcher behavior"). This will be the most common support question during
    recruitment and is invisible from the admin side.
 4. Provision the Discord webhook secret.
 5. Recruitment; add players as they register.
@@ -706,7 +706,7 @@ the dev and never ruled on:
 **Deferred from this work, not started:**
 - **`toggleFormat` still has no confirm** — unchanged, and now the only
   destructive admin control without one, since Boot and roster removal both
-  gained theirs. Tracked in CLAUDE.md's deferred list with the orphan-check
+  gained theirs. Tracked in `docs/history/2026-08-orphan-checks.md` with the orphan-check
   shape already spelled out.
 - **The existence-vs-count weakness**: the mode-change assertions use
   `confirmCalls.some()`, so they verify a matching dialog EXISTS, not how
@@ -718,7 +718,7 @@ the dev and never ruled on:
 
 ## Open items carried out of 2026-08-16/17, with enough to resume cold
 
-Each of these has a full write-up in CLAUDE.md; this is the index so nothing
+Each of these has a full write-up in `docs/decisions/` (see the index in CLAUDE.md); this is the index so nothing
 is only findable by remembering it exists.
 
 - **`oneset` fallback divergence — decision not made.** `rulesRegionHtml`

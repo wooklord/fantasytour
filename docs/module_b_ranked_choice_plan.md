@@ -4,7 +4,7 @@
 
 Fantasy Eggy's slot-based scoring only rewards positional accuracy (opener,
 closer, etc.). Module B is a second, slot-independent scoring mode designed
-in an earlier session and sketched in CLAUDE.md's "Alternate scoring modes"
+in an earlier session and sketched in `docs/decisions/scoring-modes.md` ("Alternate scoring modes", moved out of CLAUDE.md 2026-10-18)
 section: N ranked picks against a fixed descending point ladder (e.g.
 5/4/3/2/1) — a pick either gets played or it doesn't, no positional matching.
 That sketch was never built. This session builds it.
@@ -24,7 +24,7 @@ deploy` — that stays a separate, later, explicitly-approved step.
 `docs/`, screenshot deleted, `.gitignore` updated). 0.6 (commits) pending —
 see end of this document for current state and next step.**
 
-### 0.1 — CLAUDE.md: Module B locked decisions (done — actual text committed differs slightly, see CLAUDE.md itself; also folds in the coverage-vs-count fix to decision 2 and an added "open, not decided: ladder mutability" bullet, both from the second approval round)
+### 0.1 — CLAUDE.md: Module B locked decisions (done — actual text committed differs slightly, see `docs/decisions/scoring-modes.md`, where the section now lives; also folds in the coverage-vs-count fix to decision 2 and an added "open, not decided: ladder mutability" bullet, both from the second approval round)
 
 Append to the "Module B — ranked choice" bullet list in the "Alternate
 scoring modes (designed, not scheduled)" section, after the existing
@@ -63,7 +63,9 @@ scoring modes (designed, not scheduled)" section, after the existing
 
 Add immediately after the existing "silent multi-row-insert failure" gotcha
 in the Postgres/Supabase gotchas section (this is the live verification of
-that exact fix):
+that exact fix). (As of 2026-10-18 both live in `docs/`: the gotcha in
+`docs/decisions/edge-function.md`, the checkpoint in
+`docs/history/2026-08-test3-activation.md`.):
 
 ```
 - **Open checkpoint, not yet verified: Test 3 season activation
@@ -96,7 +98,8 @@ that exact fix):
 ### 0.3 — CLAUDE.md: Session durability protocol
 
 New section, inserted after "THE MERCILESS EDITING DISCIPLINE" and before
-"Feature set frozen at the start of 2.0":
+"Feature set frozen at the start of 2.0" (the latter now lives at
+`docs/history/pre-2.0-feature-snapshot.md`):
 
 ```
 ## SESSION DURABILITY PROTOCOL (standing rule — read this every session)
@@ -243,7 +246,7 @@ tell: because `scoreBracket` re-reads config fresh on every pass, editing a
 ladder rewrites `breakdown` and `points` for shows that were *already
 scored and already shown to players*. They see a different number than
 before, with no notice and no record that a rule moved underneath it. (Not
-the same as the frozen-`breakdown`-text gotcha in CLAUDE.md — that one
+the same as the frozen-`breakdown`-text gotcha in CLAUDE.md (full text in `docs/decisions/postgres-rules.md`) — that one
 freezes the *wording* written at score time; the point values a later pass
 recomputes are not frozen.)
 
@@ -305,8 +308,8 @@ brackets). What was actually checked:
   calls `get_bracket_scores`, never reads `scores`/`seasons`/
   `season_rosters`, and displays no points, totals, standings, or bracket
   config. The cross-league *stats* screen that would have been the real
-  risk was deliberately never built (see CLAUDE.md's Global-console
-  decision) — but the console that does exist was confirmed clean rather
+  risk was deliberately never built (see the Global-console
+  decision in `docs/history/stage-c-build-log.md`) — but the console that does exist was confirmed clean rather
   than assumed clean on the strength of that.
 
 **Conclusion: every score surface in the app is strictly per-bracket;
@@ -647,7 +650,7 @@ and the first production run of `scoreRankedPicks` was checked against
 (`rank1` paid 6, ruling out the flat-pick fallback), no "Any Debut" row, the
 perfect-sheet gate correctly withheld, totals reconciling. Full detail and
 the caveats live in the "✅ VERIFIED 2026-08-15 — FIRST PRODUCTION RUN OF
-`scoreRankedPicks`" bullet in CLAUDE.md; that is the authoritative record,
+`scoreRankedPicks`" bullet in `docs/history/2026-08-ranked-choice-deploy.md`; that is the authoritative record,
 not this file.
 
 **Carried forward, deliberately not logged as open work:**
@@ -667,8 +670,8 @@ not this file.
 
 **The still-open items below are not Module B blockers** — the slot-mode
 perfect-sheet count check, the `toggleFormat` orphan warning, and the
-format-transparency design question are all recorded in CLAUDE.md's
-later-work list and stand on their own.
+format-transparency design question are all recorded in
+`docs/decisions/scoring-rules.md` and stand on their own.
 
 ---
 
@@ -1123,7 +1126,7 @@ fixture edit.
    move is therefore no longer free — affected players get logged out, lose
    in-progress pick drafts, and must re-add the app and log in again. Full
    consequences and the two new scheduling constraints are recorded in the
-   domain-move bullet in CLAUDE.md; the trigger is unchanged and the
+   domain-move bullet in `docs/history/2026-08-domain-move.md`; the trigger is unchanged and the
    argument for acting before recruitment is now stronger, not weaker.
 4. ~~**7n(a) and 7n(b) are CLAIMED guardians, not demonstrated ones.**~~
    **RESOLVED 2026-08-13.** Both were written after mutations 1 and 3 had
