@@ -248,3 +248,4 @@ before assuming a change is covered just because the suite is green:
   show" rejection — it doesn't check `official_opt_in` or `season_rosters` at all. So
   even adding the session wouldn't currently prove the real roster-based rejection
   path works; the fake handler needs the same real-join treatment `get_bracket_scores`
+  and `admin_list_members` already get before that's actually covered.
