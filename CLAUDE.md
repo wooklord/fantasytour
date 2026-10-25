@@ -433,23 +433,10 @@ UNAUTHENTICATED** — `docs/decisions/cron-secret-edge-auth.md`. Dual path (a
 hourly `sync_shows` folded in and HELD until the first Green Eggs show scores
 cleanly. Do not probe the endpoint casually: unknown actions run scoring.
 
-**HOW TO ANSWER "IS THE NEW BUNDLE LIVE?" — build id.** `build.mjs` injects
-`__BUILD_ID__` = `<contenthash>-<gitsha>`, shown in the Settings card. The
-hash covers `src/**/*.js`, `styles.css` AND `index.html`, so a CSS-only edit
-changes `app.js` — rebuild and commit both together.
-
-```
-curl -s https://fantasyeggy.wooklord.net/app.js | grep -oE '[0-9a-f]{7}-[0-9a-f]{7}' | head -1   # deployed
-curl -s http://localhost:8080/app.js          | grep -oE '[0-9a-f]{7}-[0-9a-f]{7}' | head -1   # local
-```
-
-Equal = live. Different = not deployed, and the sha half says which commit
-is. The Settings card shows the id the *tab* runs; curl shows what the
-*edge* serves — two different ids is a stale client (`max-age=600`, no
-cache-busting), not a failed deploy. Don't grep the bundle for a string
-unique to your change instead; that only works when you already know one.
-Why a content hash (not a timestamp or dirty flag), the esbuild separator
-gotcha, and the cache-busting fix options: `docs/decisions/deploy-cache.md`.
+**HOW TO ANSWER "IS THE NEW BUNDLE LIVE?" — build id:** compare the
+`<hash>-<sha>` the Settings card shows with what `curl` of the live `app.js`
+serves; the curl commands, the stale-client vs not-deployed distinction and
+the hash rationale: `docs/decisions/deploy-cache.md` (Quick reference).
 
 **Cache-busting entry — deferred:** `app.js` has no cache-busting and both it
 and `index.html` are served with `max-age=600`, so an open PWA keeps the old

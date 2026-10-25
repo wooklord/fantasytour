@@ -3,6 +3,28 @@
 > Extracted verbatim from `CLAUDE.md` at commit 54a5ab8 (2026-10-18), original lines 3429–3537. Nested entries were de-indented to top level; wording is unchanged.
 > Decision record — currently binding. `CLAUDE.md` holds only a pointer stub under the same entry name; this file is the full text and rationale.
 
+## Quick reference (moved verbatim from `CLAUDE.md` on 2026-10-25 for headroom)
+
+**HOW TO ANSWER "IS THE NEW BUNDLE LIVE?" — build id.** `build.mjs` injects
+`__BUILD_ID__` = `<contenthash>-<gitsha>`, shown in the Settings card. The
+hash covers `src/**/*.js`, `styles.css` AND `index.html`, so a CSS-only edit
+changes `app.js` — rebuild and commit both together.
+
+```
+curl -s https://fantasyeggy.wooklord.net/app.js | grep -oE '[0-9a-f]{7}-[0-9a-f]{7}' | head -1   # deployed
+curl -s http://localhost:8080/app.js          | grep -oE '[0-9a-f]{7}-[0-9a-f]{7}' | head -1   # local
+```
+
+Equal = live. Different = not deployed, and the sha half says which commit
+is. The Settings card shows the id the *tab* runs; curl shows what the
+*edge* serves — two different ids is a stale client (`max-age=600`, no
+cache-busting), not a failed deploy. Don't grep the bundle for a string
+unique to your change instead; that only works when you already know one.
+Why a content hash (not a timestamp or dirty flag), the esbuild separator
+gotcha, and the cache-busting fix options: the full record below.
+
+## Full record (extracted 2026-10-18)
+
 **HOW TO ANSWER "IS THE NEW BUNDLE LIVE?" — build id, added 2026-08-17.**
 `build.mjs` injects a `__BUILD_ID__` of the form `<contenthash>-<gitsha>`,
 rendered in the Settings card under the colophon. The content hash covers
