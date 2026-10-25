@@ -84,8 +84,17 @@
 
 3a. **LOCKED 2026-10-25 — Scores page own-entry outline; standings chip
    REVERTED.** On the Scores page the viewer's own entry gets the yolk
-   OUTLINE, **keyed on `is_mine` from `get_show_picks`** (this is the
-   screen the original "server-computed `is_mine`" wording was about).
+   OUTLINE, *(superseded same day, original kept:)* **keyed on `is_mine`
+   from `get_show_picks`** (this is the screen the original
+   "server-computed `is_mine`" wording was about).
+   **SUPERSEDED 2026-10-25 (dev's call at plan approval): the own entry is
+   marked by `player_id === state.session.id`.** The score entries are
+   built from `get_bracket_scores`, which carries `player_id` but no
+   `is_mine`; `get_show_picks` carries `is_mine` but no `player_id`.
+   "Keyed on `is_mine`" was Chat's wording and wrong for this RPC — it
+   would have needed a name join. The session id is server-issued at
+   login, so this is the same mechanism as `.me` on the board. No name
+   join, no dependence on `is_mine`.
    Point colors unchanged. **Standings board: REVERT the View chip** —
    tiebreak lines always visible again, exactly as before `1a74cee`, and
    `ft_board_view` removed (no reader, no writer). **KEEP the standings
