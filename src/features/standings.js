@@ -13,6 +13,22 @@ import { computeStandings, rankStandings, TIEBREAK_SHORT_LABELS } from "../core/
 // lives on the shared state object instead of a bare global.
 export function setBoardSeason(v){ state.boardSeason = v; renderBoard(); }
 
+// View chip (standings-ux.md decision 2, resolved 2026-10-25): "compact" =
+// name + points only; "detail" = plus the per-row tiebreak lines. Nothing
+// else is ever expanded — a per-show breakdown inside rows is NOT in scope.
+// A per-device preference in localStorage, same posture as ft_theme2:
+// read once at module load, written on toggle, never account state, never
+// sent anywhere. Default compact. Only the two known values are honoured,
+// so a hand-edited key can't produce a third state.
+const BOARD_VIEWS = ["compact", "detail"];
+let boardView = BOARD_VIEWS.includes(localStorage.getItem("ft_board_view")) ? localStorage.getItem("ft_board_view") : "compact";
+export function setBoardView(v){
+  if (!BOARD_VIEWS.includes(v)) return;
+  boardView = v;
+  localStorage.setItem("ft_board_view", v);
+  renderBoard();
+}
+
 // ---------- podium arrangement ----------
 // Traditional centered-podium layout: a lone best tier centers and rises
 // above flanking lower tiers (better rank flanks left — "silver left, gold
@@ -197,7 +213,7 @@ export async function renderBoard(){
   // throughout, only what renders inside the box differs.
   const podBox = (o, big) => `<div class="pod ${big?"first":""}">${
       isOfficial ? trophy(big?bigPx:smallPx, tierFor(o)) : rankNumeral(big?bigPx:smallPx, tierFor(o), o.rank)
-    }<b>${esc(pname[o.id]||"?")}</b></div>`;
+    }<b class="nm" title="${esc(pname[o.id]||"?")}">${esc(pname[o.id]||"?")}</b></div>`;
   const podiumEntries = order.filter(o => o.rank <= 3);
   // Placeholder empty state: before ANY non-zero score exists among these
   // players (not just "before the first show finalizes" — a finalized
@@ -238,7 +254,7 @@ export async function renderBoard(){
   const compactHtml = compactTiers.length
     ? `<div class="podium-compact">${compactTiers.map(t => `<div class="pod-col">${
         isOfficial ? trophy(44, tierFor(t.items[0])) : rankNumeral(44, tierFor(t.items[0]), t.rank)
-      }<div class="pod-names">${t.items.map(o => `<div>${esc(pname[o.id]||"?")}</div>`).join("")}</div></div>`).join("")}</div>`
+      }<div class="pod-names">${t.items.map(o => `<div class="nm" title="${esc(pname[o.id]||"?")}">${esc(pname[o.id]||"?")}</div>`).join("")}</div></div>`).join("")}</div>`
     : "";
   const podium = !order.length
     ? ""
@@ -253,6 +269,9 @@ export async function renderBoard(){
         <select onchange="setBoardSeason(this.value)"
           style="margin-left:auto;background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.82rem">${opts}</select></div>
       ${podium}
+      <div class="chiprow" id="boardview"><span class="lbl">View</span><div class="switcher">
+        <button class="linkbtn switcher-btn${boardView==="compact"?" on":""}" onclick="setBoardView('compact')">Compact</button>
+        <button class="linkbtn switcher-btn${boardView==="detail"?" on":""}" onclick="setBoardView('detail')">Detail</button></div></div>
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map(o => {
         const r = T[o.id];
@@ -281,8 +300,14 @@ export async function renderBoard(){
         const layerLines = !hasAnyScore ? "" : (o.layers||[])
           .map(l => `<div class="muted" style="font-size:.72rem">${ORDINAL[tiebreakers.indexOf(l.layer)]} tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`)
           .join("");
+        // .me is the own-row outline hook (styles.css) — keyed on the
+        // server-issued session id against the RPC's player_id, the
+        // mechanism this board has always used (standings-ux.md 3).
+        // Name cell: .pname/.nm is the ellipsis pair (decision 4); the
+        // full name rides in title. Tiebreak lines only in detail view.
+        const nm = pname[o.id]||"?";
         return `<tr class="${o.id===state.session.id?"me":""}">
-        <td class="rank">${o.rank}</td><td>${esc(pname[o.id]||"?")}${layerLines}</td>
+        <td class="rank">${o.rank}</td><td class="pname"><span class="nm" title="${esc(nm)}">${esc(nm)}</span>${boardView === "detail" ? layerLines : ""}</td>
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
       }).join("")
         || '<tr><td colspan="3" class="muted">No scores yet — pick some songs.</td></tr>'}
@@ -294,7 +319,7 @@ export async function renderBoard(){
     <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">· ${scopeName}</span></h2>
       <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th><th style="text-align:right">Shows</th><th style="text-align:right">Avg</th><th style="text-align:right">High</th><th style="text-align:right">${winBadge(18)}</th></tr>
       ${statRows.map(([id,r]) => `<tr class="${id===state.session.id?"me":""}">
-        <td>${esc(pname[id]||"?")}</td><td class="pts">${r.shows}</td>
+        <td class="pname"><span class="nm" title="${esc(pname[id]||"?")}">${esc(pname[id]||"?")}</span></td><td class="pts">${r.shows}</td>
         <td class="pts">${(r.scoped/r.shows).toFixed(1)}</td>
         <td class="pts" title="${esc(r.highShow?.venue||"")}">${r.high}</td>
         <td class="pts">${r.wins||0}</td></tr>`).join("")

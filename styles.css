@@ -416,7 +416,41 @@ html[data-theme="light"] .panel.live-halo{
 .lb .pts{font-family:var(--mono);text-align:right;font-size:1.05rem}
 .lb.compact td,.lb.compact th{padding:8px 5px;font-size:.85rem}
 .lb.compact .pts{font-size:.9rem}
-.lb tr.me td{background:rgba(255,197,61,.07)}
+/* Own row: an OUTLINE in --yolk, never a fill (docs/decisions/standings-ux.md
+   decision 3) — per-show wins may later tint rows, and an outline can't
+   collide with a fill. Inset box-shadows on the cells rather than
+   `outline` on the <tr>, which browsers don't paint reliably on table
+   rows; first/last cells close the left and right edges. Replaces a
+   hardcoded rgba(255,197,61,.07) fill that also ignored the light theme. */
+.lb tr.me td{box-shadow:inset 0 2px 0 var(--yolk),inset 0 -2px 0 var(--yolk)}
+.lb tr.me td:first-child{box-shadow:inset 2px 0 0 var(--yolk),inset 0 2px 0 var(--yolk),inset 0 -2px 0 var(--yolk)}
+.lb tr.me td:last-child{box-shadow:inset -2px 0 0 var(--yolk),inset 0 2px 0 var(--yolk),inset 0 -2px 0 var(--yolk)}
+/* Name cells (decision 4): ellipsis, never a wrap or a sideways scroll.
+   .nm is the one truncation rule for every nickname cell — standings
+   table, podium, Who's Picked and the other .pickres admin lists — with
+   the full name in the title attribute. width:100%/max-width:0 is the
+   table trick that hands the name column the leftover width, so the
+   ellipsis has a bound to truncate against instead of widening the table
+   into the overflow-x wrapper. The podium cap keeps three boxes on one
+   row at phone width (the podium-row rule in frontend-css.md). */
+.lb td.pname{width:100%;max-width:0}
+.nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pod b.nm,.pod-names .nm{max-width:min(110px,28vw)}
+.pickres .nm{flex:1 1 auto;min-width:0}
+/* Chip rows — the standings View chip and Who's Picked's Show chip: a
+   small label plus the shared .switcher buttons, right-aligned so the
+   board's sits over the Score column. Not in the Score <th>: two buttons
+   plus "Score" in that header cell would leave the name column ~70px at
+   phone width. */
+.chiprow{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin:4px 0 6px}
+.chiprow .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--cream-dim)}
+/* Who's Picked two-line rows (admin-panel.md → Who's Picked). */
+.roster-lines{flex:1 1 auto;min-width:0}
+.roster-l1{display:flex;align-items:center;gap:8px}
+.roster-l2{font-size:.78rem;margin-top:2px}
+.pill.done{border-color:var(--mint);color:var(--mint)}
+.pill.partial{border-color:var(--yolk);color:var(--yolk)}
+.pill.none{opacity:.8}
 
 /* ---------- setlist + results ---------- */
 .songrow{display:flex;gap:10px;padding:7px 2px;border-bottom:1px dashed var(--dash);align-items:baseline}

@@ -37,6 +37,7 @@
   var THEME_COLOR_LIGHT = "#F4ECD9";
   var THEME_COLOR_DARK = "#171233";
   var CARTON_SITE_BASE = "https://thecarton.net/setlists";
+  var NAME_MAX_LEN = 20;
 
   // src/core/theme.js
   var sysLight = matchMedia("(prefers-color-scheme: light)");
@@ -138,7 +139,11 @@
     authFlow("login");
   }
   async function doRegister() {
-    authFlow("register_player");
+    if ($("#a-name").value.trim().length > NAME_MAX_LEN) {
+      $("#a-err").textContent = `Name must be ${NAME_MAX_LEN} characters or fewer`;
+      return;
+    }
+    return authFlow("register_player");
   }
   async function authFlow(fn) {
     $("#a-err").textContent = "";
@@ -1049,6 +1054,14 @@ Save anyway?`)) return;
     state.boardSeason = v;
     renderBoard();
   }
+  var BOARD_VIEWS = ["compact", "detail"];
+  var boardView = BOARD_VIEWS.includes(localStorage.getItem("ft_board_view")) ? localStorage.getItem("ft_board_view") : "compact";
+  function setBoardView(v) {
+    if (!BOARD_VIEWS.includes(v)) return;
+    boardView = v;
+    localStorage.setItem("ft_board_view", v);
+    renderBoard();
+  }
   function arrangePodium(tiers) {
     var _a;
     if (!tiers.length) return [];
@@ -1134,7 +1147,7 @@ Save anyway?`)) return;
     const desktopNarrow = window.matchMedia("(min-width:901px) and (max-width:1279px)").matches;
     const bigPx = narrow ? 96 : desktopNarrow ? 83 : 118;
     const smallPx = narrow ? 68 : desktopNarrow ? 58 : 82;
-    const podBox = (o, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? bigPx : smallPx, tierFor(o)) : rankNumeral(big ? bigPx : smallPx, tierFor(o), o.rank)}<b>${esc(pname[o.id] || "?")}</b></div>`;
+    const podBox = (o, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? bigPx : smallPx, tierFor(o)) : rankNumeral(big ? bigPx : smallPx, tierFor(o), o.rank)}<b class="nm" title="${esc(pname[o.id] || "?")}">${esc(pname[o.id] || "?")}</b></div>`;
     const podiumEntries = order.filter((o) => o.rank <= 3);
     const hasAnyScore = order.some((o) => o.points > 0);
     const placeholderBox = (tier, rank, big) => `<div class="pod ${big ? "first" : ""}">${isOfficial ? trophy(big ? bigPx : smallPx, tier) : rankNumeral(big ? bigPx : smallPx, tier, rank)}</div>`;
@@ -1146,7 +1159,7 @@ Save anyway?`)) return;
     }
     const { boxed: boxedTiers, compact: compactTiers } = compactPodiumTiers(tiers);
     const boxedHtml = boxedTiers.length ? `<div class="podium">${arrangePodium(boxedTiers).map(({ o, elevated }) => podBox(o, elevated)).join("")}</div>` : "";
-    const compactHtml = compactTiers.length ? `<div class="podium-compact">${compactTiers.map((t) => `<div class="pod-col">${isOfficial ? trophy(44, tierFor(t.items[0])) : rankNumeral(44, tierFor(t.items[0]), t.rank)}<div class="pod-names">${t.items.map((o) => `<div>${esc(pname[o.id] || "?")}</div>`).join("")}</div></div>`).join("")}</div>` : "";
+    const compactHtml = compactTiers.length ? `<div class="podium-compact">${compactTiers.map((t) => `<div class="pod-col">${isOfficial ? trophy(44, tierFor(t.items[0])) : rankNumeral(44, tierFor(t.items[0]), t.rank)}<div class="pod-names">${t.items.map((o) => `<div class="nm" title="${esc(pname[o.id] || "?")}">${esc(pname[o.id] || "?")}</div>`).join("")}</div></div>`).join("")}</div>` : "";
     const podium = !order.length ? "" : !hasAnyScore ? `<div class="podium">${placeholderBox("silver", 2, false)}${placeholderBox("gold", 1, true)}${placeholderBox("bronze", 3, false)}</div>` : `<div class="podium-wrap">${boxedHtml}${compactHtml}</div>`;
     const statRows = rows.filter(([, r]) => r.shows > 0).sort((a, b) => b[1].scoped / b[1].shows - a[1].scoped / a[1].shows);
     $("#main").innerHTML = `
@@ -1155,12 +1168,16 @@ Save anyway?`)) return;
         <select onchange="setBoardSeason(this.value)"
           style="margin-left:auto;background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.82rem">${opts}</select></div>
       ${podium}
+      <div class="chiprow" id="boardview"><span class="lbl">View</span><div class="switcher">
+        <button class="linkbtn switcher-btn${boardView === "compact" ? " on" : ""}" onclick="setBoardView('compact')">Compact</button>
+        <button class="linkbtn switcher-btn${boardView === "detail" ? " on" : ""}" onclick="setBoardView('detail')">Detail</button></div></div>
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map((o) => {
       const r = T[o.id];
       const layerLines = !hasAnyScore ? "" : (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">${ORDINAL[tiebreakers.indexOf(l.layer)]} tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`).join("");
+      const nm = pname[o.id] || "?";
       return `<tr class="${o.id === state.session.id ? "me" : ""}">
-        <td class="rank">${o.rank}</td><td>${esc(pname[o.id] || "?")}${layerLines}</td>
+        <td class="rank">${o.rank}</td><td class="pname"><span class="nm" title="${esc(nm)}">${esc(nm)}</span>${boardView === "detail" ? layerLines : ""}</td>
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
     }).join("") || '<tr><td colspan="3" class="muted">No scores yet \u2014 pick some songs.</td></tr>'}
       </table></div>
@@ -1171,7 +1188,7 @@ Save anyway?`)) return;
       ${statRows.map(([id, r]) => {
       var _a2;
       return `<tr class="${id === state.session.id ? "me" : ""}">
-        <td>${esc(pname[id] || "?")}</td><td class="pts">${r.shows}</td>
+        <td class="pname"><span class="nm" title="${esc(pname[id] || "?")}">${esc(pname[id] || "?")}</span></td><td class="pts">${r.shows}</td>
         <td class="pts">${(r.scoped / r.shows).toFixed(1)}</td>
         <td class="pts" title="${esc(((_a2 = r.highShow) == null ? void 0 : _a2.venue) || "")}">${r.high}</td>
         <td class="pts">${r.wins || 0}</td></tr>`;
@@ -1187,6 +1204,7 @@ Save anyway?`)) return;
     return `<div class="panel"><h2>Settings</h2>
     <div class="field"><label>Bracket</label><div class="switcher" id="bracketToggle"></div></div>
     <div id="leagueSelect"></div>
+    <div id="leagueLinks"></div>
     <p class="muted" style="margin-top:16px;font-weight:600">Change PIN</p>
     <div class="field"><label>Current PIN</label><input id="pin-current" inputmode="numeric" autocomplete="current-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
     <div class="field"><label>New PIN (4\u20138 digits)</label><input id="pin-new" inputmode="numeric" autocomplete="new-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
@@ -1199,13 +1217,20 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"c3b67c3-4711dfc"}</p>
+      <p class="colophon buildid">build ${"ce107bb-60d7d77"}</p>
     </div>
   </div>`;
   }
   function wireSettingsPanel() {
     renderBracketToggle();
     renderLeagueSelector();
+    renderLeagueLinks();
+  }
+  function renderLeagueLinks() {
+    const el = $("#leagueLinks");
+    if (!el) return;
+    const row = currentBracket();
+    el.innerHTML = row ? communityBlockHtml([{ name: row.league_name, config: row }], { id: "settings-links", lead: "Community" }) : "";
   }
   async function renderSettings() {
     clearTimersFor("admin");
@@ -1391,7 +1416,7 @@ Save anyway?`)) return;
       const rows = await rpc("global_find_players", { p_name: state.session.name, p_pin: state.session.pin, p_query: q });
       $(resultsSel).innerHTML = (rows || []).map((p) => `
       <div class="pickres">
-        <span>${esc(p.name)}</span>
+        <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         <span class="pt">${kind === "appoint" ? `<button class="btn ghost small" onclick="globalAppointAdmin('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Appoint</button>` : `<button class="btn ghost small" onclick="globalResetPin('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Reset PIN</button>`}</span>
       </div>`).join("") || '<p class="muted">No matches.</p>';
     } catch (e) {
@@ -1499,6 +1524,7 @@ Relay this to them now \u2014 it will not be shown again.`);
     clearTimersFor("admin");
     state.tab = "admin";
     markTab();
+    rosterFilter = "needs";
     await loadConfig();
     const cfg = state.cfg;
     const b = cfg.bonuses || {};
@@ -1652,7 +1678,7 @@ Relay this to them now \u2014 it will not be shown again.`);
     const rows = await rpc("admin_list_members", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId });
     $("#playerlist").innerHTML = (rows || []).map((p) => `
     <div class="pickres hit"><span>${p.is_league_admin ? "\u2605" : "\xB7"}</span>
-      <span>${esc(p.name)}${p.official_opt_in ? ' <small class="muted">Official</small>' : ""}</span>
+      <span class="nm" title="${esc(p.name)}">${esc(p.name)}${p.official_opt_in ? ' <small class="muted">Official</small>' : ""}</span>
       <span class="pt">${p.player_id === state.session.id ? '<small class="muted">you</small>' : (p.is_league_admin ? '<small class="muted">admin</small> ' : "") + `<button class="btn ghost small" onclick="resetMemberPin('` + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')">Reset PIN</button> <button class="btn ghost small" onclick="bootPlayer('` + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')" style="border-color:var(--coral);color:var(--coral)">Boot</button>`}</span>
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
     loadUnaffiliated();
@@ -1679,7 +1705,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       contacted you.</p>
     ${(rows || []).map((p) => `
       <div class="pickres">
-        <span>${esc(p.name)}</span>
+        <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Add</button></span>
       </div>`).join("")}`;
   }
@@ -1704,7 +1730,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       const rows = await rpc("admin_find_players", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_query: q });
       $("#member-results").innerHTML = (rows || []).map((p) => `
       <div class="pickres">
-        <span>${esc(p.name)}</span>
+        <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Add</button></span>
       </div>`).join("") || '<p class="muted">No matches.</p>';
     } catch (e) {
@@ -1770,7 +1796,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       const onRoster = new Set((roster || []).map((r) => r.player_id));
       panel.innerHTML = (members || []).map((m) => `
       <div class="pickres ${onRoster.has(m.player_id) ? "hit" : "miss"}">
-        <span>${onRoster.has(m.player_id) ? "\u2714" : "\u2014"}</span><span>${esc(m.name)}</span>
+        <span>${onRoster.has(m.player_id) ? "\u2714" : "\u2014"}</span><span class="nm" title="${esc(m.name)}">${esc(m.name)}</span>
         <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)}, '${esc(m.name).replace(/'/g, "\\'")}')">${onRoster.has(m.player_id) ? "Remove" : "Add"}</button></span>
       </div>`).join("") || '<p class="muted">No members in this league yet.</p>';
     } catch (e) {
@@ -1854,7 +1880,7 @@ If you re-add them later, their join date resets to that moment and every zero t
     try {
       const rows = await rpc("admin_list_bans", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId });
       $("#banlist").innerHTML = (rows || []).map((r) => `
-      <div class="pickres miss"><span>\u26D4</span><span>${esc(r.name)}</span>
+      <div class="pickres miss"><span>\u26D4</span><span class="nm" title="${esc(r.name)}">${esc(r.name)}</span>
         <span class="pt"><small class="muted">${new Date(r.banned_at).toLocaleDateString()}</small>
           <button class="btn ghost small" onclick="unban('${esc(r.name).replace(/'/g, "\\'")}')">Unban</button></span>
       </div>`).join("") || '<p class="muted">Nobody is banned. A peaceful kingdom.</p>';
@@ -1964,18 +1990,42 @@ Switch anyway?`
       toast(esc(e.message));
     }
   }
+  var rosterFilter = "needs";
+  function setRosterFilter(f) {
+    rosterFilter = f === "all" ? "all" : "needs";
+    loadRoster();
+  }
   async function loadRoster() {
     const showId = Number($("#roster-show").value);
     if (!showId) return;
     try {
-      const rows = await rpc("admin_pick_status", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: showId });
+      const [rows, show] = await Promise.all([
+        rpc("admin_pick_status", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: showId }),
+        fetchShow(showId)
+      ]);
+      const target = slotDefs(show == null ? void 0 : show.format).length;
+      const statusOf = (r) => target > 0 && r.picks_count >= target ? "done" : r.picks_count > 0 ? "partial" : "none";
+      const PILL = { done: ["done", "Done"], partial: ["partial", "Partial"], none: ["none", "No picks"] };
+      const MARK = { done: "\u2714", partial: "\u2713", none: "\u2014" };
       const total = rows.length, done = rows.filter((r) => r.picks_count > 0).length;
+      const shown = rosterFilter === "all" ? rows : rows.filter((r) => statusOf(r) !== "done");
+      const chip = `<div class="chiprow"><span class="lbl">Show</span><div class="switcher">
+        <button class="linkbtn switcher-btn${rosterFilter === "needs" ? " on" : ""}" onclick="setRosterFilter('needs')">Needs picks</button>
+        <button class="linkbtn switcher-btn${rosterFilter === "all" ? " on" : ""}" onclick="setRosterFilter('all')">All</button></div></div>`;
+      const empty = !rows.length ? '<p class="muted" id="roster-empty">No members in this league yet.</p>' : '<p class="muted" id="roster-empty">Everyone has picks in \u2014 nobody to chase.</p>';
       $("#roster").innerHTML = `
       <p class="muted" style="margin-bottom:6px"><b style="color:var(--mint)">${done}</b> of ${total} players have picks in</p>
-      ${rows.map((r) => `<div class="pickres ${r.picks_count > 0 ? "hit" : "miss"}">
-        <span>${r.picks_count > 0 ? "\u2714" : "\u2014"}</span><span>${esc(r.player_name)}</span>
-        <span class="pt">${r.picks_count > 0 ? r.picks_count + " picks \xB7 saved " + new Date(r.last_saved).toLocaleString(void 0, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "no picks yet"}</span>
-      </div>`).join("")}`;
+      ${chip}
+      ${shown.map((r) => {
+        const st = statusOf(r);
+        return `<div class="pickres roster-row ${st === "none" ? "miss" : "hit"}" data-status="${st}">
+        <span>${MARK[st]}</span>
+        <div class="roster-lines">
+          <div class="roster-l1"><span class="nm" title="${esc(r.player_name)}">${esc(r.player_name)}</span><span class="pill ${PILL[st][0]}">${PILL[st][1]}</span></div>
+          <div class="roster-l2 pt">${r.picks_count > 0 ? r.picks_count + (r.picks_count === 1 ? " pick" : " picks") + " \xB7 saved " + new Date(r.last_saved).toLocaleString(void 0, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "no picks yet"}</div>
+        </div>
+      </div>`;
+      }).join("") || empty}`;
     } catch (e) {
       $("#roster").innerHTML = `<p class="err">${esc(e.message)}</p>`;
     }
@@ -2361,7 +2411,7 @@ Switch anyway?`
     <p class="muted">Someone has to add you before you can play.</p>
     <p style="color:var(--coral);font-weight:600;margin:10px 0;padding:10px;border:1px solid var(--coral);border-radius:8px">
       Don't register again \u2014 a second account can't be merged with this one.</p>
-    <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell whoever invited you that your nickname is <b>${esc(state.session.name)}</b>.</p>
+    <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell whoever invited you that your nickname is <b style="overflow-wrap:anywhere">${esc(state.session.name)}</b>.</p>
     ${linksHtml}
     <p class="muted" id="nl-status">Checking automatically \u2014 this screen updates itself once you're added.</p>
     <div class="row" style="margin-top:12px">
@@ -2468,6 +2518,7 @@ Switch anyway?`
     openShow,
     renderShows,
     setBoardSeason,
+    setBoardView,
     loadRoster,
     addSeasonRow,
     saveSeason,
@@ -2499,6 +2550,7 @@ Switch anyway?`
     globalAppointAdmin,
     globalResetPin,
     saveLeagueConfig,
+    setRosterFilter,
     switchToBracket,
     switchToLeague
   });

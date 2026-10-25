@@ -29,10 +29,20 @@
    same day:** there is NO per-row expand/collapse today and never was —
    the only per-row detail is the always-visible tiebreak lines
    (`layerLines`, `standings.js:281`) inside the name cell. So "expanded"
-   means those lines: Compact hides them, Detail shows them. If the dev
-   meant a per-show breakdown (the RPC's `breakdown` column, which
-   standings ignores), that is new work, not a view of existing detail —
-   confirm before building.
+   means those lines: Compact hides them, Detail shows them.
+   **RESOLVED 2026-10-25 (dev's call, same day): the minimal reading is
+   the decision.** Compact = name + points only, no tiebreak lines; Detail
+   = name + points + the existing tiebreak lines. Persisted in
+   `localStorage` `ft_board_view`, default `compact`, and the chip renders
+   even when the board has zero rows. **A per-show breakdown inside rows
+   is NOT in scope** — the RPC's `breakdown` column stays unread by the
+   board. Recorded at mention-weight as a possible later feature, not a
+   decision and not a deferred item.
+   **Placement, build note 2026-10-25:** the chip renders as a right-aligned
+   row directly above the table, over the Score column — not inside the
+   Score header cell as "beside the Score label" might read. Two buttons
+   plus "Score" in that `<th>` would leave the name column about 70px at
+   phone width once the rank and score columns take their minimums.
 
 3. **The viewer's own row gets an OUTLINE in the app's existing yolk
    color.** As locked, this was "keyed on the server-computed `is_mine`";
@@ -60,9 +70,16 @@
      survey finds), with the full name in a `title` attribute so it is
      recoverable on long-press / hover.
    - **`register_player` rejects names over 20 characters after trim, for
-     NEW registrations only**, with a matching `maxlength="20"` on the
-     registration input and a clear error message. Server cap is the real
-     gate; the input attribute is a courtesy.
+     NEW registrations only**, with a clear error message. Server cap is
+     the real gate; the client check is a courtesy.
+     **Build correction 2026-10-25 — NO `maxlength` on the input.** The
+     locked text said "a matching maxlength on the input", but `#a-name`
+     is ONE input shared by Log in and New player, and three live names
+     are longer than 20: a `maxlength="20"` would have locked those three
+     players out of logging in. The courtesy check lives in `doRegister`
+     only (`auth.js`, `NAME_MAX_LEN` in `core/config.js`), trims first
+     exactly as the server does, and shows the server's message. Login is
+     untouched.
    - **Existing names are untouched.** The live maximum is 27 characters
      and three names exceed 20. This is safe because login is exact-match
      and nothing re-validates a name after creation (login, PIN reset and
@@ -96,11 +113,12 @@
 
 ## Build notes
 
-- SQL: the cap goes in its own stage file (next letter after S) — one
-  `create or replace function register_player` with the length check added,
-  nothing else. Verify by registering a throwaway 21-character name
-  (rejected) and a 20-character one (accepted), then delete the throwaway
-  through the admin boot path.
+- SQL: `sql/stage_t_name_length_cap.sql` — one `create or replace function
+  register_player` with the length check added, nothing else. **No
+  throwaway accounts in production:** the file's footer verifies inside a
+  `begin … rollback` block (21 characters must raise the Stage T message,
+  20 must succeed, then everything rolls back), followed by a count that
+  must be 0. Built 2026-10-25; NOT applied until the dev runs it.
 - Harness: an empty-set case for the View chip (a board with no rows must
   still render the chip and no error), a long-name case for the ellipsis
   (a 27-character fixture name — invented, not a real nickname), and the

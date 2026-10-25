@@ -4,7 +4,8 @@ import { rpc } from "../core/supabaseClient.js";
 import { clearTimersFor } from "../core/format.js";
 import { markTab } from "../core/layout.js";
 import { toast } from "../core/toast.js";
-import { renderBracketToggle, renderLeagueSelector } from "../core/switcher.js";
+import { renderBracketToggle, renderLeagueSelector, currentBracket } from "../core/switcher.js";
+import { communityBlockHtml } from "../core/community.js";
 
 // Shared between the standalone Settings tab (non-admins) and a section
 // inside the Admin tab (admins) — one panel, two mounting points, so the
@@ -14,6 +15,7 @@ export function settingsPanelHtml(){
   return `<div class="panel"><h2>Settings</h2>
     <div class="field"><label>Bracket</label><div class="switcher" id="bracketToggle"></div></div>
     <div id="leagueSelect"></div>
+    <div id="leagueLinks"></div>
     <p class="muted" style="margin-top:16px;font-weight:600">Change PIN</p>
     <div class="field"><label>Current PIN</label><input id="pin-current" inputmode="numeric" autocomplete="current-password" type="password" placeholder="••••"></div>
     <div class="field"><label>New PIN (4–8 digits)</label><input id="pin-new" inputmode="numeric" autocomplete="new-password" type="password" placeholder="••••"></div>
@@ -35,6 +37,25 @@ export function settingsPanelHtml(){
 export function wireSettingsPanel(){
   renderBracketToggle();
   renderLeagueSelector();
+  renderLeagueLinks();
+}
+// Fifth surface for the per-league community links (standings-ux.md
+// decision 1): the CURRENT league's fb_url/discord_url, read straight off
+// the my_leagues row that state.leagues already holds — no fetch, no RPC.
+// Goes through the same communityBlockHtml as the no-league and login
+// screens (one https-only guard), adapted to that helper's {name, config}
+// shape. Its own slot, not inside #leagueSelect: renderLeagueSelector
+// renders nothing for a single-league player, and they still get the
+// links. Empty when the league has no valid link — no heading over nothing.
+// Inside the admin tab this sits a few sections below the Community
+// editor; that redundancy is accepted (decision 1).
+export function renderLeagueLinks(){
+  const el = $("#leagueLinks");
+  if (!el) return;
+  const row = currentBracket();
+  el.innerHTML = row
+    ? communityBlockHtml([{ name: row.league_name, config: row }], { id: "settings-links", lead: "Community" })
+    : "";
 }
 export async function renderSettings(){
   clearTimersFor("admin"); state.tab = "admin"; markTab();

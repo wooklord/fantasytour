@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runBoardViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -903,6 +903,105 @@ async function runMode(mode){
   check("zero-overlay positive control: the identical submit succeeds once the row exists",
     noOv.submitWithRow && noOv.submitWithRow.ok === true && noOv.submitWithRow.saved === 1,
     `submitWithRow: ${JSON.stringify(noOv.submitWithRow)}`);
+
+  // ================================================================
+  // 2026-10-25 batch — docs/decisions/standings-ux.md (1–4) and
+  // admin-panel.md → "Who's Picked".
+  // ================================================================
+  const css = readFileSync(join(root, "styles.css"), "utf8");
+
+  // (3) own-row outline — both ways, off the DOM
+  const meLog = byLabel(log, "standings-me");
+  check("own standings row carries .me exactly once, on the session player, and on no other row (checked both ways)",
+    meLog && meLog.me.length === 1 && meLog.me[0] === "Wooklord" && meLog.others.length > 0 && !meLog.others.includes("Wooklord"),
+    `me: ${JSON.stringify(meLog?.me)} others: ${JSON.stringify(meLog?.others)}`);
+  check("own-row rule is an inset box-shadow outline in --yolk on the cells, and the hardcoded fill is gone",
+    /\.lb tr\.me td\{box-shadow:inset[^}]*var\(--yolk\)/.test(css) && !/\.lb tr\.me td\{background/.test(css) && !/rgba\(255,197,61,\.07\)/.test(css.replace(/\/\*[\s\S]*?\*\//g, "")),
+    "styles.css .lb tr.me td rule");
+
+  // (4) name overflow — the rule exists, and the markup carries it
+  check("name cells get the ellipsis rule and the table-width trick (stylesheet, checked statically — the suite is blind to CSS)",
+    /\.nm\{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap\}/.test(css) && /\.lb td\.pname\{width:100%;max-width:0\}/.test(css),
+    "styles.css .nm / .lb td.pname rules");
+  const longName = await runLongNameScenario({ html, scripts, mode });
+  check("a 27-character nickname renders in full, with the full name in title, in the standings table, the podium, Who's Picked and Members",
+    longName.cellText === longName.LONG && longName.podText === longName.LONG
+      && longName.rosterText === longName.LONG && longName.memberText === longName.LONG,
+    `cell: ${longName.cellText} pod: ${longName.podText} roster: ${longName.rosterText} member: ${longName.memberText}`);
+
+  // (1) Settings links
+  check("Settings inside the admin tab renders no community block when the league has no links (empty-set case)",
+    byLabel(log, "settings-links")?.present === false,
+    `settings-links present: ${byLabel(log, "settings-links")?.present}`);
+  const sl = await runSettingsLinksScenario({ html, scripts, mode });
+  for (const [who, r] of Object.entries(sl)){
+    check(`Settings (${who}) shows the current league's two links beneath the league selector, from state.leagues, with no leagues table read`,
+      r.present && r.slotAfterSelector && r.leagueReads === 0 && r.anchors.length === 2
+        && r.anchors.some(a => a.href === "https://example.invalid/fb-group" && /Facebook/.test(a.text))
+        && r.anchors.some(a => a.href === "https://example.invalid/discord-invite" && /Discord/.test(a.text))
+        && r.anchors.every(a => a.target === "_blank" && /noopener/.test(a.rel || "") && /noreferrer/.test(a.rel || ""))
+        && /Ambassadors/.test(r.blockText),
+      `present: ${r.present} slotAfterSelector: ${r.slotAfterSelector} leagueReads: ${r.leagueReads} anchors: ${JSON.stringify(r.anchors)}`);
+  }
+
+  // (2) View chip
+  const bv = await runBoardViewScenario({ html, scripts, mode });
+  check("board defaults to Compact: chip present, Compact on, no tiebreak lines, nothing stored yet",
+    bv.defaultView.chipPresent && bv.defaultView.on.length === 1 && bv.defaultView.on[0] === "Compact"
+      && bv.defaultView.tiebreakLines.length === 0 && bv.defaultView.stored === null && bv.defaultView.names.length === 2,
+    `on: ${JSON.stringify(bv.defaultView.on)} lines: ${JSON.stringify(bv.defaultView.tiebreakLines)} stored: ${bv.defaultView.stored} names: ${JSON.stringify(bv.defaultView.names)}`);
+  check("Detail shows one tiebreak line per tied row and writes ft_board_view=detail",
+    bv.afterDetail.on.length === 1 && bv.afterDetail.on[0] === "Detail" && bv.afterDetail.stored === "detail"
+      && bv.afterDetail.tiebreakLines.length === 2 && bv.afterDetail.tiebreakLines.every(t => /1st tiebreak: Fewest zeros \(\d\)/.test(t)),
+    `on: ${JSON.stringify(bv.afterDetail.on)} lines: ${JSON.stringify(bv.afterDetail.tiebreakLines)} stored: ${bv.afterDetail.stored}`);
+  check("back to Compact hides the lines again and stores compact; an unknown value is ignored",
+    bv.backToCompact.tiebreakLines.length === 0 && bv.backToCompact.stored === "compact"
+      && bv.afterBogus.stored === "compact" && bv.afterBogus.on[0] === "Compact",
+    `stored: ${bv.backToCompact.stored} bogus: ${bv.afterBogus.stored}`);
+  check("a stored ft_board_view=detail is honoured on a fresh boot",
+    bv.presetDetail.on.length === 1 && bv.presetDetail.on[0] === "Detail" && bv.presetDetail.tiebreakLines.length === 2,
+    `on: ${JSON.stringify(bv.presetDetail.on)} lines: ${bv.presetDetail.tiebreakLines.length}`);
+  check("a board with zero rows still renders the View chip beside the empty-state row (empty-set case)",
+    bv.empty.chipPresent && bv.empty.names.length === 0 && /No scores yet/.test(bv.empty.html),
+    `chip: ${bv.empty.chipPresent} names: ${bv.empty.names.length}`);
+
+  // Who's Picked
+  const wp = await runWhosPickedScenario({ html, scripts, mode });
+  const rowOf = (r, name) => r.rows.find(x => x.name === name);
+  check("Who's Picked opens on Needs picks and lists Partial (2 of 5), the 1-pick Partial, and No picks rows with pills",
+    wp.show1Needs.on.length === 1 && wp.show1Needs.on[0] === "Needs picks" && wp.show1Needs.rows.length === 3
+      && rowOf(wp.show1Needs, "Wooklord")?.status === "partial" && rowOf(wp.show1Needs, "Wooklord")?.pill === "Partial"
+      && rowOf(wp.show1Needs, "EggHead")?.status === "partial"
+      && rowOf(wp.show1Needs, "GlobalAdmin")?.status === "none" && rowOf(wp.show1Needs, "GlobalAdmin")?.pill === "No picks"
+      && rowOf(wp.show1Needs, "GlobalAdmin")?.l2 === "no picks yet",
+    `on: ${JSON.stringify(wp.show1Needs.on)} rows: ${JSON.stringify(wp.show1Needs.rows)}`);
+  check("line two keeps the verbatim 'n picks · saved <when>' text, singular for exactly one pick",
+    /^2 picks · saved /.test(rowOf(wp.show1Needs, "Wooklord")?.l2 || "") && /^1 pick · saved /.test(rowOf(wp.show1Needs, "EggHead")?.l2 || ""),
+    `p1: "${rowOf(wp.show1Needs, "Wooklord")?.l2}" p2: "${rowOf(wp.show1Needs, "EggHead")?.l2}"`);
+  check("a Done player (5 of 5) drops off Needs picks and appears under All with the Done pill, summary unchanged",
+    !rowOf(wp.show2Needs, "Wooklord") && wp.show2Needs.rows.length === 2
+      && rowOf(wp.show2All, "Wooklord")?.status === "done" && rowOf(wp.show2All, "Wooklord")?.pill === "Done"
+      && wp.show2All.rows.length === 3 && /^1 of 3 players have picks in/.test(wp.show2All.summary) && wp.show2All.on[0] === "All",
+    `needs: ${JSON.stringify(wp.show2Needs.rows)} all: ${JSON.stringify(wp.show2All.rows)} summary: ${wp.show2All.summary}`);
+  check("the Show chip is not persisted: a re-render reopens on Needs picks",
+    wp.afterRerender.on.length === 1 && wp.afterRerender.on[0] === "Needs picks",
+    `on after re-render: ${JSON.stringify(wp.afterRerender.on)}`);
+  check("when everyone has picked, Needs picks says so instead of rendering nothing (empty-set case); All still lists them",
+    wp.everyoneDone.rows.length === 0 && /Everyone has picks in/.test(wp.everyoneDone.empty)
+      && wp.everyoneDoneAll.rows.length === 1 && wp.everyoneDoneAll.empty === "",
+    `empty: "${wp.everyoneDone.empty}" rows: ${wp.everyoneDone.rows.length} all: ${wp.everyoneDoneAll.rows.length}`);
+
+  // (4) registration cap
+  const reg = await runRegisterLengthScenario({ html, scripts, mode });
+  check("a 21-character name is rejected on the client with the cap message, no register_player call, no session",
+    reg.over.err === "Name must be 20 characters or fewer" && reg.over.registerCalls.length === 0 && reg.over.session === null,
+    `err: "${reg.over.err}" calls: ${JSON.stringify(reg.over.registerCalls)} session: ${JSON.stringify(reg.over.session)}`);
+  check("a 20-character name is accepted: register_player called once, session stored with that name, no error",
+    reg.max.err === "" && reg.max.registerCalls.length === 1 && reg.max.session?.name === "Z".repeat(20),
+    `err: "${reg.max.err}" calls: ${JSON.stringify(reg.max.registerCalls)} session: ${JSON.stringify(reg.max.session)}`);
+  check("a padded 22-character input is accepted because both sides trim first, and the stored name is the trimmed one",
+    reg.padded.err === "" && reg.padded.registerCalls.length === 1 && reg.padded.session?.name === "Z".repeat(20),
+    `err: "${reg.padded.err}" session: ${JSON.stringify(reg.padded.session)}`);
 
   return failures.length;
 }

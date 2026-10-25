@@ -12,6 +12,7 @@ import { TIEBREAK_LABELS } from "../core/tiebreak.js";
 import { SLOT_LABELS, SLOT_TOOLTIPS, ONE_SET_EXCLUDED_TYPES, slotLabelFor } from "../core/slotTypes.js";
 import { venueLocalInputValue, venueLocalToUTC, venueLongName, hasDstTransition } from "../core/venueTime.js";
 import { RANKED_CHOICE_ENABLED } from "../core/config.js";
+import { slotDefs } from "./picks.js";
 
 // Seasons only ever belong to a league's Official bracket, and the season
 // editor has to keep working regardless of which bracket the switcher
@@ -141,7 +142,7 @@ export async function globalSearchPlayers(kind){
     const rows = await rpc("global_find_players", { p_name:state.session.name, p_pin:state.session.pin, p_query:q });
     $(resultsSel).innerHTML = (rows||[]).map(p => `
       <div class="pickres">
-        <span>${esc(p.name)}</span>
+        <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         <span class="pt">${kind === "appoint"
           ? `<button class="btn ghost small" onclick="globalAppointAdmin('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Appoint</button>`
           : `<button class="btn ghost small" onclick="globalResetPin('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Reset PIN</button>`}</span>
@@ -269,6 +270,7 @@ export function onModeChange(){
 
 export async function renderAdmin(){
   clearTimersFor("admin"); state.tab = "admin"; markTab();
+  rosterFilter = "needs"; // chase list opens on Needs picks every load (admin-panel.md → Who's Picked)
   await loadConfig();
   const cfg = state.cfg;
   const b = cfg.bonuses || {};
@@ -518,7 +520,7 @@ export async function loadMembers(){
   const rows = await rpc("admin_list_members", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId });
   $("#playerlist").innerHTML = (rows||[]).map(p => `
     <div class="pickres hit"><span>${p.is_league_admin ? "★" : "·"}</span>
-      <span>${esc(p.name)}${p.official_opt_in ? ' <small class="muted">Official</small>' : ""}</span>
+      <span class="nm" title="${esc(p.name)}">${esc(p.name)}${p.official_opt_in ? ' <small class="muted">Official</small>' : ""}</span>
       <span class="pt">${p.player_id===state.session.id ? '<small class="muted">you</small>'
         : (p.is_league_admin ? '<small class="muted">admin</small> ' : '')
           +'<button class="btn ghost small" onclick="resetMemberPin(\''+p.player_id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')">Reset PIN</button> '
@@ -563,7 +565,7 @@ export async function loadUnaffiliated(){
       contacted you.</p>
     ${(rows||[]).map(p => `
       <div class="pickres">
-        <span>${esc(p.name)}</span>
+        <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Add</button></span>
       </div>`).join("")}`;
 }
@@ -588,7 +590,7 @@ export async function searchMembers(){
     const rows = await rpc("admin_find_players", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_query:q });
     $("#member-results").innerHTML = (rows||[]).map(p => `
       <div class="pickres">
-        <span>${esc(p.name)}</span>
+        <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Add</button></span>
       </div>`).join("") || '<p class="muted">No matches.</p>';
   }catch(e){ $("#member-results").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
@@ -659,7 +661,7 @@ async function renderRosterPanel(seasonId){
     const onRoster = new Set((roster||[]).map(r => r.player_id));
     panel.innerHTML = (members||[]).map(m => `
       <div class="pickres ${onRoster.has(m.player_id)?"hit":"miss"}">
-        <span>${onRoster.has(m.player_id)?"✔":"—"}</span><span>${esc(m.name)}</span>
+        <span>${onRoster.has(m.player_id)?"✔":"—"}</span><span class="nm" title="${esc(m.name)}">${esc(m.name)}</span>
         <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)}, '${esc(m.name).replace(/'/g,"\\'")}')">${onRoster.has(m.player_id)?"Remove":"Add"}</button></span>
       </div>`).join("") || '<p class="muted">No members in this league yet.</p>';
   }catch(e){ panel.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
@@ -742,7 +744,7 @@ export async function toggleBans(){
   try{
     const rows = await rpc("admin_list_bans", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId });
     $("#banlist").innerHTML = (rows||[]).map(r => `
-      <div class="pickres miss"><span>⛔</span><span>${esc(r.name)}</span>
+      <div class="pickres miss"><span>⛔</span><span class="nm" title="${esc(r.name)}">${esc(r.name)}</span>
         <span class="pt"><small class="muted">${new Date(r.banned_at).toLocaleDateString()}</small>
           <button class="btn ghost small" onclick="unban('${esc(r.name).replace(/'/g,"\\'")}')">Unban</button></span>
       </div>`).join("") || '<p class="muted">Nobody is banned. A peaceful kingdom.</p>';
@@ -896,20 +898,54 @@ export async function toggleFormat(showId, next){
     renderAdmin();
   }catch(e){ toast(esc(e.message)); }
 }
+// Who's Picked (admin-panel.md → "Who's Picked", LOCKED 2026-10-25). Two
+// lines per row: name + status pill, then the saved text. Status is derived
+// EXACTLY the way shows.js's pickButtonInfo does it — saved count against
+// slotDefs(format).length, with "done" meaning saved >= target — so this
+// panel and the pick button can never disagree about "done". The Show chip
+// is a chase list: module state, reset to "needs" by every renderAdmin (so
+// each load, and each realtime re-render, opens on the people still to
+// chase), kept only across show-select changes within one render. Never
+// persisted. The RPC returns every league member (left join), so "needs"
+// is a filter over a complete list, not a separate query.
+let rosterFilter = "needs";
+export function setRosterFilter(f){ rosterFilter = f === "all" ? "all" : "needs"; loadRoster(); }
 export async function loadRoster(){
   const showId = Number($("#roster-show").value);
   if (!showId) return;
   try{
-    const rows = await rpc("admin_pick_status", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:showId });
+    const [rows, show] = await Promise.all([
+      rpc("admin_pick_status", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:showId }),
+      fetchShow(showId),
+    ]);
+    const target = slotDefs(show?.format).length;
+    const statusOf = r => (target > 0 && r.picks_count >= target) ? "done" : (r.picks_count > 0 ? "partial" : "none");
+    const PILL = { done: ["done", "Done"], partial: ["partial", "Partial"], none: ["none", "No picks"] };
+    const MARK = { done: "✔", partial: "✓", none: "—" };
     const total = rows.length, done = rows.filter(r => r.picks_count > 0).length;
+    const shown = rosterFilter === "all" ? rows : rows.filter(r => statusOf(r) !== "done");
+    const chip = `<div class="chiprow"><span class="lbl">Show</span><div class="switcher">
+        <button class="linkbtn switcher-btn${rosterFilter==="needs"?" on":""}" onclick="setRosterFilter('needs')">Needs picks</button>
+        <button class="linkbtn switcher-btn${rosterFilter==="all"?" on":""}" onclick="setRosterFilter('all')">All</button></div></div>`;
+    // An empty chase list must SAY so, not render nothing (the empty-set
+    // rule): everyone done is good news, no members is a different fact.
+    const empty = !rows.length
+      ? '<p class="muted" id="roster-empty">No members in this league yet.</p>'
+      : '<p class="muted" id="roster-empty">Everyone has picks in — nobody to chase.</p>';
+    // Line two keeps the original "n picks · saved <when>" text verbatim,
+    // bar one grammar fix: a single pick reads "1 pick", not "1 picks".
     $("#roster").innerHTML = `
       <p class="muted" style="margin-bottom:6px"><b style="color:var(--mint)">${done}</b> of ${total} players have picks in</p>
-      ${rows.map(r => `<div class="pickres ${r.picks_count>0?"hit":"miss"}">
-        <span>${r.picks_count>0?"✔":"—"}</span><span>${esc(r.player_name)}</span>
-        <span class="pt">${r.picks_count>0
-          ? r.picks_count+" picks · saved "+new Date(r.last_saved).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
-          : "no picks yet"}</span>
-      </div>`).join("")}`;
+      ${chip}
+      ${shown.map(r => { const st = statusOf(r); return `<div class="pickres roster-row ${st==="none"?"miss":"hit"}" data-status="${st}">
+        <span>${MARK[st]}</span>
+        <div class="roster-lines">
+          <div class="roster-l1"><span class="nm" title="${esc(r.player_name)}">${esc(r.player_name)}</span><span class="pill ${PILL[st][0]}">${PILL[st][1]}</span></div>
+          <div class="roster-l2 pt">${r.picks_count>0
+            ? r.picks_count+(r.picks_count===1?" pick":" picks")+" · saved "+new Date(r.last_saved).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+            : "no picks yet"}</div>
+        </div>
+      </div>`; }).join("") || empty}`;
   }catch(e){ $("#roster").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
 // Player-facing labels are fixed/code-owned (src/core/slotTypes.js) — the

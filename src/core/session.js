@@ -64,7 +64,7 @@ async function renderNoLeague(){
     <p class="muted">Someone has to add you before you can play.</p>
     <p style="color:var(--coral);font-weight:600;margin:10px 0;padding:10px;border:1px solid var(--coral);border-radius:8px">
       Don't register again — a second account can't be merged with this one.</p>
-    <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell whoever invited you that your nickname is <b>${esc(state.session.name)}</b>.</p>
+    <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell whoever invited you that your nickname is <b style="overflow-wrap:anywhere">${esc(state.session.name)}</b>.</p>
     ${linksHtml}
     <p class="muted" id="nl-status">Checking automatically — this screen updates itself once you're added.</p>
     <div class="row" style="margin-top:12px">

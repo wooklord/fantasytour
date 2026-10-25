@@ -1,4 +1,4 @@
-import { JSDOM } from "jsdom";
+import { JSDOM, VirtualConsole } from "jsdom";
 import { makeFixtures, makeCatalogWhitespaceFixtures, makeRankedFixtures } from "./fixtures.mjs";
 import { createFakeSupabase } from "./fakeSupabase.mjs";
 
@@ -32,7 +32,15 @@ function installGlobals(window, mode, tables, rpcHandlers, calls, dbHolder){
 // function — a plain object would misrepresent the real shape.
 const RPC_HANDLERS = {
   login: async ({ p_name }) => ({ id: "p1", name: p_name, is_global_admin: false }),
-  register_player: async ({ p_name }) => ({ id: "p3", name: p_name, is_global_admin: false }),
+  // Mirrors the live RPC (stage_c1 + stage_t): trim, min 2, max 20, and the
+  // stored name is the TRIMMED one. The fake has to be at least as strict
+  // as the real thing, or a dropped client check would pass against it.
+  register_player: async ({ p_name }) => {
+    const nm = String(p_name ?? "").trim();
+    if (nm.length < 2) throw new Error("Name too short");
+    if (nm.length > 20) throw new Error("Name must be 20 characters or fewer");
+    return { id: "p3", name: nm, is_global_admin: false };
+  },
   my_leagues: async ({ p_name }, tables) => {
     const player = tables.players_public.find(p => p.name === p_name);
     if (!player) return [];
@@ -216,7 +224,10 @@ const RPC_HANDLERS = {
       const nm = (tables.players_public.find(p => p.id === k.player_id) || {}).name || "?";
       byPlayer[nm] = (byPlayer[nm] || 0) + 1;
     }
-    return Object.entries(byPlayer).map(([player_name, picks_count]) => ({ player_name, picks_count, last_saved: null }));
+    // last_saved is max(updated_at) in the real RPC — null only when there
+    // are no picks. A null here for a player WITH picks used to render the
+    // epoch date, which no assertion ever looked at.
+    return Object.entries(byPlayer).map(([player_name, picks_count]) => ({ player_name, picks_count, last_saved: picks_count ? new Date().toISOString() : null }));
   },
   // Persists p_data into the fixture's brackets row instead of discarding it.
   // A handler that swallows the payload can't prove anything about
@@ -1570,11 +1581,22 @@ export async function runScenario({ html, scripts, mode, presetSession }){
   clickTab(window, "board");
   await tick(); await tick();
   snap("standings");
+  // Own-row marker, checked BOTH ways (standings-ux.md 3): the session
+  // player's row has .me, and no other row does. Read off the DOM, not
+  // inferred from the snapshot html.
+  log.push({ label: "standings-me",
+    // table.lb:not(.compact) — the Nerd stats table below the board is
+    // also table.lb and also marks the own row; this checks the board.
+    me: [...window.document.querySelectorAll("table.lb:not(.compact) tr.me td.pname .nm")].map(e => e.textContent),
+    others: [...window.document.querySelectorAll("table.lb:not(.compact) tr:not(.me) td.pname .nm")].map(e => e.textContent) });
 
   // admin tab (fixture session is a league admin, not global)
   clickTab(window, "admin");
   await tick(); await tick();
   snap("admin");
+  // Settings links, empty-set case: the fixture league has no config, so
+  // the block beneath the league selector must be absent (standings-ux.md 1).
+  log.push({ label: "settings-links", present: !!window.document.getElementById("settings-links") });
 
   // C2b — member search: "wa" should surface the fixture's non-member (p3,
   // "Wanderer") via admin_find_players' real prefix-match/exclude-members logic.
@@ -1792,4 +1814,241 @@ export async function runNoOverlayScenario({ html, scripts, mode }){
   catch(e){ submitWithRow = { error: e.message }; }
 
   return { list, detail, submitErrorNoRow, submitWithRow };
+}
+
+// ---------------------------------------------------------------------
+// 2026-10-25 batch — docs/decisions/standings-ux.md and admin-panel.md
+// "Who's Picked". Each scenario below boots its own window(s).
+// ---------------------------------------------------------------------
+
+// Settings community links (standings-ux.md 1): the CURRENT league's
+// links beneath the league selector, sourced from state.leagues — so no
+// `leagues` table read may happen for it. Boots a non-admin (the
+// standalone Settings tab) and an admin (the panel embedded in the admin
+// tab, where the redundancy with the Community editor is accepted).
+export async function runSettingsLinksScenario({ html, scripts, mode }){
+  async function load(session){
+    const { tables } = makeFixtures();
+    tables.leagues[0].config = { fb_url: "https://example.invalid/fb-group", discord_url: "https://example.invalid/discord-invite" };
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+    w.localStorage.setItem("ft_session", JSON.stringify(session));
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    clickTab(w, "admin");
+    await tick(); await tick();
+    const block = w.document.getElementById("settings-links");
+    const slot = w.document.getElementById("leagueLinks");
+    return {
+      present: !!block,
+      slotAfterSelector: !!slot && slot.previousElementSibling?.id === "leagueSelect",
+      anchors: block ? [...block.querySelectorAll("a")].map(a => ({ href: a.getAttribute("href"), text: a.textContent, rel: a.getAttribute("rel"), target: a.getAttribute("target") })) : [],
+      blockText: block ? block.textContent : "",
+      leagueReads: calls.filter(c => c.type === "query" && c.table === "leagues").length,
+    };
+  }
+  return {
+    nonAdmin: await load({ id: "p2", name: "EggHead", pin: "1234", is_global_admin: false }),
+    admin: await load({ id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }),
+  };
+}
+
+// View chip (standings-ux.md 2). Tiebreak lines only exist for an
+// Official season view with a configured stack AND a tie that a layer
+// actually splits (tiebreak.js records a layer only when it separates the
+// group), so the fixture is: a live season on Official, tiebreakers =
+// [fewest_zeros], p1 and p2 tied at 5 with p1 on 4+1 and p2 on 5+0 — one
+// zero apart. Compact must hide those lines; Detail must show them.
+export async function runBoardViewScenario({ html, scripts, mode }){
+  const day = o => new Date(Date.now() + o*864e5).toISOString().slice(0,10);
+  async function load({ scores, preset, bracket = "official" }){
+    const { tables, ids } = makeFixtures();
+    tables.shows.push({ id: 3, showdate: day(-3), venue: "Side Room", city: "Kingston", state: "NY" });
+    tables.league_shows.push({ league_id: ids.LEAGUE_ID, show_id: 3, cutoff_at: new Date(Date.now()-3*864e5).toISOString(), format: "standard", status: "final", remind_sent: null, lock_sent: null, winner_sent: null });
+    tables.seasons.push({ id: 502, bracket_id: ids.OFFICIAL_ID, name: "Live Season", start_date: day(-30), end_date: day(30), roster_locked_at: null });
+    tables.season_rosters.push(
+      { season_id: 502, player_id: "p1", added_at: day(-30) + "T00:00:00Z" },
+      { season_id: 502, player_id: "p2", added_at: day(-30) + "T00:00:00Z" });
+    const off = tables.brackets.find(b => b.id === ids.OFFICIAL_ID);
+    off.config = { ...off.config, tiebreakers: ["fewest_zeros"] };
+    tables.scores = scores(ids);
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+    w.localStorage.setItem("ft_session", JSON.stringify({ id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+    w.localStorage.setItem("ft_bracket_id", String(bracket === "official" ? ids.OFFICIAL_ID : ids.CASUAL_ID));
+    if (preset) w.localStorage.setItem("ft_board_view", preset);
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    clickTab(w, "board");
+    await tick(); await tick(); await tick();
+    const read = () => {
+      const chip = w.document.getElementById("boardview");
+      return {
+        chipPresent: !!chip,
+        on: chip ? [...chip.querySelectorAll(".switcher-btn.on")].map(b => b.textContent) : [],
+        tiebreakLines: [...w.document.querySelectorAll("table.lb:not(.compact) td.pname div")].map(d => d.textContent),
+        names: [...w.document.querySelectorAll("table.lb:not(.compact) td.pname .nm")].map(e => e.textContent),
+        stored: w.localStorage.getItem("ft_board_view"),
+        html: mainHTML(w, mode),
+      };
+    };
+    return { w, read };
+  }
+  const tied = ids => [
+    { player_id: "p1", bracket_id: ids.OFFICIAL_ID, show_id: 2, points: 4, breakdown: [] },
+    { player_id: "p1", bracket_id: ids.OFFICIAL_ID, show_id: 3, points: 1, breakdown: [] },
+    { player_id: "p2", bracket_id: ids.OFFICIAL_ID, show_id: 2, points: 5, breakdown: [] },
+    { player_id: "p2", bracket_id: ids.OFFICIAL_ID, show_id: 3, points: 0, breakdown: [] },
+  ];
+  const a = await load({ scores: tied });
+  const defaultView = a.read();
+  a.w.setBoardView("detail");
+  await tick(); await tick(); await tick();
+  const afterDetail = a.read();
+  a.w.setBoardView("compact");
+  await tick(); await tick(); await tick();
+  const backToCompact = a.read();
+  a.w.setBoardView("sideways"); // unknown value: ignored, nothing written
+  await tick(); await tick();
+  const afterBogus = a.read();
+  const b = await load({ scores: tied, preset: "detail" });
+  const presetDetail = b.read();
+  // Empty-set case: Casual with no scores at all renders the placeholder
+  // row — and the chip must still be there.
+  const c = await load({ scores: () => [], bracket: "casual" });
+  const empty = c.read();
+  return { defaultView, afterDetail, backToCompact, afterBogus, presetDetail, empty };
+}
+
+// Long-name case (standings-ux.md 4): a 27-character invented nickname
+// (the live maximum) must render in full inside a .nm cell with the full
+// name in title everywhere it appears — standings table, podium, Who's
+// Picked, Members. CSS does the truncation; jsdom can't measure it, so
+// scenario.test.mjs checks the stylesheet rule statically alongside this.
+export async function runLongNameScenario({ html, scripts, mode }){
+  const LONG = "Eggbertinawellingtonthe3rdX"; // 27 chars, no spaces, not a real nickname
+  const { tables } = makeFixtures();
+  tables.players_public.find(p => p.id === "p2").name = LONG;
+  const calls = [];
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const w = dom.window;
+  installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+  w.localStorage.setItem("ft_session", JSON.stringify({ id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+  for (const src of scripts) w.eval(src);
+  await tick(); await tick();
+  clickTab(w, "board");
+  await tick(); await tick(); await tick();
+  const cell = w.document.querySelector(`table.lb:not(.compact) td.pname .nm[title="${LONG}"]`);
+  const pod = w.document.querySelector(`.pod .nm[title="${LONG}"], .pod-names .nm[title="${LONG}"]`);
+  clickTab(w, "admin");
+  await tick(); await tick(); await tick(); await tick();
+  const roster = w.document.querySelector(`#roster .roster-row .nm[title="${LONG}"]`);
+  const member = w.document.querySelector(`#playerlist .nm[title="${LONG}"]`);
+  return {
+    LONG,
+    cellText: cell?.textContent ?? null,
+    podText: pod?.textContent ?? null,
+    rosterText: roster?.textContent ?? null,
+    memberText: member?.textContent ?? null,
+  };
+}
+
+// Who's Picked (admin-panel.md → "Who's Picked"): two-line rows with a
+// status pill derived like pickButtonInfo (saved vs slotDefs(format).length
+// — standard = 5 in the fixture), a Show chip defaulting to Needs picks,
+// the verbatim line-two text with the "1 pick" grammar fix, and the
+// empty-set message when everyone is done.
+export async function runWhosPickedScenario({ html, scripts, mode }){
+  async function load(mutate = () => {}){
+    const { tables, ids } = makeFixtures();
+    mutate(tables, ids);
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+    w.localStorage.setItem("ft_session", JSON.stringify({ id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    clickTab(w, "admin");
+    await tick(); await tick(); await tick(); await tick();
+    const read = () => {
+      const r = w.document.getElementById("roster");
+      return {
+        summary: r?.querySelector("p.muted")?.textContent || "",
+        on: r ? [...r.querySelectorAll(".switcher-btn.on")].map(b => b.textContent) : [],
+        rows: r ? [...r.querySelectorAll(".roster-row")].map(x => ({
+          name: x.querySelector(".nm")?.textContent, status: x.dataset.status,
+          pill: x.querySelector(".pill")?.textContent, l2: x.querySelector(".roster-l2")?.textContent })) : [],
+        empty: r?.querySelector("#roster-empty")?.textContent || "",
+        html: r?.innerHTML || "",
+      };
+    };
+    const selectShow = async id => {
+      w.document.getElementById("roster-show").value = String(id);
+      await w.loadRoster();
+      await tick(); await tick();
+    };
+    return { w, read, selectShow };
+  }
+  // p2 gets exactly one pick on show 1 (the "1 pick" grammar case); p1 has
+  // 2 of 5 there (Partial) and 5 of 5 on show 2 (Done).
+  const a = await load((t, ids) => {
+    t.picks.push({ player_id: "p2", bracket_id: ids.CASUAL_ID, show_id: 1, slot: "opener", songname: "Distraction" });
+  });
+  const show1Needs = a.read();
+  await a.selectShow(2);
+  const show2Needs = a.read();
+  a.w.setRosterFilter("all");
+  await tick(); await tick(); await tick();
+  const show2All = a.read();
+  // A re-render (tab away and back) must reopen on Needs picks.
+  clickTab(a.w, "shows");
+  await tick(); await tick();
+  clickTab(a.w, "admin");
+  await tick(); await tick(); await tick(); await tick();
+  const afterRerender = a.read();
+  // Everyone done: p1 is the only member and has 5 of 5 on show 2.
+  const b = await load(t => { t.league_members = t.league_members.filter(m => m.player_id === "p1"); });
+  await b.selectShow(2);
+  const everyoneDone = b.read();
+  b.w.setRosterFilter("all");
+  await tick(); await tick(); await tick();
+  const everyoneDoneAll = b.read();
+  return { show1Needs, show2Needs, show2All, afterRerender, everyoneDone, everyoneDoneAll };
+}
+
+// Registration length cap (standings-ux.md 4): 21 characters rejected
+// before any RPC (the client check) AND by the fake (the server mirror);
+// 20 accepted; 22 with padding accepted because both sides trim first.
+// The fake's success path ends in location.reload(), which jsdom reports
+// as "not implemented" on the virtual console — a silent VirtualConsole
+// keeps that noise out of the run; nothing else is expected to log.
+export async function runRegisterLengthScenario({ html, scripts, mode }){
+  async function attempt(name){
+    const { tables } = makeFixtures();
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true, virtualConsole: new VirtualConsole() });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    w.document.getElementById("a-name").value = name;
+    w.document.getElementById("a-pin").value = "1234";
+    await w.doRegister();
+    await tick(); await tick();
+    return {
+      err: w.document.getElementById("a-err")?.textContent || "",
+      registerCalls: calls.filter(c => c.type === "rpc" && c.fn === "register_player").map(c => c.args.p_name),
+      session: JSON.parse(w.localStorage.getItem("ft_session") || "null"),
+    };
+  }
+  return {
+    over: await attempt("Z".repeat(21)),
+    max: await attempt("Z".repeat(20)),
+    padded: await attempt("  " + "Z".repeat(20) + "  "),
+  };
 }

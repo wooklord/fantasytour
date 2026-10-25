@@ -2,6 +2,7 @@ import { $, footerHtml } from "../core/dom.js";
 import { rpc } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
 import { communityBlockHtml, fetchLeagueLinks } from "../core/community.js";
+import { NAME_MAX_LEN } from "../core/config.js";
 
 export function renderAuth(){
   $("#main").innerHTML = `
@@ -40,7 +41,19 @@ async function loadAuthCommunity(){
   if (slot) slot.innerHTML = html;
 }
 export async function doLogin(){ authFlow("login"); }
-export async function doRegister(){ authFlow("register_player"); }
+// The 20-character cap (standings-ux.md decision 4) is checked HERE, on the
+// New player button only — not as a maxlength on #a-name, which Log in
+// shares, and three existing names are longer than 20. The server
+// (register_player, Stage T) is the real gate; this just saves a round
+// trip and shows the same message. Trimmed first, exactly as the server
+// trims, so padding neither rescues nor condemns a name.
+export async function doRegister(){
+  if ($("#a-name").value.trim().length > NAME_MAX_LEN){
+    $("#a-err").textContent = `Name must be ${NAME_MAX_LEN} characters or fewer`;
+    return;
+  }
+  return authFlow("register_player");
+}
 export async function authFlow(fn){
   $("#a-err").textContent = "";
   try{

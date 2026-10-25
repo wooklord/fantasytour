@@ -21,3 +21,10 @@ export const APP_NAME = "Fantasy Eggy";
 export const THEME_COLOR_LIGHT = "#F4ECD9";
 export const THEME_COLOR_DARK  = "#171233";
 export const CARTON_SITE_BASE = "https://thecarton.net/setlists";
+
+// Nickname length cap for NEW registrations only (sql/stage_t_name_length_cap.sql
+// is the real gate; this is the client-side courtesy in features/auth.js).
+// Existing names are untouched — the live max is 27 — which is also why
+// this is NOT a maxlength on the shared login/register input: login must
+// still accept those names. Record: docs/decisions/standings-ux.md (4).
+export const NAME_MAX_LEN = 20;

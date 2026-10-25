@@ -112,7 +112,9 @@ same day, before any code; sibling record for the same batch:
 - **Rows become two lines.** Line one: the nickname, with a **status pill**
   reading `No picks` / `Partial` / `Done`. Line two: the existing
   "n picks saved · when" text, **verbatim** — the wording does not change,
-  it moves down a line so the name and the pill have the width.
+  it moves down a line so the name and the pill have the width. One
+  grammar fix on the way (dev's call, 2026-10-25): exactly one pick reads
+  "1 pick · saved …", not "1 picks"; the rest of the string is unchanged.
 - **Partial is derived the same way `pickButtonInfo` does it:** saved
   count vs the required slot count for the show's format. One derivation,
   not two — if the panel and the pick button ever disagree about "done",
