@@ -41,6 +41,9 @@ const RPC_HANDLERS = {
       return tables.brackets.filter(b => b.league_id === lm.league_id).map(b => ({
         league_id: league.id, league_name: league.name, is_league_admin: lm.is_league_admin,
         bracket_id: b.id, bracket_kind: b.kind, bracket_name: b.name, official_opt_in: lm.official_opt_in,
+        // Stage S: l.config->>'fb_url' / 'discord_url' — null when the
+        // league has no config at all, exactly as the real RPC returns.
+        fb_url: league.config?.fb_url ?? null, discord_url: league.config?.discord_url ?? null,
       }));
     });
   },
@@ -682,6 +685,49 @@ export async function runRosterScenario({ html, scripts, mode }){
 // changed server state: a fresh window over the SAME tables object after
 // membership is inserted. That covers the loop's behaviour; it does not
 // cover the button literally navigating.
+// Stage S — community links on the no-league screen. Three page loads, one
+// per shape of leagues.config, because the empty-set case is the one that
+// regresses silently (docs/decisions/testing-harness.md: a set-valued
+// computation needs an empty-set case):
+//   withLinks  — one league with both URLs, one with none: the first renders
+//                two anchors under its name, the second contributes nothing.
+//   noLinks    — no league has config at all: the whole #nl-links block is
+//                absent, not an empty heading.
+//   badScheme  — a javascript: URL in config: must NOT become an href.
+// The fake builder's select() ignores its column list and returns whole
+// rows, so `select("name, config")` needs no fake change — only the fixture
+// row carries config.
+export async function runNoLeagueLinksScenario({ html, scripts, mode }){
+  const session = { id: "p3", name: "Wanderer", pin: "1234", is_global_admin: false };
+  async function load(mutate){
+    const { tables } = makeFixtures();
+    mutate(tables);
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+    w.localStorage.setItem("ft_session", JSON.stringify(session));
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    const block = w.document.getElementById("nl-links");
+    return {
+      html: mainHTML(w, mode),
+      blockPresent: !!block,
+      anchors: block ? [...block.querySelectorAll("a")].map(a => ({ href: a.getAttribute("href"), text: a.textContent, rel: a.getAttribute("rel"), target: a.getAttribute("target") })) : [],
+      blockText: block ? block.textContent : "",
+    };
+  }
+  const withLinks = await load(t => {
+    t.leagues[0].config = { fb_url: "https://example.invalid/fb-group", discord_url: "https://example.invalid/discord-invite" };
+    t.leagues.push({ id: 99, name: "Linkless League" });
+  });
+  const noLinks = await load(() => {});
+  const badScheme = await load(t => {
+    t.leagues[0].config = { fb_url: "javascript:alert(1)", discord_url: "HTTPS://example.invalid/upper-ok" };
+  });
+  return { withLinks, noLinks, badScheme };
+}
+
 export async function runNoLeagueScenario({ html, scripts, mode }){
   const { tables } = makeFixtures();
   const calls = [];

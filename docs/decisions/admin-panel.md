@@ -41,6 +41,7 @@ which is no longer true):
     Who's picked: <Bracket>          ← highest-frequency, deliberately first
     Shows: cutoffs & finalizing      ┐
     Members                          │ league-scoped
+    Community (league links, Stage S)│   ← added 2026-10-24, onboarding Batch 1
     Seasons (Official)               ┘
     ── EDITING <BRACKET> · <LEAGUE> ──  "The rules below apply to this bracket only."
     Voting & scoring mode            ┐

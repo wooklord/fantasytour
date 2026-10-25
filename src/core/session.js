@@ -16,17 +16,47 @@ export async function loadSongs(){
 }
 export function logout(){ state.session = null; localStorage.removeItem("ft_session"); location.reload(); }
 
+// Stage S — community links from leagues.config (fb_url / discord_url).
+// Only an https URL becomes an href. admin_update_league_config enforces
+// the same rule server-side, but the client is the thing that actually
+// writes an attribute, so it checks too — a stale row from before the
+// check, or a hand-edited one, must not become a javascript: link. Labels
+// are fixed; the URL is the only admin-supplied part. Returns [] for a
+// league with no links (or no config at all), which callers must treat as
+// "render nothing", not as an error.
+export function communityLinks(cfg){
+  const ok = u => typeof u === "string" && /^https:\/\//i.test(u);
+  const out = [];
+  if (ok(cfg?.fb_url)) out.push({ label: "Facebook group", url: cfg.fb_url });
+  if (ok(cfg?.discord_url)) out.push({ label: "Discord", url: cfg.discord_url });
+  return out;
+}
+
 async function renderNoLeague(){
   // leagues has a public RLS read policy (stage_a_schema.sql — needed for the
   // switcher), so this is a free read: no RPC, no auth check needed beyond
   // the session already established. Naming the actual leagues turns "ask a
   // league admin" from a dead end into an actionable next step — the player
   // didn't know a name to give, they didn't know which admin to ask.
-  let names = [];
+  // Stage S: `config` (fb_url / discord_url) rides along on the same public
+  // read — accepted-public values, docs/decisions/onboarding.md decision 3.
+  // join_code is NOT in this column, by decision; nothing here looks for it.
+  let leagues = [];
   try{
-    const { data } = await db.from("leagues").select("name").order("name");
-    names = (data||[]).map(l => l.name);
+    const { data } = await db.from("leagues").select("name, config").order("name");
+    leagues = data || [];
   }catch(e){ /* fall through to the generic copy below */ }
+  const names = leagues.map(l => l.name);
+  // One line per league that has at least one valid link; a league with
+  // none contributes nothing, and if no league has any the block is absent
+  // rather than an empty heading.
+  const linkRows = leagues.map(l => {
+    const links = communityLinks(l.config);
+    if (!links.length) return "";
+    return `<div class="muted" style="margin-top:6px"><b>${esc(l.name)}</b>: ${links.map(k =>
+      `<a href="${esc(k.url)}" target="_blank" rel="noopener noreferrer">${k.label}</a>`).join(" · ")}</div>`;
+  }).join("");
+  const linksHtml = linkRows ? `<div id="nl-links" class="noticebox"><b>Find the community</b>${linkRows}</div>` : "";
   // A real player once re-registered here three times, thinking a fresh
   // account would fix "not in a league yet" — each attempt just made the
   // eventual case-insensitive-login cleanup worse. The don't-re-register
@@ -60,6 +90,7 @@ async function renderNoLeague(){
     <p style="color:var(--coral);font-weight:600;margin:10px 0;padding:10px;border:1px solid var(--coral);border-radius:8px">
       Don't register again — a second account can't be merged with this one.</p>
     <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell whoever invited you that your nickname is <b>${esc(state.session.name)}</b>.</p>
+    ${linksHtml}
     <p class="muted" id="nl-status">Checking automatically — this screen updates itself once you're added.</p>
     <div class="row" style="margin-top:12px">
       <button class="btn" onclick="location.reload()">Check again</button>

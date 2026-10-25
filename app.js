@@ -1162,7 +1162,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"de5c0ce-f7d7fab"}</p>
+      <p class="colophon buildid">build ${"8a2cfba-1e3d41d"}</p>
     </div>
   </div>`;
   }
@@ -1458,7 +1458,7 @@ Relay this to them now \u2014 it will not be shown again.`);
     $("#rules-region").innerHTML = rulesRegionHtml(state.cfg, $("#c-mode").value);
   }
   async function renderAdmin() {
-    var _a;
+    var _a, _b, _c;
     clearTimersFor("admin");
     state.tab = "admin";
     markTab();
@@ -1530,6 +1530,16 @@ Relay this to them now \u2014 it will not be shown again.`);
       <button class="linkbtn" id="banToggle" onclick="toggleBans()" style="margin-top:8px">show ban list</button>
       <div id="banlist" class="hidden" style="margin-top:6px"></div>
     `)}
+    ${collapsible("community", "Community", `
+      <p class="muted">Shown to players on the "not in a league yet" screen. These apply to the whole league, both brackets.
+        Anyone with the app can read them, so use a Discord invite you're willing to rotate.</p>
+      <div class="field"><label>Facebook group URL</label>
+        <input id="lc-fb" type="url" placeholder="https://\u2026" value="${esc(((_a = currentBracket()) == null ? void 0 : _a.fb_url) || "")}" autocomplete="off"></div>
+      <div class="field"><label>Discord invite URL</label>
+        <input id="lc-discord" type="url" placeholder="https://\u2026" value="${esc(((_b = currentBracket()) == null ? void 0 : _b.discord_url) || "")}" autocomplete="off"></div>
+      <button class="btn ghost small" onclick="saveLeagueConfig()">Save links</button>
+      <div class="err" id="lc-err"></div>
+    `)}
     ${collapsible("seasons", "Seasons (Official)", `
       <p class="muted">Named date ranges \u2014 shows sort themselves in by date.</p>
       <div id="seasonrows">${(seasonsA || []).map(seasonRow).join("")}</div>
@@ -1567,7 +1577,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       <button class="btn ghost small" id="add-rule-btn" onclick="addCustomRule()"
         ${(cfg.custom_rules || []).length >= CUSTOM_RULES_MAX ? "disabled" : ""}>+ add rule</button>
     `)}
-    ${((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" ? collapsible("tiebreakers", "Season tiebreakers", `
+    ${((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official" ? collapsible("tiebreakers", "Season tiebreakers", `
       <p class="muted">Applies only to Official's season standings, when a season ends with players tied on points. Tried in order \u2014 the first layer that separates two players decides. Leave all "None", or exhaust every layer without a difference, and they share the placing \u2014 same as a per-show tie.</p>
       <div class="grid2">
         ${[0, 1, 2].map((i) => tiebreakerSelectRow(i, (cfg.tiebreakers || [])[i] || "")).join("")}
@@ -1673,6 +1683,27 @@ Relay this to them now \u2014 it will not be shown again.`);
       loadMembers();
     } catch (e) {
       toast(esc(e.message));
+    }
+  }
+  async function saveLeagueConfig() {
+    $("#lc-err").textContent = "";
+    const val = (id) => {
+      const v = $(id).value.trim();
+      return v === "" ? null : v;
+    };
+    const data = { fb_url: val("#lc-fb"), discord_url: val("#lc-discord") };
+    for (const [k, v] of Object.entries(data)) {
+      if (v !== null && !/^https:\/\//i.test(v)) {
+        $("#lc-err").textContent = `${k === "fb_url" ? "Facebook" : "Discord"} link must start with https://`;
+        return;
+      }
+    }
+    try {
+      await rpc("admin_update_league_config", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_data: data });
+      for (const row of state.leagues) if (row.league_id === state.currentLeagueId) Object.assign(row, data);
+      toast("Links saved \u2714", "score");
+    } catch (e) {
+      $("#lc-err").textContent = e.message;
     }
   }
   function seasonRow(se) {
@@ -2280,19 +2311,34 @@ Switch anyway?`
     localStorage.removeItem("ft_session");
     location.reload();
   }
+  function communityLinks(cfg) {
+    const ok = (u) => typeof u === "string" && /^https:\/\//i.test(u);
+    const out = [];
+    if (ok(cfg == null ? void 0 : cfg.fb_url)) out.push({ label: "Facebook group", url: cfg.fb_url });
+    if (ok(cfg == null ? void 0 : cfg.discord_url)) out.push({ label: "Discord", url: cfg.discord_url });
+    return out;
+  }
   async function renderNoLeague() {
-    let names = [];
+    let leagues = [];
     try {
-      const { data } = await db.from("leagues").select("name").order("name");
-      names = (data || []).map((l) => l.name);
+      const { data } = await db.from("leagues").select("name, config").order("name");
+      leagues = data || [];
     } catch (e) {
     }
+    const names = leagues.map((l) => l.name);
+    const linkRows = leagues.map((l) => {
+      const links = communityLinks(l.config);
+      if (!links.length) return "";
+      return `<div class="muted" style="margin-top:6px"><b>${esc(l.name)}</b>: ${links.map((k) => `<a href="${esc(k.url)}" target="_blank" rel="noopener noreferrer">${k.label}</a>`).join(" \xB7 ")}</div>`;
+    }).join("");
+    const linksHtml = linkRows ? `<div id="nl-links" class="noticebox"><b>Find the community</b>${linkRows}</div>` : "";
     $("#main").innerHTML = `<div class="panel" style="margin-top:30px">
     <h2>You're not in a league yet</h2>
     <p class="muted">Someone has to add you before you can play.</p>
     <p style="color:var(--coral);font-weight:600;margin:10px 0;padding:10px;border:1px solid var(--coral);border-radius:8px">
       Don't register again \u2014 a second account can't be merged with this one.</p>
     <p class="muted">${names.length ? `Leagues currently running: ${names.map(esc).join(", ")}. ` : ""}Tell whoever invited you that your nickname is <b>${esc(state.session.name)}</b>.</p>
+    ${linksHtml}
     <p class="muted" id="nl-status">Checking automatically \u2014 this screen updates itself once you're added.</p>
     <div class="row" style="margin-top:12px">
       <button class="btn" onclick="location.reload()">Check again</button>
@@ -2428,6 +2474,7 @@ Switch anyway?`
     globalSearchPlayers,
     globalAppointAdmin,
     globalResetPin,
+    saveLeagueConfig,
     switchToBracket,
     switchToLeague
   });

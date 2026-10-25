@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -700,6 +700,29 @@ async function runMode(mode){
   check("after being added, a reload shows the nav tabs",
     noLeague.after.tabsDisplay === "flex",
     `after.tabsDisplay: "${noLeague.after.tabsDisplay}"`);
+
+  // Stage S — community links on the no-league screen (onboarding Batch 1).
+  const links = await runNoLeagueLinksScenario({ html, scripts, mode });
+  check("no-league screen renders both community links for a league that has them",
+    links.withLinks.blockPresent
+      && links.withLinks.anchors.length === 2
+      && links.withLinks.anchors.some(a => a.href === "https://example.invalid/fb-group" && /Facebook/.test(a.text))
+      && links.withLinks.anchors.some(a => a.href === "https://example.invalid/discord-invite" && /Discord/.test(a.text)),
+    `anchors: ${JSON.stringify(links.withLinks.anchors)}`);
+  check("every community link opens in a new tab with noopener noreferrer",
+    links.withLinks.anchors.every(a => a.target === "_blank" && /noopener/.test(a.rel || "") && /noreferrer/.test(a.rel || "")),
+    `anchors: ${JSON.stringify(links.withLinks.anchors)}`);
+  check("a league with no links contributes no row to the community block",
+    /Ambassadors/.test(links.withLinks.blockText) && !/Linkless League/.test(links.withLinks.blockText),
+    `blockText: ${JSON.stringify(links.withLinks.blockText)}`);
+  check("with no links anywhere, the community block is absent entirely (empty-set case)",
+    !links.noLinks.blockPresent && !/Find the community/.test(links.noLinks.html) && /not in a league yet/i.test(links.noLinks.html),
+    `html: ${links.noLinks.html.slice(0, 300)}`);
+  check("a javascript: URL in leagues.config never becomes an href; an upper-case HTTPS one does",
+    links.badScheme.anchors.length === 1
+      && links.badScheme.anchors[0].href === "HTTPS://example.invalid/upper-ok"
+      && !/javascript:/.test(links.badScheme.html),
+    `anchors: ${JSON.stringify(links.badScheme.anchors)}`);
 
   // The save split's whole reason for existing: neither save may revert the
   // other's fields. Asserted on the actual admin_update_config payloads, not

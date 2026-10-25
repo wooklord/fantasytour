@@ -428,6 +428,16 @@ export async function renderAdmin(){
       <button class="linkbtn" id="banToggle" onclick="toggleBans()" style="margin-top:8px">show ban list</button>
       <div id="banlist" class="hidden" style="margin-top:6px"></div>
     `)}
+    ${collapsible("community", "Community", `
+      <p class="muted">Shown to players on the "not in a league yet" screen. These apply to the whole league, both brackets.
+        Anyone with the app can read them, so use a Discord invite you're willing to rotate.</p>
+      <div class="field"><label>Facebook group URL</label>
+        <input id="lc-fb" type="url" placeholder="https://…" value="${esc(currentBracket()?.fb_url || "")}" autocomplete="off"></div>
+      <div class="field"><label>Discord invite URL</label>
+        <input id="lc-discord" type="url" placeholder="https://…" value="${esc(currentBracket()?.discord_url || "")}" autocomplete="off"></div>
+      <button class="btn ghost small" onclick="saveLeagueConfig()">Save links</button>
+      <div class="err" id="lc-err"></div>
+    `)}
     ${collapsible("seasons", "Seasons (Official)", `
       <p class="muted">Named date ranges — shows sort themselves in by date.</p>
       <div id="seasonrows">${(seasonsA||[]).map(seasonRow).join("")}</div>
@@ -590,6 +600,33 @@ export async function addMember(id, name){
     $("#member-search").value = ""; $("#member-results").innerHTML = "";
     loadMembers();
   }catch(e){ toast(esc(e.message)); }
+}
+// Stage S — LEAGUE-scoped, not bracket-scoped: the links belong to the
+// league and both brackets share one community (docs/decisions/onboarding.md).
+// Sits in the league-scoped group between Members and Seasons; Seasons must
+// stay immediately above the EDITING divider (docs/decisions/admin-panel.md).
+// admin_update_league_config MERGES (config || p_data) and whitelists keys
+// server-side, so unlike admin_update_config there is no whole-object
+// hazard here and nothing to spread from state. An emptied field sends JSON
+// null, which the server strips — i.e. "clear this link".
+export async function saveLeagueConfig(){
+  $("#lc-err").textContent = "";
+  const val = id => { const v = $(id).value.trim(); return v === "" ? null : v; };
+  const data = { fb_url: val("#lc-fb"), discord_url: val("#lc-discord") };
+  for (const [k, v] of Object.entries(data)){
+    if (v !== null && !/^https:\/\//i.test(v)){
+      $("#lc-err").textContent = `${k === "fb_url" ? "Facebook" : "Discord"} link must start with https://`;
+      return;
+    }
+  }
+  try{
+    await rpc("admin_update_league_config", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_data:data });
+    // my_leagues is the client's only source of these values. Patch every
+    // row of this league (both brackets) so a bracket switch re-renders the
+    // section with what was actually saved rather than what was loaded.
+    for (const row of state.leagues) if (row.league_id === state.currentLeagueId) Object.assign(row, data);
+    toast("Links saved ✔", "score");
+  }catch(e){ $("#lc-err").textContent = e.message; }
 }
 export function seasonRow(se){
   const v = se || { id:"", name:"", start_date:"", end_date:"" };
