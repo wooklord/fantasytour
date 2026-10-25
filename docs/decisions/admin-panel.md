@@ -106,6 +106,29 @@ which is no longer true):
 
 ---
 
+**Who's Picked — LOCKED 2026-10-25 (design settled in Chat, written the
+same day, before any code; sibling record for the same batch:
+`standings-ux.md`).**
+- **Rows become two lines.** Line one: the nickname, with a **status pill**
+  reading `No picks` / `Partial` / `Done`. Line two: the existing
+  "n picks saved · when" text, **verbatim** — the wording does not change,
+  it moves down a line so the name and the pill have the width.
+- **Partial is derived the same way `pickButtonInfo` does it:** saved
+  count vs the required slot count for the show's format. One derivation,
+  not two — if the panel and the pick button ever disagree about "done",
+  one of them is wrong, and this rule says which (the button).
+- **A "Show" chip with two positions: `Needs picks` (default) and `All`.**
+  `Needs picks` lists players with zero or partial saved picks. **Not
+  persisted** — this is a chase list, and it opens on `Needs picks` every
+  load. (Contrast the standings View chip, which IS persisted; the
+  difference is intent: a board view is a reading preference, a chase list
+  is a task.) When nobody needs picks the panel must say so, not render
+  empty — an empty-set case belongs in the harness scenario.
+- Unchanged: the section stays FIRST, above the first divider, with its
+  own `Who's picked: <Bracket>` scope heading (see above).
+
+---
+
 **Members panel signalling — the visual weight and confirm count both
 understate Reset PIN relative to its operational cost.** Separate from the
 boot bug above; this one is layout/affordance, not behaviour. Not a claim

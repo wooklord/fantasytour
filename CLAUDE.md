@@ -263,6 +263,10 @@ in the file each one names.
   `--line*`/`--pit`/`--indigo` or any app-wide component class on it;
   `--coral` on paper fails AA in both themes (NOT FIXED). **The podium row**
   has three width tiers and must never wrap. `docs/decisions/frontend-css.md`.
+- **Standings/Settings UX LOCKED 2026-10-25 — `docs/decisions/standings-ux.md`:**
+  Settings links from `state.leagues`; View chip (`ft_board_view`); own-row
+  yolk OUTLINE on `is_mine`, never a fill; 20-char cap on NEW names only.
+  Who's Picked two-line rows + Show chip: `admin-panel.md`.
 
 ---
 
@@ -312,8 +316,7 @@ a tenant.
   Stage F correction: `docs/decisions/official-opt-in-default.md`.
 - **Onboarding LOCKED 2026-10-24** — `leagues.config` jsonb for community
   links, three derived states, join codes, Stage F as its own batch, and
-  a public-select conflict found during the write: `docs/decisions/onboarding.md`
-  (RESUME NOTE at its top, paused 2026-10-24).
+  a public-select conflict found during the write: `docs/decisions/onboarding.md`.
 - **Frozen season roster** (`season_rosters`): snapshotted at activation,
   scoring reads the snapshot not the live flag, frozen in both directions;
   admin override edits the roster explicitly.
@@ -594,7 +597,7 @@ matches — full text in `scoring-rules`) · `deploy-cache` ·
 `multi-league-switcher` · `official-opt-in-default` · `onboarding` ·
 `post-first-show-batch` (the 🚨 overlay entry, LOCKED list, batch (a)–(f),
 DST bug) · `postgres-rules` · `realtime` · `scoring-modes` ·
-`scoring-rules` · `testing-harness` · `tooling`.
+`scoring-rules` · `standings-ux` · `testing-harness` · `tooling`.
 
 `docs/history/` (resolved, dated): `2026-08-14-format-toggle-orphans` ·
 `2026-08-15-nickname-redaction` · `2026-08-16-stage-p` (gate #7) ·
