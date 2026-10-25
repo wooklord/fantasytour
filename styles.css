@@ -437,13 +437,22 @@ html[data-theme="light"] .panel.live-halo{
 .nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pod b.nm,.pod-names .nm{max-width:min(110px,28vw)}
 .pickres .nm{flex:1 1 auto;min-width:0}
-/* Chip rows — the standings View chip and Who's Picked's Show chip: a
-   small label plus the shared .switcher buttons, right-aligned so the
-   board's sits over the Score column. Not in the Score <th>: two buttons
-   plus "Score" in that header cell would leave the name column ~70px at
-   phone width. */
+/* Chip rows — the Scores page's View chip and Who's Picked's Show chip: a
+   small label plus the shared .switcher buttons, right-aligned. */
 .chiprow{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin:4px 0 6px}
 .chiprow .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--cream-dim)}
+/* Scores page (standings-ux.md 2a/3a): the Score heading shares its line
+   with the View chip — the heading was alone on that line, so this costs
+   nothing at phone width. Own entry: an inset ring in --yolk on the card
+   (cards, not table rows, so no cell shadows), inset so it follows the
+   panel radius and reads differently from the winner panel's yolk border
+   and the live halo's outer glow. Name rows don't wrap: the name
+   truncates (.nm) instead of pushing "N pts" to a second line. */
+.scorehead{margin:18px 4px 4px}
+.scorehead h2{margin:0 auto 0 0}
+.panel.scoreentry.mine{box-shadow:inset 0 0 0 2px var(--yolk)}
+.scoreentry .row,.pickboard .row{flex-wrap:nowrap}
+.scoreentry .nm,.pickboard .nm{flex:1 1 auto;min-width:0}
 /* Who's Picked two-line rows (admin-panel.md → Who's Picked). */
 .roster-lines{flex:1 1 auto;min-width:0}
 .roster-l1{display:flex;align-items:center;gap:8px}

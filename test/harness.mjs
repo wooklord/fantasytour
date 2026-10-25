@@ -1310,6 +1310,9 @@ export async function runRankedChoiceScenario({ html, scripts, mode, wildcardDeb
   // those rows SHUFFLED, so the rendered order proves breakdownSlotInfo
   // supplied a real order rather than falling through to the
   // everything-compares-equal path.
+  // Pick rows render only in Detail (standings-ux.md 2a, Compact is the
+  // default) — switch before reading the breakdown labels.
+  window.setScoresView("detail");
   window.openShow(2);
   await tick(); await tick();
   // Scoped to the FIRST player's panel, not the whole page: renderShowDetail
@@ -1855,13 +1858,14 @@ export async function runSettingsLinksScenario({ html, scripts, mode }){
   };
 }
 
-// View chip (standings-ux.md 2). Tiebreak lines only exist for an
-// Official season view with a configured stack AND a tie that a layer
-// actually splits (tiebreak.js records a layer only when it separates the
-// group), so the fixture is: a live season on Official, tiebreakers =
-// [fewest_zeros], p1 and p2 tied at 5 with p1 on 4+1 and p2 on 5+0 — one
-// zero apart. Compact must hide those lines; Detail must show them.
-export async function runBoardViewScenario({ html, scripts, mode }){
+// Standings tiebreak lines are ALWAYS visible (the board View chip from
+// 1a74cee was reverted the same day — standings-ux.md 3a). Tiebreak lines
+// only exist for an Official season view with a configured stack AND a
+// tie that a layer actually splits (tiebreak.js records a layer only when
+// it separates the group), so the fixture is: a live season on Official,
+// tiebreakers = [fewest_zeros], p1 and p2 tied at 5 with p1 on 4+1 and p2
+// on 5+0 — one zero apart.
+export async function runStandingsTiebreakScenario({ html, scripts, mode }){
   const day = o => new Date(Date.now() + o*864e5).toISOString().slice(0,10);
   async function load({ scores, preset, bracket = "official" }){
     const { tables, ids } = makeFixtures();
@@ -1880,22 +1884,18 @@ export async function runBoardViewScenario({ html, scripts, mode }){
     installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
     w.localStorage.setItem("ft_session", JSON.stringify({ id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
     w.localStorage.setItem("ft_bracket_id", String(bracket === "official" ? ids.OFFICIAL_ID : ids.CASUAL_ID));
-    if (preset) w.localStorage.setItem("ft_board_view", preset);
+    if (preset) w.localStorage.setItem("ft_board_view", preset); // a leftover key from 1a74cee must be ignored
     for (const src of scripts) w.eval(src);
     await tick(); await tick();
     clickTab(w, "board");
     await tick(); await tick(); await tick();
-    const read = () => {
-      const chip = w.document.getElementById("boardview");
-      return {
-        chipPresent: !!chip,
-        on: chip ? [...chip.querySelectorAll(".switcher-btn.on")].map(b => b.textContent) : [],
-        tiebreakLines: [...w.document.querySelectorAll("table.lb:not(.compact) td.pname div")].map(d => d.textContent),
-        names: [...w.document.querySelectorAll("table.lb:not(.compact) td.pname .nm")].map(e => e.textContent),
-        stored: w.localStorage.getItem("ft_board_view"),
-        html: mainHTML(w, mode),
-      };
-    };
+    const read = () => ({
+      chipPresent: !!w.document.getElementById("boardview"),
+      tiebreakLines: [...w.document.querySelectorAll("table.lb:not(.compact) td.pname div")].map(d => d.textContent),
+      names: [...w.document.querySelectorAll("table.lb:not(.compact) td.pname .nm")].map(e => e.textContent),
+      setterOnWindow: typeof w.setBoardView,
+      html: mainHTML(w, mode),
+    });
     return { w, read };
   }
   const tied = ids => [
@@ -1905,23 +1905,74 @@ export async function runBoardViewScenario({ html, scripts, mode }){
     { player_id: "p2", bracket_id: ids.OFFICIAL_ID, show_id: 3, points: 0, breakdown: [] },
   ];
   const a = await load({ scores: tied });
-  const defaultView = a.read();
-  a.w.setBoardView("detail");
-  await tick(); await tick(); await tick();
-  const afterDetail = a.read();
-  a.w.setBoardView("compact");
-  await tick(); await tick(); await tick();
-  const backToCompact = a.read();
-  a.w.setBoardView("sideways"); // unknown value: ignored, nothing written
+  const tiedView = a.read();
+  const b = await load({ scores: tied, preset: "compact" });
+  const leftoverKey = b.read();
+  return { tiedView, leftoverKey };
+}
+
+// Scores page View chip + own-entry outline (standings-ux.md 2a/3a).
+// Fixture show 2 is final with scores for p1 (5, one breakdown row) and
+// p2 (2, one breakdown row). Compact must render the cards with NO pick
+// rows; Detail must render them; the own card is the session player's
+// and only theirs — checked from two sessions so "mine" is proven to
+// follow the viewer, not a fixed row.
+export async function runScoresViewScenario({ html, scripts, mode }){
+  async function load({ session, preset, mutate = () => {} }){
+    const { tables } = makeFixtures();
+    mutate(tables);
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+    w.localStorage.setItem("ft_session", JSON.stringify(session));
+    if (preset) w.localStorage.setItem("ft_scores_view", preset);
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    w.openShow(2);
+    await tick(); await tick(); await tick();
+    const read = () => {
+      const chip = w.document.getElementById("scoresview");
+      return {
+        chipPresent: !!chip,
+        on: chip ? [...chip.querySelectorAll(".switcher-btn.on")].map(b => b.textContent) : [],
+        entries: w.document.querySelectorAll(".scoreentry").length,
+        pickRows: w.document.querySelectorAll(".scoreentry .pickres").length,
+        mine: [...w.document.querySelectorAll(".scoreentry.mine .nm")].map(e => e.textContent),
+        notMine: [...w.document.querySelectorAll(".scoreentry:not(.mine) .nm")].map(e => e.textContent),
+        titled: w.document.querySelectorAll(".scoreentry .nm[title]").length,
+        stored: w.localStorage.getItem("ft_scores_view"),
+        rpcCalls: calls.filter(c => c.type === "rpc").length,
+        html: mainHTML(w, mode),
+      };
+    };
+    return { w, read };
+  }
+  const p1 = { id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false };
+  const p2 = { id: "p2", name: "EggHead", pin: "1234", is_global_admin: false };
+  const a = await load({ session: p1 });
+  const compact = a.read();
+  a.w.setScoresView("detail");
   await tick(); await tick();
+  const detail = a.read();
+  a.w.setScoresView("compact");
+  await tick(); await tick();
+  const backToCompact = a.read();
+  a.w.setScoresView("sideways"); // unknown value: ignored, nothing written
+  await tick();
   const afterBogus = a.read();
-  const b = await load({ scores: tied, preset: "detail" });
+  const b = await load({ session: p1, preset: "detail" });
   const presetDetail = b.read();
-  // Empty-set case: Casual with no scores at all renders the placeholder
-  // row — and the chip must still be there.
-  const c = await load({ scores: () => [], bracket: "casual" });
-  const empty = c.read();
-  return { defaultView, afterDetail, backToCompact, afterBogus, presetDetail, empty };
+  const c = await load({ session: p2 });
+  const asP2 = c.read();
+  // Zero entries: no scores for show 2 and no picks either, so neither the
+  // score cards nor the pre-scoring board render — the chip still must.
+  const d = await load({ session: p1, mutate: t => {
+    t.scores = t.scores.filter(s => s.show_id !== 2);
+    t.picks = t.picks.filter(p => p.show_id !== 2);
+  }});
+  const empty = d.read();
+  return { compact, detail, backToCompact, afterBogus, presetDetail, asP2, empty };
 }
 
 // Long-name case (standings-ux.md 4): a 27-character invented nickname

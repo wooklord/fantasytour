@@ -4,9 +4,9 @@ import { switchToBracket, switchToLeague } from "./core/switcher.js";
 import "./core/layout.js";
 import "./core/realtime.js";
 import { doLogin, doRegister, submitForcedPinChange } from "./features/auth.js";
-import { openShow } from "./features/picks.js";
+import { openShow, setScoresView } from "./features/picks.js";
 import { renderShows } from "./features/shows.js";
-import { setBoardSeason, setBoardView } from "./features/standings.js";
+import { setBoardSeason } from "./features/standings.js";
 import { changeOwnPin } from "./features/settings.js";
 import {
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
@@ -21,7 +21,7 @@ import {
 // Functions referenced from inline HTML onclick/onchange attributes must live
 // on window — module-scoped bindings aren't visible to inline handlers.
 Object.assign(window, {
-  toggleTheme, logout, doLogin, doRegister, submitForcedPinChange, changeOwnPin, openShow, renderShows, setBoardSeason, setBoardView,
+  toggleTheme, logout, doLogin, doRegister, submitForcedPinChange, changeOwnPin, openShow, setScoresView, renderShows, setBoardSeason,
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
   toggleFormat, saveCutoff, finalizeShow, reopenShow, toggleBans, unban, runEdge, bootPlayer,
   searchMembers, addMember, toggleRoster, setRosterMember, toggleSection,

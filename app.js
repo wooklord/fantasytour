@@ -457,6 +457,15 @@
   function draftKey(showId) {
     return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`;
   }
+  var SCORES_VIEWS = ["compact", "detail"];
+  var scoresView = SCORES_VIEWS.includes(localStorage.getItem("ft_scores_view")) ? localStorage.getItem("ft_scores_view") : "compact";
+  var lastDetail = null;
+  function setScoresView(v) {
+    if (!SCORES_VIEWS.includes(v)) return;
+    scoresView = v;
+    localStorage.setItem("ft_scores_view", v);
+    if (lastDetail && state.currentShow && lastDetail.show.id === state.currentShow.id) renderShowDetailHtml(lastDetail);
+  }
   async function openShow(id) {
     if (isDesktop()) state.tab = "shows";
     clearTimersFor("shows");
@@ -719,7 +728,6 @@ Save anyway?`)) return;
     ${footerHtml()}`;
   }
   async function renderShowDetail(show) {
-    var _a, _b, _c;
     clearTimers();
     let setlist, picks, scores;
     try {
@@ -735,6 +743,11 @@ Save anyway?`)) return;
       renderShowDetailError(show, e);
       return;
     }
+    lastDetail = { show, setlist, picks, scores };
+    renderShowDetailHtml(lastDetail);
+  }
+  function renderShowDetailHtml({ show, setlist, picks, scores }) {
+    var _a, _b, _c;
     const pname = Object.fromEntries((scores || []).map((s) => [s.player_id, s.player_name]));
     const mineHits = new Set((picks || []).filter((p) => p.is_mine).map((p) => p.songname.toLowerCase()));
     let lastSet = null;
@@ -753,15 +766,18 @@ Save anyway?`)) return;
     const { order: brkOrder, label: brkLabel } = breakdownSlotInfo(show.format);
     const hasUndetermined = (scores || []).some((sc) => (sc.breakdown || []).some((b) => (b.reason || "").includes("slot undetermined")));
     const scoreHtml = (scores || []).map((sc) => `
-    <div class="panel" style="padding:12px">
-      <div class="row"><b>${esc(pname[sc.player_id] || "?")}</b>
+    <div class="panel scoreentry${sc.player_id === state.session.id ? " mine" : ""}" style="padding:12px">
+      <div class="row"><b class="nm" title="${esc(pname[sc.player_id] || "?")}">${esc(pname[sc.player_id] || "?")}</b>
         <span class="pts" style="margin-left:auto;font-family:var(--mono);color:var(--yolk)">${sc.points} pts</span></div>
-      ${sortBySlotOrder(sc.breakdown || [], brkOrder).map((b) => `
+      ${scoresView !== "detail" ? "" : sortBySlotOrder(sc.breakdown || [], brkOrder).map((b) => `
         <div class="pickres ${b.points > 0 ? "hit" : b.hit ? "" : "miss"}">
           <span class="sl">${esc(brkLabel[b.slot] || prettifySlotKey(b.slot))}</span><span>${esc(b.songname)}</span>
           <span class="pt">${b.points > 0 ? "+" + b.points : "\xB7"} <small class="muted">${esc(b.reason)}</small></span>
         </div>`).join("")}
     </div>`).join("");
+    const viewChip = `<div class="chiprow scorehead" id="scoresview"><h2>Score</h2><span class="lbl">View</span><div class="switcher">
+        <button class="linkbtn switcher-btn${scoresView === "compact" ? " on" : ""}" onclick="setScoresView('compact')">Compact</button>
+        <button class="linkbtn switcher-btn${scoresView === "detail" ? " on" : ""}" onclick="setScoresView('detail')">Detail</button></div></div>`;
     let pickBoard = "";
     if (!(scores || []).length && (picks || []).length) {
       const slotOrder = slotDefs(show.format).map((sl) => sl.key);
@@ -769,7 +785,7 @@ Save anyway?`)) return;
       const byName = {};
       for (const p of picks) ((_b = byName[_a = p.player_name]) != null ? _b : byName[_a] = []).push(p);
       pickBoard = `<h2 style="margin:18px 4px 4px">The picks are in</h2>` + Object.entries(byName).sort((a, b) => a[0].localeCompare(b[0])).map(([name, pp]) => `
-        <div class="panel" style="padding:12px"><div class="row"><b>${esc(name)}</b></div>
+        <div class="panel pickboard" style="padding:12px"><div class="row"><b class="nm" title="${esc(name)}">${esc(name)}</b></div>
           ${pp.sort((a, b) => slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot)).map((p) => `
             <div class="pickres"><span class="sl">${esc(slotLabel[p.slot] || p.slot)}</span>
               <span>${esc(p.songname)}</span></div>`).join("")}
@@ -791,7 +807,7 @@ Save anyway?`)) return;
       ${((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official" ? `<div class="row" style="justify-content:center;gap:10px;margin:4px 0 12px">${trophy(26)}<span style="font-family:'Fraunces',serif;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--yolk);font-size:.85rem">Official</span>${trophy(26)}</div>` : ""}
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
     ${pickBoard}
-    <h2 style="margin:18px 4px 4px">Score</h2>
+    ${viewChip}
     ${hasUndetermined ? `<p class="muted" style="text-align:center;margin:0 4px 8px">Closer-type picks show off-slot points (if enabled) until the encore starts (or the show ends) \u2014 full points awarded once determined.</p>` : ""}
     ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet \u2014 they appear with the first song.</p>'}
     ${footerHtml()}`;
@@ -1054,14 +1070,6 @@ Save anyway?`)) return;
     state.boardSeason = v;
     renderBoard();
   }
-  var BOARD_VIEWS = ["compact", "detail"];
-  var boardView = BOARD_VIEWS.includes(localStorage.getItem("ft_board_view")) ? localStorage.getItem("ft_board_view") : "compact";
-  function setBoardView(v) {
-    if (!BOARD_VIEWS.includes(v)) return;
-    boardView = v;
-    localStorage.setItem("ft_board_view", v);
-    renderBoard();
-  }
   function arrangePodium(tiers) {
     var _a;
     if (!tiers.length) return [];
@@ -1168,16 +1176,13 @@ Save anyway?`)) return;
         <select onchange="setBoardSeason(this.value)"
           style="margin-left:auto;background:var(--pit);border:1px solid var(--line2);color:var(--cream);border-radius:8px;padding:6px 8px;font-size:.82rem">${opts}</select></div>
       ${podium}
-      <div class="chiprow" id="boardview"><span class="lbl">View</span><div class="switcher">
-        <button class="linkbtn switcher-btn${boardView === "compact" ? " on" : ""}" onclick="setBoardView('compact')">Compact</button>
-        <button class="linkbtn switcher-btn${boardView === "detail" ? " on" : ""}" onclick="setBoardView('detail')">Detail</button></div></div>
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map((o) => {
       const r = T[o.id];
       const layerLines = !hasAnyScore ? "" : (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">${ORDINAL[tiebreakers.indexOf(l.layer)]} tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`).join("");
       const nm = pname[o.id] || "?";
       return `<tr class="${o.id === state.session.id ? "me" : ""}">
-        <td class="rank">${o.rank}</td><td class="pname"><span class="nm" title="${esc(nm)}">${esc(nm)}</span>${boardView === "detail" ? layerLines : ""}</td>
+        <td class="rank">${o.rank}</td><td class="pname"><span class="nm" title="${esc(nm)}">${esc(nm)}</span>${layerLines}</td>
         <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
     }).join("") || '<tr><td colspan="3" class="muted">No scores yet \u2014 pick some songs.</td></tr>'}
       </table></div>
@@ -1217,7 +1222,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"ce107bb-60d7d77"}</p>
+      <p class="colophon buildid">build ${"2c817d8-82712ab"}</p>
     </div>
   </div>`;
   }
@@ -2516,9 +2521,9 @@ Switch anyway?`
     submitForcedPinChange,
     changeOwnPin,
     openShow,
+    setScoresView,
     renderShows,
     setBoardSeason,
-    setBoardView,
     loadRoster,
     addSeasonRow,
     saveSeason,

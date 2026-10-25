@@ -100,6 +100,16 @@
    `ft_board_view` removed (no reader, no writer). **KEEP the standings
    own-row outline on `.me`**, since it replaced a fill that was broken in
    the light theme — that part of item 3 stands on its own merits.
+   **Build note 2026-10-25 (2a/3a built, standings chip reverted):**
+   `renderShowDetail` is split into the fetch and `renderShowDetailHtml`,
+   with the last fetched data cached per show id so the chip re-renders
+   without refetching three RPCs; the harness asserts the rpc count is
+   unchanged across a toggle. Compact omits the pick rows from the DOM
+   (not a hidden block). The chip shares the Score heading's line, which
+   had nothing else on it. The own-entry ring is `box-shadow:inset 0 0 0
+   2px var(--yolk)` on the `.panel.scoreentry.mine` card. The ranked-choice
+   scenario switches to Detail before reading breakdown labels.
+   `ft_board_view` has no reader or writer; a leftover key is proven inert.
 
 4. **Nickname overflow, two layers:**
    - **CSS ellipsis on every name cell** (standings rows and podium, Who's

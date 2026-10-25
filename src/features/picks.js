@@ -35,6 +35,25 @@ const UNLOCKED_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="non
 
 export function draftKey(showId){ return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`; }
 
+// Scores-page View chip (standings-ux.md 2a, LOCKED 2026-10-25): "compact"
+// = every entry collapsed to name + points; "detail" = every entry open
+// (pick rows with per-pick points). A per-device preference in
+// localStorage, same posture as ft_theme2: read once at module load,
+// written on toggle, never account state, never sent anywhere. Default
+// compact. Only the two known values are honoured. The toggle re-renders
+// from the last fetched data (lastDetail) rather than refetching three
+// RPCs on venue LTE; the cache is keyed by show id so a stale one is never
+// rendered for a different show.
+const SCORES_VIEWS = ["compact", "detail"];
+let scoresView = SCORES_VIEWS.includes(localStorage.getItem("ft_scores_view")) ? localStorage.getItem("ft_scores_view") : "compact";
+let lastDetail = null;
+export function setScoresView(v){
+  if (!SCORES_VIEWS.includes(v)) return;
+  scoresView = v;
+  localStorage.setItem("ft_scores_view", v);
+  if (lastDetail && state.currentShow && lastDetail.show.id === state.currentShow.id) renderShowDetailHtml(lastDetail);
+}
+
 export async function openShow(id){
   if (isDesktop()) state.tab = "shows";
   clearTimersFor("shows");
@@ -430,6 +449,12 @@ export async function renderShowDetail(show){
     renderShowDetailError(show, e);
     return;
   }
+  lastDetail = { show, setlist, picks, scores };
+  renderShowDetailHtml(lastDetail);
+}
+// Pure render from already-fetched data — split from renderShowDetail so
+// the View chip (setScoresView) can re-render without a refetch.
+function renderShowDetailHtml({ show, setlist, picks, scores }){
   const pname = Object.fromEntries((scores||[]).map(s => [s.player_id, s.player_name]));
   // is_mine is computed server-side now (stage_p) — the RPC no longer
   // returns player_id at all, so there is no client-side uuid comparison to
@@ -460,16 +485,25 @@ export async function renderShowDetail(show){
   // encore (or the show) hasn't confirmed it yet. Keeps the note out of the
   // way once nothing's ambiguous, so it doesn't read as boilerplate.
   const hasUndetermined = (scores||[]).some(sc => (sc.breakdown||[]).some(b => (b.reason||"").includes("slot undetermined")));
+  // One card per scoring player. `.mine` marks the viewer's own entry for
+  // the yolk outline (standings-ux.md 3a): player_id against the
+  // server-issued session id — the same mechanism as .me on the board;
+  // get_bracket_scores carries player_id, get_show_picks does not. Point
+  // colors are untouched. Pick rows render only in Detail (2a); Compact is
+  // true DOM absence, not a hidden block. Name in .nm + title (4).
   const scoreHtml = (scores||[]).map(sc => `
-    <div class="panel" style="padding:12px">
-      <div class="row"><b>${esc(pname[sc.player_id] || "?")}</b>
+    <div class="panel scoreentry${sc.player_id === state.session.id ? " mine" : ""}" style="padding:12px">
+      <div class="row"><b class="nm" title="${esc(pname[sc.player_id] || "?")}">${esc(pname[sc.player_id] || "?")}</b>
         <span class="pts" style="margin-left:auto;font-family:var(--mono);color:var(--yolk)">${sc.points} pts</span></div>
-      ${sortBySlotOrder(sc.breakdown||[], brkOrder).map(b => `
+      ${scoresView !== "detail" ? "" : sortBySlotOrder(sc.breakdown||[], brkOrder).map(b => `
         <div class="pickres ${b.points>0?"hit":b.hit?"":"miss"}">
           <span class="sl">${esc(brkLabel[b.slot] || prettifySlotKey(b.slot))}</span><span>${esc(b.songname)}</span>
           <span class="pt">${b.points>0?"+"+b.points:"·"} <small class="muted">${esc(b.reason)}</small></span>
         </div>`).join("")}
     </div>`).join("");
+  const viewChip = `<div class="chiprow scorehead" id="scoresview"><h2>Score</h2><span class="lbl">View</span><div class="switcher">
+        <button class="linkbtn switcher-btn${scoresView==="compact"?" on":""}" onclick="setScoresView('compact')">Compact</button>
+        <button class="linkbtn switcher-btn${scoresView==="detail"?" on":""}" onclick="setScoresView('detail')">Detail</button></div></div>`;
   // pre-scoring pick board: cutoff has passed, picks are public, but no scores yet
   let pickBoard = "";
   if (!(scores||[]).length && (picks||[]).length){
@@ -479,7 +513,7 @@ export async function renderShowDetail(show){
     for (const p of picks) (byName[p.player_name] ??= []).push(p);
     pickBoard = `<h2 style="margin:18px 4px 4px">The picks are in</h2>` +
       Object.entries(byName).sort((a,b) => a[0].localeCompare(b[0])).map(([name, pp]) => `
-        <div class="panel" style="padding:12px"><div class="row"><b>${esc(name)}</b></div>
+        <div class="panel pickboard" style="padding:12px"><div class="row"><b class="nm" title="${esc(name)}">${esc(name)}</b></div>
           ${pp.sort((a,b) => slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot)).map(p => `
             <div class="pickres"><span class="sl">${esc(slotLabel[p.slot] || p.slot)}</span>
               <span>${esc(p.songname)}</span></div>`).join("")}
@@ -501,7 +535,7 @@ export async function renderShowDetail(show){
       ${currentBracket()?.bracket_kind === "official" ? `<div class="row" style="justify-content:center;gap:10px;margin:4px 0 12px">${trophy(26)}<span style="font-family:'Fraunces',serif;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--yolk);font-size:.85rem">Official</span>${trophy(26)}</div>` : ""}
       ${setHtml || '<p class="muted">No setlist yet. It shows up here song-by-song once the tapers get typing.</p>'}</div>${attribution}
     ${pickBoard}
-    <h2 style="margin:18px 4px 4px">Score</h2>
+    ${viewChip}
     ${hasUndetermined ? `<p class="muted" style="text-align:center;margin:0 4px 8px">Closer-type picks show off-slot points (if enabled) until the encore starts (or the show ends) — full points awarded once determined.</p>` : ""}
     ${scoreHtml || '<p class="muted" style="margin:8px 4px">No scores yet — they appear with the first song.</p>'}
     ${footerHtml()}`;

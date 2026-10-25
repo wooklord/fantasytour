@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runBoardViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -944,26 +944,45 @@ async function runMode(mode){
       `present: ${r.present} slotAfterSelector: ${r.slotAfterSelector} leagueReads: ${r.leagueReads} anchors: ${JSON.stringify(r.anchors)}`);
   }
 
-  // (2) View chip
-  const bv = await runBoardViewScenario({ html, scripts, mode });
-  check("board defaults to Compact: chip present, Compact on, no tiebreak lines, nothing stored yet",
-    bv.defaultView.chipPresent && bv.defaultView.on.length === 1 && bv.defaultView.on[0] === "Compact"
-      && bv.defaultView.tiebreakLines.length === 0 && bv.defaultView.stored === null && bv.defaultView.names.length === 2,
-    `on: ${JSON.stringify(bv.defaultView.on)} lines: ${JSON.stringify(bv.defaultView.tiebreakLines)} stored: ${bv.defaultView.stored} names: ${JSON.stringify(bv.defaultView.names)}`);
-  check("Detail shows one tiebreak line per tied row and writes ft_board_view=detail",
-    bv.afterDetail.on.length === 1 && bv.afterDetail.on[0] === "Detail" && bv.afterDetail.stored === "detail"
-      && bv.afterDetail.tiebreakLines.length === 2 && bv.afterDetail.tiebreakLines.every(t => /1st tiebreak: Fewest zeros \(\d\)/.test(t)),
-    `on: ${JSON.stringify(bv.afterDetail.on)} lines: ${JSON.stringify(bv.afterDetail.tiebreakLines)} stored: ${bv.afterDetail.stored}`);
-  check("back to Compact hides the lines again and stores compact; an unknown value is ignored",
-    bv.backToCompact.tiebreakLines.length === 0 && bv.backToCompact.stored === "compact"
-      && bv.afterBogus.stored === "compact" && bv.afterBogus.on[0] === "Compact",
-    `stored: ${bv.backToCompact.stored} bogus: ${bv.afterBogus.stored}`);
-  check("a stored ft_board_view=detail is honoured on a fresh boot",
-    bv.presetDetail.on.length === 1 && bv.presetDetail.on[0] === "Detail" && bv.presetDetail.tiebreakLines.length === 2,
-    `on: ${JSON.stringify(bv.presetDetail.on)} lines: ${bv.presetDetail.tiebreakLines.length}`);
-  check("a board with zero rows still renders the View chip beside the empty-state row (empty-set case)",
-    bv.empty.chipPresent && bv.empty.names.length === 0 && /No scores yet/.test(bv.empty.html),
-    `chip: ${bv.empty.chipPresent} names: ${bv.empty.names.length}`);
+  // (3a) standings chip REVERTED: tiebreak lines always visible, no chip,
+  // no setter, and a leftover ft_board_view key changes nothing.
+  const tb = await runStandingsTiebreakScenario({ html, scripts, mode });
+  check("standings shows one tiebreak line per tied row unconditionally, with no View chip and no setBoardView on window",
+    !tb.tiedView.chipPresent && tb.tiedView.setterOnWindow === "undefined" && tb.tiedView.names.length === 2
+      && tb.tiedView.tiebreakLines.length === 2 && tb.tiedView.tiebreakLines.every(t => /1st tiebreak: Fewest zeros \(\d\)/.test(t)),
+    `chip: ${tb.tiedView.chipPresent} setter: ${tb.tiedView.setterOnWindow} lines: ${JSON.stringify(tb.tiedView.tiebreakLines)}`);
+  check("a leftover ft_board_view=compact key from 1a74cee does not hide the tiebreak lines",
+    tb.leftoverKey.tiebreakLines.length === 2 && !tb.leftoverKey.chipPresent,
+    `lines: ${tb.leftoverKey.tiebreakLines.length}`);
+
+  // (2a/3a) Scores page: View chip, own-entry outline, ellipsis names
+  const sv = await runScoresViewScenario({ html, scripts, mode });
+  check("Scores page defaults to Compact: chip present, Compact on, two entries, zero pick rows, nothing stored",
+    sv.compact.chipPresent && sv.compact.on.length === 1 && sv.compact.on[0] === "Compact"
+      && sv.compact.entries === 2 && sv.compact.pickRows === 0 && sv.compact.stored === null,
+    `on: ${JSON.stringify(sv.compact.on)} entries: ${sv.compact.entries} pickRows: ${sv.compact.pickRows} stored: ${sv.compact.stored}`);
+  check("Detail opens every entry (pick rows present), stores ft_scores_view=detail, and re-renders from the cache without refetching",
+    sv.detail.on[0] === "Detail" && sv.detail.pickRows === 2 && sv.detail.stored === "detail" && sv.detail.rpcCalls === sv.compact.rpcCalls,
+    `on: ${JSON.stringify(sv.detail.on)} pickRows: ${sv.detail.pickRows} stored: ${sv.detail.stored} rpc before/after: ${sv.compact.rpcCalls}/${sv.detail.rpcCalls}`);
+  check("back to Compact removes the pick rows and stores compact; an unknown value is ignored",
+    sv.backToCompact.pickRows === 0 && sv.backToCompact.stored === "compact" && sv.afterBogus.stored === "compact" && sv.afterBogus.on[0] === "Compact",
+    `pickRows: ${sv.backToCompact.pickRows} stored: ${sv.backToCompact.stored} bogus: ${sv.afterBogus.stored}`);
+  check("a stored ft_scores_view=detail is honoured on a fresh boot",
+    sv.presetDetail.on[0] === "Detail" && sv.presetDetail.pickRows === 2,
+    `on: ${JSON.stringify(sv.presetDetail.on)} pickRows: ${sv.presetDetail.pickRows}`);
+  check("exactly one entry carries the own-entry outline, and it follows the viewer (p1 session → Wooklord, p2 session → EggHead), never the other entry",
+    sv.compact.mine.length === 1 && sv.compact.mine[0] === "Wooklord" && sv.compact.notMine.length === 1 && sv.compact.notMine[0] === "EggHead"
+      && sv.asP2.mine.length === 1 && sv.asP2.mine[0] === "EggHead" && sv.asP2.notMine.length === 1 && sv.asP2.notMine[0] === "Wooklord",
+    `p1 mine: ${JSON.stringify(sv.compact.mine)} notMine: ${JSON.stringify(sv.compact.notMine)} p2 mine: ${JSON.stringify(sv.asP2.mine)} notMine: ${JSON.stringify(sv.asP2.notMine)}`);
+  check("Scores-page names are .nm cells with a title attribute",
+    sv.compact.titled === 2,
+    `titled: ${sv.compact.titled}`);
+  check("a show with zero score entries still renders the View chip beside the empty-state line (empty-set case)",
+    sv.empty.chipPresent && sv.empty.entries === 0 && /No scores yet/.test(sv.empty.html),
+    `chip: ${sv.empty.chipPresent} entries: ${sv.empty.entries}`);
+  check("own-entry outline rule is an inset box-shadow ring in --yolk on the card (stylesheet, checked statically)",
+    /\.panel\.scoreentry\.mine\{box-shadow:inset 0 0 0 2px var\(--yolk\)\}/.test(css),
+    "styles.css .panel.scoreentry.mine rule");
 
   // Who's Picked
   const wp = await runWhosPickedScenario({ html, scripts, mode });
