@@ -42,6 +42,22 @@ The shape of the fix is settled; only the implementation is outstanding.
   covers shows that appear afterwards. **Do not implement or schedule
   before that first clean score** — the dev's explicit hold, so a scoring
   problem on opening night is never confounded with a cron change.
+- **OPEN 2026-10-25: a daily automatic show sync is wanted to catch Carton
+  changes to EXISTING shows (dates, venues), not just new ones.** A
+  Suwannee date change was missed: the app kept the old date while The
+  Carton had moved the show. Distinct from the hourly `sync_shows` above,
+  which is about acquiring new shows and overlay rows — this is about
+  re-checking rows the app already has. **Design pending** the 2026-10-25
+  show-sync survey and a Chat decision; it becomes its own batch.
+  **Guardrails already locked (dev, 2026-10-25):** (1) never modify a
+  finalized show; (2) never delete a show that disappears from Carton —
+  surface it to admins instead; (3) a date change posts the existing
+  "cutoff changed" notification, not a new one. Open: where it runs (cron
+  tick vs a separate schedule), what it compares (which columns, keyed on
+  what), what it updates vs only flags, and the per-league cutoff
+  consequence of a moved date (a derived cutoff should follow the date; an
+  admin-set one may not — if the two are indistinguishable today, that is
+  the first design problem).
 - **PRIORITY: below gate items #1 (login rate-limiting) and #2 (`ft_session`
   plaintext PIN).** Those yield account and admin takeover — persistent,
   silent, targeted. This one yields availability degradation only: no data
