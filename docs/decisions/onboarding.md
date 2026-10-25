@@ -40,6 +40,14 @@
      top of the shows list (`src/features/shows.js`).
    - **has-picks**: a one-time toast on first successful save
      (`submit_picks` success path in `src/features/picks.js`).
+   - **pre-auth (fourth surface, added 2026-10-24):** the login/new-player
+     screen (`src/features/auth.js`) shows the same per-league links via
+     the anon `leagues` select; fetched async AFTER the form renders,
+     additive only, never blocks sign-in. A fetch error or no league with a
+     URL renders nothing. Shares one rendering helper with the no-league
+     screen (`src/core/community.js`) rather than a second copy of the
+     https-only guard. Not a state of the player (there is no player yet);
+     listed here because it is the first thing a recruit sees.
    The welcome card auto-hides once any picks exist. A manual Dismiss
    stores `ft_welcome_<playerId>` in localStorage (per-device, per-player;
    same posture as `ft_draft_*`). Derivation reuses the signals catalogued
