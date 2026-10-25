@@ -95,8 +95,12 @@ The shape of the fix is settled; only the implementation is outstanding.
   6. **Recorded, NOT in scope of this batch:** `scoreShow`'s fallback to
      every setlist row for that date when the show id matches nothing;
      `cutoffChanged()` having no dedupe stamp.
-  **RESUME HERE — PAUSED 2026-10-25, plan written, NOT approved, no code.**
-  The change plan (given in Chat the same day) in brief, so it survives:
+  **BUILD PLAN — approved in Chat 2026-10-25, build starts 2026-10-26:
+  `docs/show_sync_plan.md`** (full plan, the two approval decisions —
+  `syncSongs` stays out of the daily run; `admin_clear_sync_flag` is any
+  league admin or global, allow-plus-log — and the strict build order:
+  Stage U applied by the dev → edge-function deploy → client push). The
+  brief below is the pre-approval sketch, kept for the record:
   - Pure module `supabase/functions/carton-sync/showSync.js` (no Supabase
     client, same isolation as `scoring.js`) holding `dailyGateDue({ranAt,
     attemptedAt, now})`, `diffShows({incoming, existing, finalIds, today})`
