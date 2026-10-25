@@ -310,6 +310,9 @@ a tenant.
   applied — item (e) of the post-first-show batch. There is no self-service
   opt-out UI (`set_official_opt_in` has no caller). Full record and the
   Stage F correction: `docs/decisions/official-opt-in-default.md`.
+- **Onboarding LOCKED 2026-10-24** — `leagues.config` jsonb for community
+  links, three derived states, join codes, Stage F as its own batch, and
+  a public-select conflict found during the write: `docs/decisions/onboarding.md`.
 - **Frozen season roster** (`season_rosters`): snapshotted at activation,
   scoring reads the snapshot not the live flag, frozen in both directions;
   admin override edits the roster explicitly.
@@ -587,7 +590,7 @@ by default (durability rule 4).
 scoring bugs: stale `setlist_songs` footnote/cover, score-write diff never
 matches — full text in `scoring-rules`) · `deploy-cache` ·
 `discord-routing` · `edge-function` · `frontend-css` ·
-`multi-league-switcher` · `official-opt-in-default` ·
+`multi-league-switcher` · `official-opt-in-default` · `onboarding` ·
 `post-first-show-batch` (the 🚨 overlay entry, LOCKED list, batch (a)–(f),
 DST bug) · `postgres-rules` · `realtime` · `scoring-modes` ·
 `scoring-rules` · `testing-harness` · `tooling`.
