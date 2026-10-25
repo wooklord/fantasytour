@@ -1,6 +1,7 @@
 import { $, footerHtml } from "../core/dom.js";
 import { rpc } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
+import { communityBlockHtml, fetchLeagueLinks } from "../core/community.js";
 
 export function renderAuth(){
   $("#main").innerHTML = `
@@ -15,7 +16,28 @@ export function renderAuth(){
       </div>
       <div class="err" id="a-err"></div>
     </div>
+    <div id="auth-community"></div>
     ${footerHtml()}`;
+  // Deliberately NOT awaited: the form above is already usable, and this
+  // must stay true whether the fetch is slow, fails, or finds nothing.
+  loadAuthCommunity();
+}
+// Stage S, pre-auth surface (docs/decisions/onboarding.md, derived states):
+// the same per-league links the no-league screen shows, via the same anon
+// leagues read and the same helper. Fetched AFTER the form is in the DOM;
+// additive only. Anything wrong — error, no leagues, no links — renders
+// nothing, and sign-in never waits on it. The lead-in is generic on
+// purpose: no league name or URL lives in source; both come from
+// leagues.config, which the admin edits in the Community section.
+async function loadAuthCommunity(){
+  let html = "";
+  try{ html = communityBlockHtml(await fetchLeagueLinks(), { id: "auth-links", lead: "Looking for your league? Here's where each one hangs out." }); }
+  catch(e){ html = ""; }
+  // Plain getElementById, not $(): the slot has a unique id, and if a login
+  // completed in the meantime the page has reloaded and the slot is gone —
+  // in which case there is nothing to do.
+  const slot = document.getElementById("auth-community");
+  if (slot) slot.innerHTML = html;
 }
 export async function doLogin(){ authFlow("login"); }
 export async function doRegister(){ authFlow("register_player"); }

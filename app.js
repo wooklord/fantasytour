@@ -81,6 +81,31 @@
     return j;
   }
 
+  // src/core/community.js
+  function communityLinks(cfg) {
+    const ok = (u) => typeof u === "string" && /^https:\/\//i.test(u);
+    const out = [];
+    if (ok(cfg == null ? void 0 : cfg.fb_url)) out.push({ label: "Facebook group", url: cfg.fb_url });
+    if (ok(cfg == null ? void 0 : cfg.discord_url)) out.push({ label: "Discord", url: cfg.discord_url });
+    return out;
+  }
+  function communityRowsHtml(leagues) {
+    return (leagues || []).map((l) => {
+      const links = communityLinks(l.config);
+      if (!links.length) return "";
+      return `<div class="muted" style="margin-top:6px"><b>${esc(l.name)}</b>: ${links.map((k) => `<a href="${esc(k.url)}" target="_blank" rel="noopener noreferrer">${k.label}</a>`).join(" \xB7 ")}</div>`;
+    }).join("");
+  }
+  function communityBlockHtml(leagues, { id, lead }) {
+    const rows = communityRowsHtml(leagues);
+    return rows ? `<div id="${id}" class="noticebox"><b>${lead}</b>${rows}</div>` : "";
+  }
+  async function fetchLeagueLinks() {
+    const { data, error } = await db.from("leagues").select("name, config").order("name");
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
   // src/features/auth.js
   function renderAuth() {
     $("#main").innerHTML = `
@@ -95,7 +120,19 @@
       </div>
       <div class="err" id="a-err"></div>
     </div>
+    <div id="auth-community"></div>
     ${footerHtml()}`;
+    loadAuthCommunity();
+  }
+  async function loadAuthCommunity() {
+    let html = "";
+    try {
+      html = communityBlockHtml(await fetchLeagueLinks(), { id: "auth-links", lead: "Looking for your league? Here's where each one hangs out." });
+    } catch (e) {
+      html = "";
+    }
+    const slot = document.getElementById("auth-community");
+    if (slot) slot.innerHTML = html;
   }
   async function doLogin() {
     authFlow("login");
@@ -1162,7 +1199,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"8a2cfba-1e3d41d"}</p>
+      <p class="colophon buildid">build ${"c3b67c3-4711dfc"}</p>
     </div>
   </div>`;
   }
@@ -2311,27 +2348,14 @@ Switch anyway?`
     localStorage.removeItem("ft_session");
     location.reload();
   }
-  function communityLinks(cfg) {
-    const ok = (u) => typeof u === "string" && /^https:\/\//i.test(u);
-    const out = [];
-    if (ok(cfg == null ? void 0 : cfg.fb_url)) out.push({ label: "Facebook group", url: cfg.fb_url });
-    if (ok(cfg == null ? void 0 : cfg.discord_url)) out.push({ label: "Discord", url: cfg.discord_url });
-    return out;
-  }
   async function renderNoLeague() {
     let leagues = [];
     try {
-      const { data } = await db.from("leagues").select("name, config").order("name");
-      leagues = data || [];
+      leagues = await fetchLeagueLinks();
     } catch (e) {
     }
     const names = leagues.map((l) => l.name);
-    const linkRows = leagues.map((l) => {
-      const links = communityLinks(l.config);
-      if (!links.length) return "";
-      return `<div class="muted" style="margin-top:6px"><b>${esc(l.name)}</b>: ${links.map((k) => `<a href="${esc(k.url)}" target="_blank" rel="noopener noreferrer">${k.label}</a>`).join(" \xB7 ")}</div>`;
-    }).join("");
-    const linksHtml = linkRows ? `<div id="nl-links" class="noticebox"><b>Find the community</b>${linkRows}</div>` : "";
+    const linksHtml = communityBlockHtml(leagues, { id: "nl-links", lead: "Find the community" });
     $("#main").innerHTML = `<div class="panel" style="margin-top:30px">
     <h2>You're not in a league yet</h2>
     <p class="muted">Someone has to add you before you can play.</p>

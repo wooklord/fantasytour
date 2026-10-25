@@ -313,8 +313,13 @@ export function mainHTML(window, mode){
 // in a hidden desktop column) shipped once without either scenario catching
 // it. Returns enough to check the login form actually landed somewhere
 // visible, not just that it rendered *somewhere* in the DOM.
-export async function runLoggedOutBoot({ html, scripts, mode }){
+// `mutate(tables)` runs before the window exists — the Stage S login-screen
+// checks use it to give a league links, or to make the leagues read throw
+// (a getter that throws is the only way to produce an error from the fake
+// builder, which otherwise treats a missing table as empty).
+export async function runLoggedOutBoot({ html, scripts, mode, mutate = () => {} }){
   const { tables } = makeFixtures();
+  mutate(tables);
   const calls = [];
   const dbHolder = {};
   const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
@@ -335,7 +340,14 @@ export async function runLoggedOutBoot({ html, scripts, mode }){
     ? colsDisplay === "grid" && !!window.document.querySelector("#main-shows #a-name")
     : authFormPresent;
 
-  return { colsDisplay, authFormPresent, authFormInVisibleContainer };
+  // Stage S pre-auth community block (features/auth.js loadAuthCommunity).
+  const block = window.document.getElementById("auth-links");
+  const linksPresent = !!block;
+  const anchors = block ? [...block.querySelectorAll("a")].map(a => ({ href: a.getAttribute("href"), text: a.textContent, rel: a.getAttribute("rel"), target: a.getAttribute("target") })) : [];
+  const blockText = block ? block.textContent : "";
+  const mainText = mainHTML(window, mode);
+
+  return { colsDisplay, authFormPresent, authFormInVisibleContainer, linksPresent, anchors, blockText, mainText };
 }
 
 // Every OTHER scenario in this file (and, until now, every scenario ever

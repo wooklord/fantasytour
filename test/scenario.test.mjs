@@ -248,6 +248,32 @@ async function runMode(mode){
     loggedOut.authFormPresent && loggedOut.authFormInVisibleContainer,
     `colsDisplay: "${loggedOut.colsDisplay}" authFormPresent: ${loggedOut.authFormPresent} inVisibleContainer: ${loggedOut.authFormInVisibleContainer}`);
 
+  // Stage S — the login screen is the first onboarding surface (onboarding
+  // Batch 1, pre-auth). Three shapes: links present, none anywhere (the
+  // default fixture, already loaded above), and a leagues read that throws.
+  check("login screen with no links anywhere renders no community block (empty-set case)",
+    !loggedOut.linksPresent && !/Looking for your league/.test(loggedOut.mainText),
+    `mainText: ${loggedOut.mainText.slice(0, 300)}`);
+  const loggedOutLinks = await runLoggedOutBoot({ html, scripts, mode, mutate: t => {
+    t.leagues[0].config = { fb_url: "https://example.invalid/fb-group", discord_url: "https://example.invalid/discord-invite" };
+    t.leagues.push({ id: 99, name: "Linkless League" });
+  }});
+  check("login screen shows both community links beneath a present form, one row per league that has any",
+    loggedOutLinks.authFormPresent && loggedOutLinks.authFormInVisibleContainer
+      && loggedOutLinks.linksPresent
+      && loggedOutLinks.anchors.length === 2
+      && loggedOutLinks.anchors.some(a => a.href === "https://example.invalid/fb-group" && /Facebook/.test(a.text))
+      && loggedOutLinks.anchors.some(a => a.href === "https://example.invalid/discord-invite" && /Discord/.test(a.text))
+      && loggedOutLinks.anchors.every(a => a.target === "_blank" && /noopener/.test(a.rel || "") && /noreferrer/.test(a.rel || ""))
+      && /Ambassadors/.test(loggedOutLinks.blockText) && !/Linkless League/.test(loggedOutLinks.blockText),
+    `anchors: ${JSON.stringify(loggedOutLinks.anchors)} blockText: ${JSON.stringify(loggedOutLinks.blockText)}`);
+  const loggedOutErr = await runLoggedOutBoot({ html, scripts, mode, mutate: t => {
+    Object.defineProperty(t, "leagues", { get(){ throw new Error("leagues read failed"); } });
+  }});
+  check("a failing leagues read leaves the login form intact and renders no community block",
+    loggedOutErr.authFormPresent && loggedOutErr.authFormInVisibleContainer && !loggedOutErr.linksPresent,
+    `authFormPresent: ${loggedOutErr.authFormPresent} linksPresent: ${loggedOutErr.linksPresent}`);
+
   // Every session above is p1, a league admin in the fixture — this whole
   // suite never logged in as a genuine non-admin until now. Regression
   // coverage for the real bug: a non-admin's shared admin/settings tab
