@@ -95,6 +95,44 @@ The shape of the fix is settled; only the implementation is outstanding.
   6. **Recorded, NOT in scope of this batch:** `scoreShow`'s fallback to
      every setlist row for that date when the show id matches nothing;
      `cutoffChanged()` having no dedupe stamp.
+  **RESUME HERE — PAUSED 2026-10-25, plan written, NOT approved, no code.**
+  The change plan (given in Chat the same day) in brief, so it survives:
+  - Pure module `supabase/functions/carton-sync/showSync.js` (no Supabase
+    client, same isolation as `scoring.js`) holding `dailyGateDue({ranAt,
+    attemptedAt, now})`, `diffShows({incoming, existing, finalIds, today})`
+    → {updates, flags, vanished}, and `cutoffPlan({overlay, oldShow,
+    newShow, defaultOf, now})`; `index.ts` fetches, calls, applies.
+  - Gate: Eastern hour ≥ 9, no `ran_at` on today's Eastern date, no
+    `attempted_at` in the last 30 min; `attempted_at` stamped before the
+    Carton call, `ran_at` only after success. Runs at the END of
+    `scoreShows`, own try/catch, never throws; skipped on a live-burst
+    tick (runs the next minute). The Sync shows button runs the same code
+    and also stamps `ran_at`.
+  - Stage U SQL: `league_shows.cutoff_set_by_admin boolean` (nullable;
+    null = predates the flag; `admin_set_cutoff` sets true; sync inserts
+    set false; Stage R's unapplied seed to set false), `shows.sync_flag
+    text`, table `sync_state(key pk, ran_at, attempted_at, note)` (RLS on,
+    no policies, anon/authenticated revoked), RPC `admin_clear_sync_flag`.
+    No backfill. Apply Stage U BEFORE deploying the function.
+  - Flags append with a separator and never re-add a note already
+    present; a re-create pair (new id, same date+venue) is named in the
+    vanished note. Derived-cutoff changes reuse the `cutoffChanged`
+    message builder (factored out) and `pingRealtime` per league row.
+  - Admin Shows section: a `.noticebox` per flagged show with a Clear
+    button (`clearSyncFlag` on `window`); `fetchShows` already selects
+    every column.
+  - Tests: new `test/showSync.test.mjs` (plain Node, wired into `npm
+    test`) — derived cutoff moves + stamps reset + one post per league;
+    admin-set stays + flag; null-flag equal/unequal to the OLD default;
+    any-league-final → no update + flag; vanished → flag, no delete, pair
+    named; empty set → zero writes/posts; gate cases with injected `now`
+    (08:59, 09:00, ran today, ran yesterday, failed 10/31 min ago, a DST
+    day). Harness: flagged fixture renders the notice, clear removes it,
+    no flags → no notice.
+  **Open before build (dev's call):** (1) should the daily run also call
+  `syncSongs`? Plan assumes NO (not in the locked list). (2) should
+  `admin_clear_sync_flag` require global admin? Plan assumes any league
+  admin, since the show is global.
   **Survey findings 2026-10-25 (read-only, `index.ts` as committed):**
   nothing runs `sync_shows` automatically — the cron body is `score` only,
   the button is the sole caller. `syncShows` keys on the Carton `show_id`
