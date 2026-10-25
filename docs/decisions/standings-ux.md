@@ -20,7 +20,15 @@
    https-only guard rather than add a copy. The block re-renders with the
    dropdown, so switching league switches the links.
 
-2. **A "View" chip on the standings board, beside the Score label, with two
+2. **⚠️ CORRECTION 2026-10-25, recorded at full weight: items 2 and 3 were
+   built against the WRONG SCREEN.** The dev meant the per-show **Scores
+   page** — the view that lists every player's entry with picks and
+   per-pick points (`get_show_picks`, which is where `is_mine` lives) —
+   not the standings board. The Chat-side reading of "all open" as the
+   board's tiebreak lines was wrong, and it shipped in `1a74cee`. The
+   original wording below is kept and **SUPERSEDED**; the replacement
+   decisions are 2a and 3a after item 3.
+   *(superseded)* **A "View" chip on the standings board, beside the Score label, with two
    positions: Compact and Detail.** Compact is the default — name and
    points only, nothing expanded. Detail — every row expanded. The choice is
    **persisted per device in `localStorage` under `ft_board_view`**, same
@@ -44,7 +52,9 @@
    plus "Score" in that `<th>` would leave the name column about 70px at
    phone width once the rank and score columns take their minimums.
 
-3. **The viewer's own row gets an OUTLINE in the app's existing yolk
+3. *(superseded in part — see the correction under 2 and item 3a; the
+   standings outline itself is KEPT)* **The viewer's own row gets an
+   OUTLINE in the app's existing yolk
    color.** As locked, this was "keyed on the server-computed `is_mine`";
    **survey correction, same day:** `get_bracket_scores` has no `is_mine`
    (only `get_show_picks` does). The board already marks the own row with
@@ -63,6 +73,24 @@
    by the outline, not kept alongside it. Any later winner/tie treatment
    must stay a fill or a mark, so the two never fight for the same
    property.
+
+2a. **LOCKED 2026-10-25 — Scores page View chip.** On the per-show Scores
+   page, a "View" chip with two positions: **Compact (default)** collapses
+   every entry to name + points; **Detail** opens every entry (picks and
+   per-pick points visible). Persisted per device in `localStorage`
+   `ft_scores_view`, default `compact`, same posture as `ft_theme2`; the
+   chip renders even with zero entries. **Name cells on this page get the
+   same ellipsis treatment** as decision 4 (`.nm` + `title`).
+
+3a. **LOCKED 2026-10-25 — Scores page own-entry outline; standings chip
+   REVERTED.** On the Scores page the viewer's own entry gets the yolk
+   OUTLINE, **keyed on `is_mine` from `get_show_picks`** (this is the
+   screen the original "server-computed `is_mine`" wording was about).
+   Point colors unchanged. **Standings board: REVERT the View chip** —
+   tiebreak lines always visible again, exactly as before `1a74cee`, and
+   `ft_board_view` removed (no reader, no writer). **KEEP the standings
+   own-row outline on `.me`**, since it replaced a fill that was broken in
+   the light theme — that part of item 3 stands on its own merits.
 
 4. **Nickname overflow, two layers:**
    - **CSS ellipsis on every name cell** (standings rows and podium, Who's
