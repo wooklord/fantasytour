@@ -58,6 +58,22 @@ The shape of the fix is settled; only the implementation is outstanding.
   consequence of a moved date (a derived cutoff should follow the date; an
   admin-set one may not — if the two are indistinguishable today, that is
   the first design problem).
+  **Survey findings 2026-10-25 (read-only, `index.ts` as committed):**
+  nothing runs `sync_shows` automatically — the cron body is `score` only,
+  the button is the sole caller. `syncShows` keys on the Carton `show_id`
+  (= `shows.id`) and its upsert DOES overwrite `showdate`/`venue`/`city`/
+  `state`/`permalink`/`timezone` on an existing row, within its newest-200
+  / 14-days-back window — but the per-league `cutoff_at` refill is
+  NULL-only, so a moved date leaves every league's cutoff on the OLD date,
+  and nothing compares, logs, notifies or resets `remind_sent`/`lock_sent`.
+  `cutoffChanged()` posts to Discord only (no in-app ping), has no dedupe
+  stamp, and fires only from `saveCutoff`. A derived cutoff is NOT
+  distinguishable from an admin-set one (no flag; only a comparison with
+  `default_show_cutoff`). A show missing from Carton is never noticed.
+  `scoreShow` fetches the setlist BY `shows.showdate`, with a fallback to
+  every row for that date — so a stale date also fetches the wrong
+  setlist. No write path checks `status = 'final'`. Design options and
+  tradeoffs were given in Chat the same day; decision pending.
 - **PRIORITY: below gate items #1 (login rate-limiting) and #2 (`ft_session`
   plaintext PIN).** Those yield account and admin takeover — persistent,
   silent, targeted. This one yields availability degradation only: no data
