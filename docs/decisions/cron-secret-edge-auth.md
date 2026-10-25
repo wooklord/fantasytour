@@ -42,22 +42,59 @@ The shape of the fix is settled; only the implementation is outstanding.
   covers shows that appear afterwards. **Do not implement or schedule
   before that first clean score** — the dev's explicit hold, so a scoring
   problem on opening night is never confounded with a cron change.
-- **OPEN 2026-10-25: a daily automatic show sync is wanted to catch Carton
-  changes to EXISTING shows (dates, venues), not just new ones.** A
-  Suwannee date change was missed: the app kept the old date while The
-  Carton had moved the show. Distinct from the hourly `sync_shows` above,
-  which is about acquiring new shows and overlay rows — this is about
-  re-checking rows the app already has. **Design pending** the 2026-10-25
-  show-sync survey and a Chat decision; it becomes its own batch.
-  **Guardrails already locked (dev, 2026-10-25):** (1) never modify a
-  finalized show; (2) never delete a show that disappears from Carton —
-  surface it to admins instead; (3) a date change posts the existing
-  "cutoff changed" notification, not a new one. Open: where it runs (cron
-  tick vs a separate schedule), what it compares (which columns, keyed on
-  what), what it updates vs only flags, and the per-league cutoff
-  consequence of a moved date (a derived cutoff should follow the date; an
-  admin-set one may not — if the two are indistinguishable today, that is
-  the first design problem).
+  **⚠️ SUPERSEDED 2026-10-25 by the daily in-tick show sync below (dev's
+  call, settled in Chat).** The hourly cron-scheduled `sync_shows` will
+  NOT be built. Reason: the daily sync runs the same acquisition path
+  (new shows and overlay rows) once a day, which covers the need this
+  item existed for; it halves Carton traffic against an hourly schedule;
+  and it needs no cron SQL change, so the out-of-repo cron stays `score`
+  only and the dev's hold on cron changes is never tested. The "Sync
+  shows" button stays as the manual override. The `CRON_SECRET` dual-path
+  decision above is untouched by this; it just no longer carries a
+  sync_shows schedule with it.
+- **LOCKED 2026-10-25 — daily in-tick show sync (new shows AND changes
+  to existing ones). Settled in Chat the same day; its own batch, plan
+  pending approval.** Trigger: a Suwannee date change was missed — the
+  app kept the old date while The Carton had moved the show (root cause
+  in the survey findings below). Guardrails locked first (same day):
+  never modify a finalized show; never delete a show that disappears from
+  Carton — surface it to admins; a date change posts the existing
+  "cutoff changed" notification, not a new one.
+  1. **Runs inside the existing `score` action, AFTER scoring, once per
+     day, stamp-gated**, on the first tick after 09:00 America/New_York —
+     the same Eastern gating `activateSeasons` uses. Wrapped so a Carton
+     failure cannot reach the scoring path (scoring has already run; the
+     sync's own errors are caught and logged, never thrown). **No new
+     action, no cron SQL change.** This is what supersedes the hourly
+     item above. The "Sync shows" button remains the manual override and
+     runs the same code.
+  2. **`syncShows` gains a diff step over the same newest-200 window:**
+     per Carton `show_id`, compare `showdate`, `venue`, `city`, `state`
+     against the stored row. **"Finalized" means ANY league has the show
+     `final`**; a finalized show's global row is never updated, only
+     flagged (shows are global, status is per league — the conservative
+     reading is the only safe one).
+  3. **New column `league_shows.cutoff_set_by_admin boolean`** — the table
+     that holds `cutoff_at` — written `true` by `admin_set_cutoff`, in a
+     new SQL stage (next letter after T). On a date change: a **derived**
+     cutoff recomputes to the new date's default (6 PM venue-local), posts
+     the existing cutoff-changed message per league, and resets
+     `remind_sent`/`lock_sent` when the new cutoff is in the future (or
+     the reminder and lock would never fire for the moved show); an
+     **admin-set** cutoff stays and the show is flagged. **Rows predating
+     the flag are derived iff the stored value equals the OLD date's
+     default** — compared against the old date, never the new one.
+  4. **An in-window id Carton no longer returns, dated today or later, is
+     flagged, never deleted.** A re-create under a new id surfaces as
+     "new" plus "vanished" together, so an admin sees the pair.
+  5. **New nullable `shows.sync_flag text`**, rendered as a notice in the
+     admin Shows section and cleared by an admin; a Discord post only
+     where a league hook exists. Known, separate: Green Eggs posts
+     currently route to the Ambassadors channel (`discord-routing.md`), so
+     Ambassadors itself hears nothing until that item is done.
+  6. **Recorded, NOT in scope of this batch:** `scoreShow`'s fallback to
+     every setlist row for that date when the show id matches nothing;
+     `cutoffChanged()` having no dedupe stamp.
   **Survey findings 2026-10-25 (read-only, `index.ts` as committed):**
   nothing runs `sync_shows` automatically — the cron body is `score` only,
   the button is the sole caller. `syncShows` keys on the Carton `show_id`
@@ -73,7 +110,8 @@ The shape of the fix is settled; only the implementation is outstanding.
   `scoreShow` fetches the setlist BY `shows.showdate`, with a fallback to
   every row for that date — so a stale date also fetches the wrong
   setlist. No write path checks `status = 'final'`. Design options and
-  tradeoffs were given in Chat the same day; decision pending.
+  tradeoffs were given in Chat the same day; decided as the LOCKED list
+  above.
 - **PRIORITY: below gate items #1 (login rate-limiting) and #2 (`ft_session`
   plaintext PIN).** Those yield account and admin takeover — persistent,
   silent, targeted. This one yields availability degradation only: no data
