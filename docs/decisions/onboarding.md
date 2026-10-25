@@ -11,10 +11,26 @@
 1. **Community links are per-league config, stored in a new
    `leagues.config` jsonb column**, admin-editable from the admin tab's
    league-scoped group, never in tracked files. Keys v1: `fb_url`,
-   `discord_url`, `join_code`. Rationale: both brackets of a league share
+   `discord_url`. Rationale: both brackets of a league share
    one community, so the links belong to the league, not a bracket; and
    links are data, not source, so they cannot live in `src/core/config.js`
    or any seed SQL.
+   **⚠️ SUPERSEDED IN PART 2026-10-24 (same day, after the conflict note
+   below was written).** As first recorded, the v1 key list read
+   "`fb_url`, `discord_url`, `join_code`". That was wrong: `leagues` is
+   publicly selectable on every column, so a join code in `leagues.config`
+   would be published the moment it was written. **`leagues.config` never
+   carries `join_code`.** Join codes live in a new table
+   `league_join_codes` (`league_id` pk → `leagues`, `code text unique`,
+   `rotated_at timestamptz`), RLS enabled with NO policies and all
+   privileges revoked from `anon` and `authenticated`, read and written
+   only by security-definer RPCs: `admin_get_join_code`,
+   `admin_rotate_join_code`, `join_league`. Codes are 8 characters from an
+   unambiguous alphabet (no 0/O/1/I/l), generated server-side, compared
+   case-insensitively. **Rejected:** hash storage (admins must display the
+   code, and an 8-character code behind a public hash is brute-forceable
+   offline) and column-level grants (they break `select *` callers,
+   including the Global console). Built in Batch 4.
 
 2. **Onboarding has three DERIVED states and no onboarding-step column.**
    - **no-league**: `state.leagues.length === 0` → `renderNoLeague()`
@@ -50,10 +66,12 @@
      not folded into the links batch. Before applying, read the Part 3
      note in this record: the file as written also BACKFILLS every existing
      `false` row to `true`, which flips every current Green Eggs member.
-     That is a data change, not a default change, and needs the dev's
-     explicit call at apply time.
-   - Join codes v1: entered only on the no-league screen; 8+ random
-     characters; admin-rotatable from the Community section. Second-league
+     That is a data change, not a default change. **Decided 2026-10-24:
+     apply both statements, gated on the writer grep — full reasoning in
+     `official-opt-in-default.md` → "Stage F apply decision".**
+   - Join codes v1: entered only on the no-league screen; 8 characters,
+     stored in `league_join_codes` (see the correction under decision 1);
+     admin-rotatable from the Community section. Second-league
      joins remain admin-add (the Stage Q panel), so a code can never land
      someone in a second league by accident.
    - New-signup admin ping: CUT. Join codes remove the admin step the ping
@@ -61,12 +79,14 @@
 
 6. **Batch order** (each its own commit set, each verified before the next):
    1. `leagues.config` + links on the no-league screen + admin Community
-      section (two URL fields + save; `join_code` field read-only).
+      section (two URL fields + save; no join-code field at all — amended
+      2026-10-24, it was first planned as a read-only line).
    2. Stage F apply (see 5 above and Part 3 below).
    3. Welcome card + first-save toast.
-   4. Join codes (entry on the no-league screen, rotation in Community).
+   4. Join codes: `league_join_codes` table + its three RPCs, entry on the
+      no-league screen, rotation in Community.
 
-## Conflict found while writing this record (durability rule 3)
+## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
 The design says "public league-list RPC". **There is no such RPC.** The
 no-league screen (`src/core/session.js:27`) and the Global console
@@ -87,8 +107,11 @@ the anon key. Consequences:
   path needs no change; check `renderNoLeague` and `loadGlobalLeagues`);
   (b) keep `join_code` out of `leagues.config` and store it in its own
   non-public column or table, checked only by a `join_league_by_code` RPC;
-  (c) store only a hash. **Open for the dev; Batch 1's plan leaves
-  `join_code` unwritten until this is settled.**
+  (c) store only a hash. **RESOLVED 2026-10-24: none of (a)–(c). A
+  separate RLS-locked table, `league_join_codes`, behind three RPCs; see
+  the correction under decision 1.** The Stage S whitelist in
+  `admin_update_league_config` accepts only `fb_url` and `discord_url`,
+  so nothing can put a code into the public row by accident.
 - `my_leagues` already returns `official_opt_in` (redefined in
   `sql/stage_c2a_rpcs.sql:99`, which also added the `drop function` the
   return-type change needs). Adding two columns to it needs the same drop.

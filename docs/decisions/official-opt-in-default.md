@@ -39,3 +39,38 @@
   known-not-scaled-past-Ambassadors gaps: the PIN-guessing surface and the
   lack of self-service PIN management (both noted below), plus the missing
   self-service opt-out UI this note just surfaced.
+
+## Stage F apply decision — LOCKED 2026-10-24
+
+**Apply BOTH statements of `sql/stage_f_official_default_optin.sql` (the
+ALTER of the default and the UPDATE backfill), gated on one read-only
+check.** The dev runs it; it is not applied from a session.
+
+Reasoning:
+- `set_official_opt_in` has no caller anywhere in `src/` and there is no
+  opt-out UI, so every existing `false` row is the OLD COLUMN DEFAULT
+  landing on an `admin_add_league_member` insert, not a choice anyone made.
+  Backfilling them to `true` restores the intent the 2026-10-12
+  reaffirmation already locked.
+- The live Green Eggs Official season reads the frozen `season_rosters`
+  snapshot (`_official_gate`, `sql/stage_c2a_rpcs.sql`), so the backfill
+  cannot change who scores in live play. It affects only the live flag,
+  which the gate consults solely for seasons not yet activated.
+
+**The gate (ran 2026-10-24, read-only grep of `sql/` and
+`supabase/functions/` for any statement writing `official_opt_in`):**
+the column default (`stage_a_schema.sql:65`), the Stage A seed (writes
+`true`), Stage F itself (writes `true`), and `set_official_opt_in`
+(`stage_c1_rpcs.sql:308`, redefined `stage_n_...:232`), which writes
+whatever boolean it is passed. Nothing writes a literal `false`. The one
+caveat, stated at its weight: `set_official_opt_in` is granted to `anon`,
+so a player with a valid name and PIN could have called it with `false` by
+hand through the REST endpoint. No UI, no documented instance, no
+evidence; recorded so the backfill is not later read as having erased a
+choice nobody is known to have made. The edge function only reads the flag
+(`index.ts:348`). **Gate passed; the file is to be applied whole, not split.**
+
+Preflight before applying, so the before-count is on record:
+`select l.name, count(*) from league_members lm join leagues l on l.id = lm.league_id where lm.official_opt_in = false group by l.name order by l.name;`
+Related: `docs/decisions/onboarding.md` decision 5 (Stage F is Batch 2 of
+the onboarding sequence).
