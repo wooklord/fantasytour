@@ -312,7 +312,8 @@ a tenant.
   Stage F correction: `docs/decisions/official-opt-in-default.md`.
 - **Onboarding LOCKED 2026-10-24** — `leagues.config` jsonb for community
   links, three derived states, join codes, Stage F as its own batch, and
-  a public-select conflict found during the write: `docs/decisions/onboarding.md`.
+  a public-select conflict found during the write: `docs/decisions/onboarding.md`
+  (RESUME NOTE at its top, paused 2026-10-24).
 - **Frozen season roster** (`season_rosters`): snapshotted at activation,
   scoring reads the snapshot not the live flag, frozen in both directions;
   admin override edits the roster explicitly.

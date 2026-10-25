@@ -1,5 +1,36 @@
 # Onboarding: community links, derived states, join codes
 
+## RESUME HERE (paused 2026-10-24)
+
+**State:** Batch 1 (onboarding community links: Stage S SQL, no-league
+screen links, login-screen links, admin Community section) is committed
+LOCALLY — 5 commits ahead of `origin/main`, **NOT pushed**. Stage S is
+**NOT applied** in Supabase. An accidental push before step (1) is harmless:
+both client fetches (`src/core/community.js` → `fetchLeagueLinks`) render
+nothing on error, and `my_leagues` keeps its old shape until Stage S runs.
+
+**Resume order:**
+1. Apply `sql/stage_s_league_config.sql` in the Supabase SQL editor, then
+   run its verification queries 1–5 (in the file's footer) using league 2.
+   Query 1 (deploy check) FIRST — a PGRST202 means not deployed.
+2. `git push origin main`, then confirm the footer build id reads
+   `c3b67c3-4711dfc` (Settings card in the app, or
+   `curl -s https://fantasyeggy.wooklord.net/app.js | grep -oE '[0-9a-f]{7}-[0-9a-f]{7}' | head -1`).
+3. Admin → Community → enter the Facebook group URL and a Discord invite
+   created with expiry **Never** and **no max uses** → Save links → log out
+   and confirm the block renders under the login form. (Values go in the
+   admin UI only — never into any tracked file.)
+4. Stage F as its own step: run the preflight count (below), apply
+   `sql/stage_f_official_default_optin.sql` WHOLE (both statements —
+   decision and gate in `official-opt-in-default.md` → "Stage F apply
+   decision"), re-run the count expecting 0, confirm the column default is
+   `true` via `information_schema.columns`.
+
+Preflight count for step 4:
+`select l.name, count(*) from league_members lm join leagues l on l.id = lm.league_id where lm.official_opt_in = false group by l.name order by l.name;`
+
+Then Batch 3 (welcome card + first-save toast) per decision 6 below.
+
 > Decision record — currently binding. LOCKED 2026-10-24 (design settled in
 > Chat, written the same day). `CLAUDE.md` holds a one-line pointer under
 > "THE 2.0 MODEL → Locked decisions" and in the docs index; this file is the
