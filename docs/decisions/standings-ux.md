@@ -118,7 +118,9 @@
   throwaway accounts in production:** the file's footer verifies inside a
   `begin … rollback` block (21 characters must raise the Stage T message,
   20 must succeed, then everything rolls back), followed by a count that
-  must be 0. Built 2026-10-25; NOT applied until the dev runs it.
+  must be 0. Built and **APPLIED 2026-10-25**: deploy check returned
+  `register_player(text,text)`, the rolled-back behaviour test completed
+  clean, and the `ZZtest_stage_t_%` count was 0. Server cap is live.
 - Harness: an empty-set case for the View chip (a board with no rows must
   still render the chip and no error), a long-name case for the ellipsis
   (a 27-character fixture name — invented, not a real nickname), and the
