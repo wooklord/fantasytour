@@ -102,3 +102,96 @@
   901px desktop's grid never renders at all (`isDesktop()` in
   `core/dom.js` is `min-width:901px`) — that's phone/tablet's `.wrap`
   instead, covered by the first tier.
+
+- **Brand assets: the laurel wreath has stems (LOCKED 2026-10-26; dev's
+  design, drafted 2026-10-14, revised twice on review of before/after
+  sheets).** No other record covers brand assets, so this is their home.
+  - **Every copy of the wreath** (all now stemmed): `assets/icon.svg` and
+    root `icon.svg` (byte-identical duplicates; the root copies exist for
+    browsers' automatic requests); the `index.html` header `.logo-icon` (no
+    halos); `src/core/trophy.js` `WIN_SVG` (`winBadge`; its halos always
+    show, the app CSS has no `.h` rule) and `TROPHY_SVG` (`trophy`; no
+    halos); rasters `assets/icon-512.png`, `assets/icon-192.png`,
+    `assets/apple-touch-icon.png` + root `apple-touch-icon.png`,
+    `assets/favicon.ico` (PNG frames 16/32/48) + root `favicon.ico`, new
+    `assets/icon-maskable-512.png` and `-192.png`, `assets/discord-icon.png`;
+    and `manifest.webmanifest`. `laurelSpray()` already draws its own stem
+    and is unchanged.
+  - **Stem path:** a Catmull-Rom spline through each branch's leaf-pair
+    anchors (the `translate()` of every leaf; 8 per branch, mirrored
+    x -> 100 - x), bottom to top, as cubic Beziers with the end points
+    duplicated, one path per branch. Icon and header anchors run
+    (53.9,82.8) ... (67.4,24.2); the trophy/badge wreath is the same shape
+    at 0.655 scale, (52.6,58.8) ... (61.4,20.4).
+  - **Base lead-in (SHORT, chosen by the dev over LONG):** each stem starts
+    with a straight `M E L P0` from its lowest anchor P0 back along the
+    tangent there (direction P0 - P1; the spline's tangent at a duplicated
+    end point), so there is no kink; round caps kept. Length is solved per
+    geometry so the gap between the two cap edges is HALF the un-extended
+    gap, never closer: icon and header 5.6 -> 2.8 units (lead-in 1.466),
+    trophy and badge 3.0 -> 1.5 (lead-in 0.784). LONG (a third) was the
+    alternative shown.
+  - **Stroke:** `#9C6B3C`, width 2.2 in every copy, round caps, no halo.
+    2.2 holds in the trophy/badge too: same 0-100 viewBox, and their wreath
+    leaves already use the icon's unscaled 1.4 outline. The near-black
+    first draft (`#1A2415` with a cream stem halo) was rejected because it
+    disappeared on the dark header and the home-screen icon.
+  - **Paint order: the stem is above every cream halo and below every
+    leaf.** In the halo'd copies (`icon.svg` and its rasters, `WIN_SVG`)
+    each layer of halos and leaves is reordered to all its halos, then all
+    its leaves, and the stems go between the halos and the leaves of the
+    wreath's layer. `WIN_SVG`'s contact-shadow ellipse sits between its 26
+    back and 2 front nest leaves; it splits the layers, so the shadow keeps
+    its place. Shown to the dev and accepted: there is no longer a cream rim
+    where leaves overlap, in the wreath or the nest. The header and
+    `TROPHY_SVG` have no halos; their stem simply sits before the wreath's
+    first leaf (in `TROPHY_SVG`, after the nest and before the medal).
+  - **Halos trimmed (variant B, chosen over A at 3.8):** every halo is 1.0
+    thinner, 3.8 -> 2.8 on the icon and wreath leaves and 3.6 -> 2.6 on the
+    nest, which keeps the cream margin around each leaf even.
+  - **Stem colour contrast** (WCAG relative luminance, non-text 3:1):
+
+    | Background | Ratio |
+    |---|---|
+    | `#171233` (theme_color, apple-touch) | 3.91 |
+    | `#100C26` (`--pit`, header, maskable) | 4.16 |
+    | `#1F1941` (dark `--panel`) | 3.60 |
+    | `#FDF8EC` (light `--panel`) | 4.32 |
+    | `#F3EBD8` (light header) | 3.86 |
+    | `#EDE3CC` (light `--pit`) | 3.59 |
+    | `#F2EEDC` (cream halo) | 3.94 |
+    | `#FFFFFF` (light browser tab) | 4.58 |
+    | `#35363A` (Chrome dark tab strip) | **2.63** |
+
+    The tab strip is the one miss, accepted: in a dark tab the SVG shows its
+    halos, so the stem sits mostly on cream, and at 16px it is under a pixel.
+    Lighter browns that clear it (`#AA7842`, 3.15) become nearly identical
+    to the leaf green under deuteranopia (CIEDE2000 2.0, against 6.7 for
+    `#9C6B3C`). Against the leaf green `#5B9E45` the stem is only 1.40:1 in
+    luminance but CIEDE2000 35 in hue, and the leaf's dark outline always
+    separates them.
+  - **Rasters are regenerated from `icon.svg` with the halos forced ON.**
+    Re-rendering the old SVG that way reproduced every old raster to within
+    antialiasing (mean difference 0.7-5.5 out of 255; halos off was 19-26).
+    Full frame, transparent background; `apple-touch-icon.png` is on
+    `#171233` and stays RGB.
+  - **Maskable icons** sit on `#100C26` (the manifest's `background_color`).
+    The wreath is centred on its smallest enclosing circle (radius 39.6
+    units about (50, 52.45)) and sized 1px inside the 80% safe circle
+    (painted radius 204.09 of 204.8 at 512, 76.25 of 76.8 at 192). The
+    manifest's two existing icons now carry an explicit `"purpose": "any"`.
+    This resolves the maskable follow-up in `onboarding.md` Batch 3.
+  - **`discord-icon.png` has no source file.** It is the wreath at 1.03x
+    over a gold egg on a `#171233` rounded square; the fitted placement is
+    527.11px per 100 units at offset (-7.555, -2.171), within about 1px. It
+    was regenerated by wiping the old wreath to the flat navy (verified
+    uniform outside the wreath) and drawing the new one at the fitted
+    placement; the egg and corners are byte-identical. **Nothing in the repo
+    references it, and the edge function sends no `avatar_url`, so it
+    changes in Discord only when re-uploaded as each webhook's avatar in
+    Discord's settings.**
+  - **Installed apps:** installed iPhones keep their old home-screen icon
+    until the app is removed and re-added to the Home Screen; Android
+    updates the installed icon on its own (Chrome's periodic manifest
+    check, so not instantly). Browser favicons refresh as their cache
+    expires.

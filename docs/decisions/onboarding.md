@@ -220,6 +220,9 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
       **Follow-up candidate, NOT in this batch:** a maskable manifest
       icon. Android shows the current icon inside a white circle because
       none of the manifest's icons is marked maskable.
+      **DONE 2026-10-26** with the wreath-stems change: `assets/icon-maskable-192.png`
+      and `-512.png` are in the manifest as `"purpose": "maskable"`, beside the
+      existing icons, now marked `"purpose": "any"`. Record: `frontend-css.md`, brand assets.
       **BUILT 2026-10-26, bundle `7b4f28f-503c56d`.** New
       `src/core/install.js` (pure detection, standalone check and branch
       text, plus the prompt capture wired before `boot()`), the card and
