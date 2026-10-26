@@ -23,8 +23,8 @@ to "Stage F APPLIED 2026-10-26"; this parenthetical said it was stale
 until then.)
 
 **Remaining:** Batch 3 (welcome card, install guide, first-save toast) —
-LOCKED 2026-10-26 under decision 6 below; change plan pending the dev's
-approval, nothing built. Then Batch 4 (join codes).
+LOCKED 2026-10-26 under decision 6 below; plan APPROVED the same day with
+six decisions recorded there; build in progress. Then Batch 4 (join codes).
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -154,8 +154,8 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
          Eggy to your home screen", plus a "How?" that expands the same
          platform instructions. Standalone always hides both the bar and
          the card's section. *Not specified when locked:* whether the
-         bar is phones-only like the card's section. Open until the
-         plan is approved.
+         bar is phones-only like the card's section. Resolved by
+         decision 2 of the approved plan below: phones only.
          **AMENDED 2026-10-26, same day (dev's call): install help is
          permanently dismissable.** As first written, `ft_install_dismissed`
          governed the bar only and its ✕ was a plain close. Now:
@@ -181,6 +181,44 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
       5. **Rejected:** a modal, because it would block the shows list on
          first load; server-side dismissal state, because per-device is
          enough at this scale.
+      **PLAN APPROVED 2026-10-26, with the dev's six decisions:**
+      1. **Card scope is per league.** The current bracket's
+         `get_my_pick_counts` is checked first; only when it is empty is
+         the league's other bracket checked. A draft key for either of
+         the league's brackets also counts as picks.
+      2. **The bar is phones only**, like the card's section.
+      3. **`ft_first_save_<playerId>` is also set silently whenever the
+         shows list sees saved picks**, so only genuinely new players get
+         the toast and existing players never see it.
+      4. **`appinstalled` also sets `ft_install_dismissed`**, so an Android
+         browser tab stops showing install help after the install. iPhone
+         has no such event; iPhone players use "Don't show again".
+      5. **Samsung Internet is detected for branch (b)** and names its ≡
+         menu. Branch (d) uses each OS's menu glyph: ⋯ on iOS, ⋮ on
+         Android. The rest of the locked wording is unchanged.
+      6. **The welcome card's ✕ hides only the card**, never install
+         help. **Bar rule AMENDED:** the bar shows whenever install help
+         applies (phone, not standalone, `ft_install_dismissed` not set)
+         and the card's install section is not on screen. This replaces
+         "for players who already have picks" in item 3, and closes the
+         gap where a no-picks player who closed the card saw no install
+         help.
+      **How-to-play lines, five (dev's copy), replacing "three" in
+      item 1:**
+      - "Before each show, pick the songs you think <band> will play."
+      - "Picks partly score in realtime and finalize once the setlist is in."
+      - "Standings update after every show."
+      - "Change your picks any time until the cutoff."
+      - "Scoring details are in The Rules under every pick sheet."
+      `<band>` comes from a config constant beside `APP_NAME` in
+      `src/core/config.js`: one source of truth, no band name hardcoded in
+      feature code. The fifth line is the Rules pointer item 1 asks for.
+      **Toast duration (part of the approved plan):** the first-save toast
+      stays up 10 seconds through a new optional `toast()` duration; every
+      other toast keeps 6.
+      **Follow-up candidate, NOT in this batch:** a maskable manifest
+      icon. Android shows the current icon inside a white circle because
+      none of the manifest's icons is marked maskable.
    4. Join codes: `league_join_codes` table + its three RPCs, entry on the
       no-league screen, rotation in Community.
 
