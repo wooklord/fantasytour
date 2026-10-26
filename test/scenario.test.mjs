@@ -990,14 +990,20 @@ async function runMode(mode){
       && /\.lb tr\.me td:first-child\{box-shadow:inset 2px 0 0 var\(--yolk\)/.test(css)
       && !/tr\.tg[^-\w][^{]*\{[^}]*box-shadow/.test(css),
     "styles.css: .lb tr.tg td:first-child / .lb tr.me td:first-child rules");
+  // Amendment 2026-10-26's recorded example, all four facts: (1) High
+  // Score cells tinted for all three, (2) Fewest zeros tinted for the
+  // pair only, (3) the first player's Fewest zeros cell PLAIN, (4) Most
+  // wins (1–1) plain — and the header tint + mark on High Score only.
   const tsub = tb.three.subs[0];
-  check("three-way partial split on a TWO-layer stack: ONE tag naming the first splitting layer; the grid has both header columns in stack order with ONLY the first tinted and marked, one value per layer per member, ranks 1/2/2 down the rank column (the still-shared pair visible only by those equal ranks)",
-    tb.three.tags.length === 1 && tb.three.tags[0].text === "Tie for 1st · decided by Fewest zeros" && tb.three.tgRows.length === 3
-      && J(tb.three.tgRows.map(r => r.rank)) === J(["1", "2", "2"])
-      && J(tsub?.headers) === J([{ layer: "fewest_zeros", label: "Fewest zeros", deciding: true, decidedMark: true }, { layer: "most_wins", label: "Most wins", deciding: false, decidedMark: false }])
-      && /repeat\(2,/.test(tsub?.cols ?? "") && tsub?.stray === 0
+  check("three-way, three-layer stack: ONE tag naming High Score; header tint + decided mark on High Score ONLY; cells — High Score tinted for all three, Fewest zeros tinted for the pair only, the split-off player's Fewest zeros cell plain, Most wins plain; ranks 1/2/3",
+    tb.three.tags.length === 1 && tb.three.tags[0].text === "Tie for 1st · decided by High Score" && tb.three.tgRows.length === 3
+      && J(tb.three.tgRows.map(r => r.rank)) === J(["1", "2", "3"])
+      && J(tsub?.headers) === J([{ layer: "highest_single_show", label: "High Score", deciding: true, decidedMark: true },
+                                 { layer: "fewest_zeros", label: "Fewest zeros", deciding: false, decidedMark: false },
+                                 { layer: "most_wins", label: "Most wins", deciding: false, decidedMark: false }])
+      && /repeat\(3,/.test(tsub?.cols ?? "") && tsub?.stray === 0
       && J(tsub?.rows.map(r => [r.rank, r.name, r.vals.map(v => `${v.value}:${v.deciding}`)]))
-         === J([["1", "Wooklord", ["0:true", "0:false"]], ["2", "EggHead", ["1:true", "1:false"]], ["2", "GlobalAdmin", ["1:true", "1:false"]]]),
+         === J([["1", "Wooklord", ["6:true", "2:false", "1:false"]], ["2", "GlobalAdmin", ["3:true", "0:true", "1:false"]], ["3", "EggHead", ["3:true", "1:true", "1:false"]]]),
     `three: ${J(tb.three.tags)} rows ${J(tb.three.tgRows)} subs ${J(tb.three.subs)}`);
   check("all-zero board (fresh season): no groups, no tags, no sub-rows — the hasAnyScore gate — while the placeholder podium renders (empty-set case)",
     tb.zero.names.length === 2 && tb.zero.tgRows.length === 0 && tb.zero.tags.length === 0 && tb.zero.subs.length === 0 && tb.zero.placeholderPodium,

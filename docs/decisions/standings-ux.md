@@ -257,6 +257,37 @@
    two lines, the name column truncating before the value columns do, the
    tint reading in both themes, and the sub-row's width at 360px with a
    two- or three-layer stack need a look on the device.
+   **AMENDMENT 2026-10-26, after the live look — a refinement, decision 1
+   stands:** sub-splits inside a group are shown by CELL tint, not only
+   by equal ranks. **Rule:** a value cell (member, layer) carries
+   `.deciding` iff that layer is in the member's own `layers` from
+   `rankStandings` — the layers that split that member's group at each
+   depth. The header tint and the "decided" mark stay on the group's
+   FIRST splitting layer only, matching the tag line. **Example
+   recorded:** a three-way tie where High Score splits one player off and
+   Fewest zeros then splits the remaining pair — High Score cells tinted
+   for all three, Fewest zeros tinted for the pair only, the first
+   player's Fewest zeros cell plain, Most wins (1–1) plain. Build:
+   `groupTies` members carry each member's `layers` (unit-tested, passed
+   through as the `[{ layer, value }]` objects rankStandings produced);
+   `subRow` tints per member per layer by the rule; header logic and CSS
+   unchanged. The three-way harness fixture gains a third final show so
+   the second configured layer actually splits the remaining pair (two
+   shows summing to one total cannot separate equal-high players on
+   zeros), and asserts the four facts; the shared and resolved-pair
+   cases keep their assertions. One mutation: tint every cell in any
+   splitting layer's column (ignore per-member layers) — caught by the
+   already-resolved player's plain cell.
+   **AMENDMENT BUILT 2026-10-26, bundle `d86d949-20c0cae`.** `groupTies`
+   members carry `layers` (unit test: the layer-1 escapee has no layer-2
+   entry); `subRow`'s `cellDec(m, l)` tints a value cell iff `l` is in
+   `m.layers`; `dec(l)` still drives the header. Harness three-way: three
+   shows, totals 6, stack High Score → Fewest zeros → Most wins, ranks
+   1/2/3, all four facts asserted. Mutation result: under "ignore
+   per-member layers" the split-off player's Fewest zeros cell rendered
+   tinted (value 2, `deciding: true`) and only the three-way check
+   failed, both modes — the shared and resolved-pair cases were
+   unaffected, as they should be.
 
 ## Why these and not the alternatives
 

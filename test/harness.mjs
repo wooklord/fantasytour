@@ -1885,10 +1885,18 @@ export async function runSettingsLinksScenario({ html, scripts, mode }){
 // here at all (a stated seam: check it on a device).
 export async function runStandingsTiebreakScenario({ html, scripts, mode }){
   const day = o => new Date(Date.now() + o*864e5).toISOString().slice(0,10);
-  async function load({ scores, stack = ["fewest_zeros"], preset, bracket = "official", roster = ["p1", "p2"] }){
+  async function load({ scores, stack = ["fewest_zeros"], preset, bracket = "official", roster = ["p1", "p2"], thirdShow = false }){
     const { tables, ids } = makeFixtures();
     tables.shows.push({ id: 3, showdate: day(-3), venue: "Side Room", city: "Kingston", state: "NY", sync_flag: null });
     tables.league_shows.push({ league_id: ids.LEAGUE_ID, show_id: 3, cutoff_at: new Date(Date.now()-3*864e5).toISOString(), format: "standard", status: "final", remind_sent: null, lock_sent: null, winner_sent: null });
+    // Only the three-way case: a third final show, so a second layer can
+    // split a pair that the first left together (two shows summing to one
+    // total cannot separate equal-high players on zeros). Not pushed for
+    // the other cases — an extra show changes everyone's zero count.
+    if (thirdShow){
+      tables.shows.push({ id: 4, showdate: day(-2), venue: "Back Room", city: "Kingston", state: "NY", sync_flag: null });
+      tables.league_shows.push({ league_id: ids.LEAGUE_ID, show_id: 4, cutoff_at: new Date(Date.now()-2*864e5).toISOString(), format: "standard", status: "final", remind_sent: null, lock_sent: null, winner_sent: null });
+    }
     tables.seasons.push({ id: 502, bracket_id: ids.OFFICIAL_ID, name: "Live Season", start_date: day(-30), end_date: day(30), roster_locked_at: null });
     for (const id of roster) tables.season_rosters.push({ season_id: 502, player_id: id, added_at: day(-30) + "T00:00:00Z" });
     const off = tables.brackets.find(b => b.id === ids.OFFICIAL_ID);
@@ -1955,8 +1963,14 @@ export async function runStandingsTiebreakScenario({ html, scripts, mode }){
   const sharedWins = ids => [O(ids, "p1", 2, 5), O(ids, "p1", 3, 0), O(ids, "p2", 2, 0), O(ids, "p2", 3, 5)];
   // p2 one point behind → no tie at all.
   const noTie = ids => [O(ids, "p1", 2, 4), O(ids, "p1", 3, 1), O(ids, "p2", 2, 4), O(ids, "p2", 3, 0)];
-  // Three-way at 5: p1 (no zeros) splits off; p2 and p4 (one zero each) stay shared.
-  const threeWay = ids => [O(ids, "p1", 2, 4), O(ids, "p1", 3, 1), O(ids, "p2", 2, 5), O(ids, "p2", 3, 0), O(ids, "p4", 2, 0), O(ids, "p4", 3, 5)];
+  // Three-way at 6 over three shows (amendment 2026-10-26's recorded
+  // example): p1 (6,0,0) has the high score and splits off at High Score;
+  // p2 (3,3,0) and p4 (3,2,1) share high 3, and Fewest zeros then splits
+  // them (p4 none, p2 one). Each wins one show, so Most wins is 1–1 and
+  // never reached. Expected: High Score cells tinted for all three,
+  // Fewest zeros tinted for the pair only, p1's Fewest zeros cell plain,
+  // Most wins plain; ranks p1 1, p4 2, p2 3.
+  const threeWay = ids => [O(ids, "p1", 2, 6), O(ids, "p2", 2, 3), O(ids, "p2", 3, 3), O(ids, "p4", 2, 3), O(ids, "p4", 3, 2), O(ids, "p4", 4, 1)];
   // Fresh season: everyone at 0 → hasAnyScore false → the gate.
   const allZero = ids => [O(ids, "p1", 2, 0), O(ids, "p1", 3, 0), O(ids, "p2", 2, 0), O(ids, "p2", 3, 0)];
   // Casual: no seasons → All time → empty stack; equal career points.
@@ -1984,10 +1998,9 @@ export async function runStandingsTiebreakScenario({ html, scripts, mode }){
 
   const shared = (await load({ scores: sharedWins, stack: ["most_wins"] })).read();
   const none = (await load({ scores: noTie })).read();
-  // Two-layer stack on purpose: most_wins also ties the shared pair 1–1,
-  // so only the FIRST column may carry the deciding tint — a one-layer
-  // stack cannot tell "tint the deciding column" from "tint every column".
-  const three = (await load({ scores: threeWay, roster: ["p1", "p2", "p4"], stack: ["fewest_zeros", "most_wins"] })).read();
+  // Three-layer stack: the header tint must stay on the FIRST splitting
+  // layer only, and the cell tints must follow each member's own path.
+  const three = (await load({ scores: threeWay, roster: ["p1", "p2", "p4"], stack: ["highest_single_show", "fewest_zeros", "most_wins"], thirdShow: true })).read();
   const zero = (await load({ scores: allZero })).read();
   const casual = (await load({ scores: casualTie, bracket: "casual" })).read();
   const leftoverKey = (await load({ scores: resolved, preset: "compact" })).read();

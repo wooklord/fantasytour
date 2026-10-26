@@ -300,9 +300,15 @@ export async function renderBoard(){
   // listed, not only the ones that split (that is what a row's `layers`
   // carries): the values come from computeStandings' totals, which exist
   // for every layer. The deciding column's header AND cells carry
-  // .deciding (mint tint); its header carries the "decided" mark. Equal
-  // ranks down the rank column are how a still-shared sub-pair shows
-  // (decision 1). Columns: auto (rank) · minmax(0,1fr) (name, min 0 so it
+  // .deciding (mint tint); its header carries the "decided" mark.
+  // Amendment 2026-10-26: a VALUE CELL is tinted iff its layer is in that
+  // member's OWN `layers` (the layers that split their group at each
+  // depth) — so a sub-split inside the group shows as tint, not only as
+  // equal ranks, and the player who broke free at layer 1 shows no
+  // layer-2 tint they were never measured on. The header keeps the
+  // group's FIRST splitting layer, matching the tag line. Equal ranks
+  // down the rank column still show a still-shared sub-pair (decision
+  // 1). Columns: auto (rank) · minmax(0,1fr) (name, min 0 so it
   // truncates instead of pushing values off-screen) · fit-content(5em)
   // per layer, so a label wraps to two lines when width is short. The
   // grid is flat (no row element); the harness chunks it by header count.
@@ -310,12 +316,13 @@ export async function renderBoard(){
     if (!tiebreakers.length) return "";
     const open = expandedTieGroups.has(g.key);
     const dec = l => l === g.deciding ? " deciding" : "";
+    const cellDec = (m, l) => m.layers.some(x => x.layer === l) ? " deciding" : "";
     const cols = `grid-template-columns:auto minmax(0,1fr) repeat(${tiebreakers.length},fit-content(5em))`;
     const head = `<div class="tg-h" aria-hidden="true"></div><div class="tg-h" aria-hidden="true"></div>`
       + tiebreakers.map(l => `<div class="tg-h tg-col${dec(l)}" data-layer="${l}">${esc(TIEBREAK_SHORT_LABELS[l])}${dec(l) ? '<span class="tg-decided">decided</span>' : ""}</div>`).join("");
     const body = g.members.map(m =>
       `<div class="tg-r tg-rank">${m.rank}</div><div class="tg-r tg-name"><span class="nm" title="${esc(pname[m.id]||"?")}">${esc(pname[m.id]||"?")}</span></div>`
-      + tiebreakers.map(l => `<div class="tg-r tg-v${dec(l)}" data-layer="${l}">${layerDisplayValue(T[m.id], l)}</div>`).join("")).join("");
+      + tiebreakers.map(l => `<div class="tg-r tg-v${cellDec(m, l)}" data-layer="${l}">${layerDisplayValue(T[m.id], l)}</div>`).join("")).join("");
     return `<tr class="tg-sub${open ? "" : " hidden"}" id="tg-sub-${g.key}" data-tg="${g.key}"><td colspan="3"><div class="tg-grid" style="${cols}">${head}${body}</div></td></tr>`;
   };
   $("#main").innerHTML = `

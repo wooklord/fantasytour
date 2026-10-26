@@ -223,10 +223,15 @@ function check(label, actual, expected) {
   // and is still one tie. The singleton at 4 points is left out.
   check("groupTies: a layer-resolved pair is ONE group keyed on points, carrying both ranks, decided by the splitting layer",
     groupTies([row("a", 1, 5, [fz(0)]), row("b", 2, 5, [fz(1)]), row("c", 3, 4)], ["fewest_zeros"]),
-    [{ key: "5-1", members: [{ id: "a", rank: 1 }, { id: "b", rank: 2 }], place: 1, deciding: "fewest_zeros", shared: false }]);
-  check("groupTies: an empty stack gives a shared group (Casual / All time)",
+    [{ key: "5-1", members: [{ id: "a", rank: 1, layers: [fz(0)] }, { id: "b", rank: 2, layers: [fz(1)] }], place: 1, deciding: "fewest_zeros", shared: false }]);
+  check("groupTies: an empty stack gives a shared group (Casual / All time), members with empty layers",
     groupTies([row("a", 1, 5), row("b", 1, 5)], []),
-    [{ key: "5-1", members: [{ id: "a", rank: 1 }, { id: "b", rank: 1 }], place: 1, deciding: null, shared: true }]);
+    [{ key: "5-1", members: [{ id: "a", rank: 1, layers: [] }, { id: "b", rank: 1, layers: [] }], place: 1, deciding: null, shared: true }]);
+  // Amendment 2026-10-26: each member carries ITS OWN path, not the
+  // group's union — the player split off at layer 1 has no layer-2 entry.
+  check("groupTies: members carry their own rankStandings layers, passed through unchanged (the layer-1 escapee has no layer-2 entry)",
+    groupTies([row("a", 1, 5, [fz(0)]), row("b", 2, 5, [fz(1), mw(2)]), row("c", 3, 5, [fz(1), mw(1)])], ["fewest_zeros", "most_wins"])[0]?.members.map(m => m.layers),
+    [[fz(0)], [fz(1), mw(2)], [fz(1), mw(1)]]);
   check("groupTies: a configured stack that never split anything is shared, not decided",
     groupTies([row("a", 1, 5), row("b", 1, 5)], ["most_wins"])[0]?.shared, true);
   // Partial split (decision 1): one group, one tag; the shared pair shows

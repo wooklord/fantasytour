@@ -194,9 +194,15 @@ export function ordinal(n){
 // a layer resolved has different ranks but is still one tie, which is the
 // thing the board has to explain. Equal-points rows are always contiguous
 // because rankStandings buckets by points first.
-//   members  — [{ id, rank }] in display order; equal ranks inside a group
-//              are a still-shared sub-placing, shown only by those ranks
-//              (approval decision 1 — one tag per group, no nesting).
+//   members  — [{ id, rank, layers }] in display order; equal ranks inside
+//              a group are a still-shared sub-placing (approval decision 1
+//              — one tag per group, no nesting). `layers` is the member's
+//              own rankStandings path, passed through unchanged: the
+//              layers that split THAT member's group at each depth. The
+//              board tints a value cell iff its layer is in this list
+//              (amendment 2026-10-26), so a player who broke free at
+//              layer 1 never shows a layer-2 tint they were never
+//              measured on.
 //   place    — the group's best rank, for "Tie for <place>".
 //   deciding — the FIRST layer in configured order that appears in any
 //              member's `layers`, i.e. the layer that first split the
@@ -216,7 +222,7 @@ export function groupTies(order, tiebreakers = []){
       const deciding = tiebreakers.find(l => present.has(l)) ?? null;
       groups.push({
         key: `${rows[0].points}-${rows[0].rank}`,
-        members: rows.map(o => ({ id: o.id, rank: o.rank })),
+        members: rows.map(o => ({ id: o.id, rank: o.rank, layers: o.layers || [] })),
         place: rows[0].rank,
         deciding,
         shared: deciding === null,

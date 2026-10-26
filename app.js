@@ -1083,7 +1083,7 @@ Save anyway?`)) return;
         const deciding = (_a = tiebreakers.find((l) => present.has(l))) != null ? _a : null;
         groups.push({
           key: `${rows[0].points}-${rows[0].rank}`,
-          members: rows.map((o) => ({ id: o.id, rank: o.rank })),
+          members: rows.map((o) => ({ id: o.id, rank: o.rank, layers: o.layers || [] })),
           place: rows[0].rank,
           deciding,
           shared: deciding === null
@@ -1224,9 +1224,10 @@ Save anyway?`)) return;
       if (!tiebreakers.length) return "";
       const open = expandedTieGroups.has(g.key);
       const dec = (l) => l === g.deciding ? " deciding" : "";
+      const cellDec = (m, l) => m.layers.some((x) => x.layer === l) ? " deciding" : "";
       const cols = `grid-template-columns:auto minmax(0,1fr) repeat(${tiebreakers.length},fit-content(5em))`;
       const head = `<div class="tg-h" aria-hidden="true"></div><div class="tg-h" aria-hidden="true"></div>` + tiebreakers.map((l) => `<div class="tg-h tg-col${dec(l)}" data-layer="${l}">${esc(TIEBREAK_SHORT_LABELS[l])}${dec(l) ? '<span class="tg-decided">decided</span>' : ""}</div>`).join("");
-      const body = g.members.map((m) => `<div class="tg-r tg-rank">${m.rank}</div><div class="tg-r tg-name"><span class="nm" title="${esc(pname[m.id] || "?")}">${esc(pname[m.id] || "?")}</span></div>` + tiebreakers.map((l) => `<div class="tg-r tg-v${dec(l)}" data-layer="${l}">${layerDisplayValue(T[m.id], l)}</div>`).join("")).join("");
+      const body = g.members.map((m) => `<div class="tg-r tg-rank">${m.rank}</div><div class="tg-r tg-name"><span class="nm" title="${esc(pname[m.id] || "?")}">${esc(pname[m.id] || "?")}</span></div>` + tiebreakers.map((l) => `<div class="tg-r tg-v${cellDec(m, l)}" data-layer="${l}">${layerDisplayValue(T[m.id], l)}</div>`).join("")).join("");
       return `<tr class="tg-sub${open ? "" : " hidden"}" id="tg-sub-${g.key}" data-tg="${g.key}"><td colspan="3"><div class="tg-grid" style="${cols}">${head}${body}</div></td></tr>`;
     };
     $("#main").innerHTML = `
@@ -1282,7 +1283,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"79618b2-502ca9b"}</p>
+      <p class="colophon buildid">build ${"d86d949-20c0cae"}</p>
     </div>
   </div>`;
   }
