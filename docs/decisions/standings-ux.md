@@ -438,6 +438,46 @@
    stated:** the "0s" header row at 360px, the active column widening
    when its values go bold, the arrow's width on the active header, and
    the leaders strip's 2×2 wrap are all unmeasured here.
+   **AMENDMENT 2026-10-26 (dev's call after the live look: the 2×2 grid
+   broke with three chips or a long name, and "+N" hid co-leaders) —
+   leaders strip and Player sort.** Supersedes 6.4's grid and "+N";
+   original kept above.
+   1. The leaders strip becomes **STACKED ROWS**, one per stat, in this
+      order: Best avg, High score, Most laurels, Most shows, Fewest
+      zeros. Each row: a fixed-width small-caps label, the tied names at
+      full width, the value right-aligned in mono. Fewest zeros is still
+      omitted without a season.
+   2. **Ties list EVERY name** (name order), up to 5; past 5, the first
+      5 then muted "and N more". "+N" is gone. Names use `.nm` with the
+      row's full width.
+   3. **"Most wins" is renamed "Most laurels"** everywhere it renders;
+      the column header stays the laurel icon; the legend says
+      "laurels = shows won".
+   4. **New row Most shows:** the highest shows-played count and
+      everyone at it — the participation nudge.
+   5. **The Player header sorts alphabetically:** first tap A–Z, second
+      Z–A, same arrow and `aria-sort` treatment; best-first for Player is
+      A–Z. Numeric columns unchanged.
+   Build shape: `statLeaders` gains the shows key and returns every tied
+   id (the render applies the 5-name cap through `capNames`);
+   `sortStats` accepts "player" with the name comparator; stacked-row
+   CSS; unit tests (shows leader, the cap boundary at 5 and 6, player
+   sort both directions); harness (five rows in order on a season view,
+   four on All time, a two-way tie shows both names and no "+", a
+   six-way tie shows five names plus "and 1 more", Player tap A–Z then
+   Z–A with the arrow). Mutations: "+N" style reintroduced, Player sort
+   ignored, Most laurels label reverted.
+   **AMENDMENT BUILT 2026-10-26, bundle `9a5094f-c8fc6ec`.** `capNames`
+   (pure, boundary unit-tested at 5 and 6), `player` in `STAT_COLS` with
+   the name comparator in `sortStats`, `statLeaders` with the shows row
+   and the label as its one source of wording; `statsPanelHtml` renders
+   the stacked rows and a sortable Player header (name cells go bold
+   when Player is the sort); CSS replaces the grid. Harness: four new
+   loads — two-way ties, a six-way tie with three invented members,
+   Player A–Z then Z–A. Mutations, all caught: "+N" reintroduced (3
+   board checks per mode), Player sort ignored (2 unit + 1 board), label
+   reverted (1 unit + 1 board). Phone seam: the stacked rows' label
+   column at 360px against a long name list is unmeasured here.
 
 ## Why these and not the alternatives
 

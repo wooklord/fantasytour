@@ -1062,12 +1062,13 @@ async function runMode(mode){
   const activeHeaders = r => r.headers.map((h, i) => h.active ? i : -1).filter(i => i >= 0);
   const arrowHeaders = r => r.headers.map((h, i) => h.arrow ? i : -1).filter(i => i >= 0);
   const activeCells = r => [...new Set(r.rows.flatMap(x => x.cells.map((c, i) => c.active ? i : -1).filter(i => i >= 0)))];
-  check("Stats: heading reads 'Stats · Live Season'; headers are Player, Shows, Avg, High, 0s, laurel; the five numeric headers are sortable, Player is not; setStatsSort is on window",
+  check("Stats: heading reads 'Stats · Live Season'; headers are Player, Shows, Avg, High, 0s, laurel; ALL six are sortable (Player alphabetically); the legend says 'laurels = shows won'; setStatsSort is on window",
     st.dflt.heading === "Stats · Live Season" && st.dflt.setterOnWindow === "function"
       && J(st.dflt.headers.map(h => h.text)) === J(["Player", "Shows", "Avg", "High", "0s", ""])
-      && J(st.dflt.headers.map(h => h.sortable)) === J([false, true, true, true, true, true])
-      && st.dflt.headers[4].onclick === "setStatsSort('zeros')",
-    `headers: ${J(st.dflt.headers)} heading: ${st.dflt.heading}`);
+      && J(st.dflt.headers.map(h => h.sortable)) === J([true, true, true, true, true, true])
+      && st.dflt.headers[0].onclick === "setStatsSort('player')" && st.dflt.headers[4].onclick === "setStatsSort('zeros')"
+      && /laurels = shows won/.test(st.dflt.legend) && !/wreath/.test(st.dflt.legend),
+    `headers: ${J(st.dflt.headers)} heading: ${st.dflt.heading} legend: ${st.dflt.legend}`);
   check("Stats default: today's order (Avg best-first) — Wooklord 7.0, EggHead 3.0, GlobalAdmin 2.3 — Avg header active with ▼ and aria-sort=descending, every other header aria-sort=none and arrow-less, bold cells in the Avg column only, nothing written to localStorage before a tap, own row carries .me",
     J(names(st.dflt)) === J(["Wooklord", "EggHead", "GlobalAdmin"])
       && J(st.dflt.rows.map(x => x.cells.map(c => c.v))) === J([["1", "7.0", "7", "2", "1"], ["2", "3.0", "3", "1", "1"], ["3", "2.3", "4", "0", "1"]])
@@ -1092,27 +1093,49 @@ async function runMode(mode){
   check("Stats: a bogus stored value falls back to the default (Avg active) and is left untouched until a tap",
     J(activeHeaders(st.presetBogus)) === J([2]) && J(names(st.presetBogus)) === J(["Wooklord", "EggHead", "GlobalAdmin"]) && st.presetBogus.stored === "bogus",
     `headers: ${J(st.presetBogus.headers)} stored: ${st.presetBogus.stored}`);
-  check("Stats leaders: Best avg Wooklord 7.0, High score Wooklord 7, Most wins EggHead +2 (three-way tie, name order) 1, Fewest zeros GlobalAdmin 0",
-    J(st.dflt.leaders.map(l => [l.key, l.label, l.name, l.extra, l.value])) === J([
-      ["avg", "Best avg", "Wooklord", null, "7.0"], ["high", "High score", "Wooklord", null, "7"],
-      ["wins", "Most wins", "EggHead", "+2", "1"], ["zeros", "Fewest zeros", "GlobalAdmin", null, "0"]]),
+  check("Stats leaders (season view): FIVE stacked rows in order — Best avg Wooklord 7.0, High score Wooklord 7, Most laurels EggHead, GlobalAdmin, Wooklord (three-way tie, every name, name order, no '+') 1, Most shows GlobalAdmin 3, Fewest zeros GlobalAdmin 0 — and no row carries a '+N'",
+    J(st.dflt.leaders.map(l => [l.key, l.label, l.names, l.more, l.value])) === J([
+      ["avg", "Best avg", ["Wooklord"], null, "7.0"], ["high", "High score", ["Wooklord"], null, "7"],
+      ["wins", "Most laurels", ["EggHead", "GlobalAdmin", "Wooklord"], null, "1"],
+      ["shows", "Most shows", ["GlobalAdmin"], null, "3"], ["zeros", "Fewest zeros", ["GlobalAdmin"], null, "0"]])
+      && st.dflt.leaders.every(l => l.plus === false),
     `leaders: ${J(st.dflt.leaders)}`);
+  check("Stats leaders two-way ties: Best avg lists EggHead, Wooklord (both, name order, no '+') at 3.0 and Most laurels lists the same pair at 2; High score, Most shows and Fewest zeros are GlobalAdmin alone",
+    J(st.twoWay.leaders.map(l => [l.key, l.names, l.more, l.value])) === J([
+      ["avg", ["EggHead", "Wooklord"], null, "3.0"], ["high", ["GlobalAdmin"], null, "4"],
+      ["wins", ["EggHead", "Wooklord"], null, "2"], ["shows", ["GlobalAdmin"], null, "3"], ["zeros", ["GlobalAdmin"], null, "0"]])
+      && st.twoWay.leaders.every(l => l.plus === false),
+    `twoWay: ${J(st.twoWay.leaders)}`);
+  check("Stats leaders six-way tie (the cap): every row lists the first FIVE names in name order (EggHead, GlobalAdmin, Marigold, Quartz, Tumbleweed) then muted 'and 1 more', five rows",
+    st.sixWay.leaders.length === 5
+      && st.sixWay.leaders.every(l => J(l.names) === J(["EggHead", "GlobalAdmin", "Marigold", "Quartz", "Tumbleweed"]) && l.more === "and 1 more" && l.plus === false),
+    `sixWay: ${J(st.sixWay.leaders)}`);
+  check("Stats Player sort: first tap A–Z (EggHead, GlobalAdmin, Wooklord) with ▲ and aria-sort=ascending on the Player header only, name cells active, player:asc stored; second tap Z–A with ▼ and player:desc",
+    J(names(st.playerAsc)) === J(["EggHead", "GlobalAdmin", "Wooklord"]) && J(activeHeaders(st.playerAsc)) === J([0]) && J(arrowHeaders(st.playerAsc)) === J([0])
+      && st.playerAsc.headers[0].arrow === "▲" && st.playerAsc.headers[0].ariaSort === "ascending" && st.playerAsc.stored === "player:asc"
+      && st.playerAsc.rows.every(r => r.nameActive === true) && J(activeCells(st.playerAsc)) === J([])
+      && J(names(st.playerDesc)) === J(["Wooklord", "GlobalAdmin", "EggHead"]) && st.playerDesc.headers[0].arrow === "▼"
+      && st.playerDesc.headers[0].ariaSort === "descending" && st.playerDesc.stored === "player:desc",
+    `asc: ${J(names(st.playerAsc))} ${J(st.playerAsc.headers[0])} stored ${st.playerAsc.stored}; desc: ${J(names(st.playerDesc))} ${J(st.playerDesc.headers[0])} stored ${st.playerDesc.stored}`);
   check("Stats no-scores board: the empty row renders, no leaders strip, no player rows (empty-set case)",
     st.empty.emptyRow === "Stats appear once shows score." && st.empty.leadersPresent === false && st.empty.rows.length === 0,
     `empty: ${J(st.empty)}`);
   check("Stats on All time (no season): 0s cells read '—', the 0s header is NOT sortable (no onclick, no aria-sort), the Fewest zeros leader is omitted, the legend says season views only; a stored zeros:asc falls back to Avg for the render without being rewritten, and a tap on 0s there is ignored",
     st.allTime.heading === "Stats · All time" && st.allTime.rows.every(x => x.cells[3].v === "—")
       && st.allTime.headers[4].sortable === false && st.allTime.headers[4].onclick === "" && st.allTime.headers[4].ariaSort === null
-      && J(st.allTime.leaders.map(l => l.key)) === J(["avg", "high", "wins"]) && /season views only/.test(st.allTime.legend)
+      && J(st.allTime.leaders.map(l => l.key)) === J(["avg", "high", "wins", "shows"]) && /season views only/.test(st.allTime.legend)
       && J(activeHeaders(st.allTimeZerosPreset)) === J([2]) && st.allTimeZerosPreset.stored === "zeros:asc"
       && J(activeHeaders(st.allTimeZerosTap)) === J([2]) && st.allTimeZerosTap.stored === "zeros:asc" && st.allTimeZerosTap.rpcCount === st.allTimeZerosPreset.rpcCount,
     `allTime: ${J(st.allTime.headers)} leaders ${J(st.allTime.leaders.map(l => l.key))} preset: ${J(activeHeaders(st.allTimeZerosPreset))}/${st.allTimeZerosPreset.stored} tap: ${J(activeHeaders(st.allTimeZerosTap))}/${st.allTimeZerosTap.stored}`);
-  check("Stats stylesheet, statically: the arrow lives only in .lb th .arrow with no reserved width, .lb td.active is bold, .leaders is a 2-column grid going to 4 at 520px",
+  check("Stats stylesheet, statically: the arrow lives only in .lb th .arrow with no reserved width, .lb td.active is bold, .leaders is a stacked column with a fixed-width small-caps label, inline .nm names and a right-aligned mono value; no grid rule remains",
     /\.lb th \.arrow\{font-size:\.6rem;margin-left:2px;vertical-align:middle\}/.test(css)
       && /\.lb td\.active\{font-weight:700;color:var\(--cream\)\}/.test(css)
-      && /\.leaders\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(css)
-      && /@media \(min-width:520px\)\{ \.leaders\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)\} \}/.test(css),
-    "styles.css: .lb th .arrow / .lb td.active / .leaders rules");
+      && /\.leaders\{display:flex;flex-direction:column/.test(css)
+      && /\.leader \.lbl\{flex:0 0 7\.2em;[^}]*font-variant:small-caps/.test(css)
+      && /\.leader \.who \.nm\{display:inline-block;max-width:100%/.test(css)
+      && /\.leader b\{[^}]*text-align:right\}/.test(css)
+      && !/\.leaders\{display:grid/.test(css),
+    "styles.css: .lb th .arrow / .lb td.active / .leaders / .leader rules");
 
   // Empty ranked ladder (admin-panel.md → "EMPTY RANKED LADDER", LOCKED
   // 2026-10-26). The empty-set case the ranked scenario skipped.

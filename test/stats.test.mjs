@@ -5,7 +5,7 @@
 //
 // Invented ids and names only.
 
-import { STAT_COLS, DEFAULT_STATS_SORT, statValue, fmtStat, bestDir, flipDir, sortStats, parseStatsSort, formatStatsSort, statLeaders } from "../src/core/stats.js";
+import { STAT_COLS, DEFAULT_STATS_SORT, statValue, fmtStat, bestDir, flipDir, sortStats, parseStatsSort, formatStatsSort, statLeaders, capNames } from "../src/core/stats.js";
 
 const failures = [];
 function check(label, actual, expected) {
@@ -28,9 +28,9 @@ const rows = [
 const ids = r => r.map(x => x[0]);
 
 // ---- directions ----
-check("bestDir: shows/avg/high/wins descending, zeros ascending",
-  ["shows", "avg", "high", "wins", "zeros"].map(bestDir), ["desc", "desc", "desc", "desc", "asc"]);
-check("STAT_COLS has exactly the five numeric columns", Object.keys(STAT_COLS), ["shows", "avg", "high", "zeros", "wins"]);
+check("bestDir: shows/avg/high/wins descending, zeros ascending, player ascending (A–Z)",
+  ["shows", "avg", "high", "wins", "zeros", "player"].map(bestDir), ["desc", "desc", "desc", "desc", "asc", "asc"]);
+check("STAT_COLS has player plus the five numeric columns", Object.keys(STAT_COLS), ["player", "shows", "avg", "high", "zeros", "wins"]);
 check("flipDir", [flipDir("asc"), flipDir("desc")], ["desc", "asc"]);
 check("default sort is avg best-first", DEFAULT_STATS_SORT, { col: "avg", dir: "desc" });
 
@@ -53,6 +53,10 @@ const allTied = [["a", T(1, 1, 1, 1, 1)], ["b", T(1, 1, 1, 1, 1)], ["c", T(1, 1,
 check("all equal on every column → pure name order, case-insensitive (alpha, bravo, Mike, Zed)", ids(sortStats(allTied, "wins", "desc", nameOf)), ["b", "d", "c", "a"]);
 check("sortStats returns a new array and leaves the input untouched", ids(rows), ["a", "b", "c", "d"]);
 check("sortStats on an empty set is empty", sortStats([], "avg", "desc", nameOf), []);
+// ---- player sort (amendment 2026-10-26, item 5): by name, both ways ----
+check("player asc (best-first) is A–Z, case-insensitive: alpha, bravo, Mike, Zed", ids(sortStats(rows, "player", bestDir("player"), nameOf)), ["b", "d", "c", "a"]);
+check("player desc is Z–A", ids(sortStats(rows, "player", "desc", nameOf)), ["a", "c", "d", "b"]);
+check("parseStatsSort accepts player:asc", parseStatsSort("player:asc"), { col: "player", dir: "asc" });
 
 // ---- persistence parsing ----
 check("parseStatsSort: a valid value round-trips", parseStatsSort("zeros:asc"), { col: "zeros", dir: "asc" });
@@ -66,16 +70,24 @@ check("parseStatsSort returns a fresh object (mutating it never alters the defau
 
 // ---- leaders ----
 const L = statLeaders(rows, nameOf);
-check("leaders: four entries in order avg, high, wins, zeros", L.map(l => l.key), ["avg", "high", "wins", "zeros"]);
-check("leaders: Best avg 5.0 shared by b and d, ids in name order (alpha, bravo)", [L[0].label, L[0].value, L[0].ids], ["Best avg", 5, ["b", "d"]]);
-check("leaders: High score 7 is b alone", [L[1].label, L[1].value, L[1].ids], ["High score", 7, ["b"]]);
-check("leaders: Most wins 2 is c alone", [L[2].label, L[2].value, L[2].ids], ["Most wins", 2, ["c"]]);
-check("leaders: Fewest zeros 0 is b alone", [L[3].label, L[3].value, L[3].ids], ["Fewest zeros", 0, ["b"]]);
-check("leaders: a three-way tie lists all three in name order (the render shows the first and +2)",
-  statLeaders(allTied, nameOf)[2].ids, ["b", "d", "c", "a"].slice(0, 4));
-check("leaders: withZeros:false omits Fewest zeros (no season → zeros not computed)",
-  statLeaders(rows, nameOf, { withZeros: false }).map(l => l.key), ["avg", "high", "wins"]);
+check("leaders: five entries in order avg, high, wins (laurels), shows, zeros", L.map(l => l.key), ["avg", "high", "wins", "shows", "zeros"]);
+check("leaders: labels read Best avg, High score, Most laurels, Most shows, Fewest zeros — never 'Most wins'",
+  L.map(l => l.label), ["Best avg", "High score", "Most laurels", "Most shows", "Fewest zeros"]);
+check("leaders: Best avg 5.0 shared by b and d, ids in name order (alpha, bravo)", [L[0].value, L[0].ids], [5, ["b", "d"]]);
+check("leaders: High score 7 is b alone", [L[1].value, L[1].ids], [7, ["b"]]);
+check("leaders: Most laurels 2 is c alone", [L[2].value, L[2].ids], [2, ["c"]]);
+check("leaders: Most shows 4 is c alone (the participation row)", [L[3].value, L[3].ids], [4, ["c"]]);
+check("leaders: Fewest zeros 0 is b alone", [L[4].value, L[4].ids], [0, ["b"]]);
+check("leaders: a four-way tie returns EVERY id in name order (the render caps, not this)",
+  statLeaders(allTied, nameOf)[2].ids, ["b", "d", "c", "a"]);
+check("leaders: withZeros:false omits Fewest zeros (no season → zeros not computed), keeps the other four",
+  statLeaders(rows, nameOf, { withZeros: false }).map(l => l.key), ["avg", "high", "wins", "shows"]);
 check("leaders empty-set: no rows → no leaders", statLeaders([], nameOf), []);
+// ---- the render's cap (amendment item 2): boundary at 5 and 6 ----
+check("capNames: five ids → all five shown, nothing more", capNames(["a", "b", "c", "d", "e"]), { shown: ["a", "b", "c", "d", "e"], more: 0 });
+check("capNames: six ids → the first five shown and 1 more", capNames(["a", "b", "c", "d", "e", "f"]), { shown: ["a", "b", "c", "d", "e"], more: 1 });
+check("capNames: one id → shown alone, nothing more", capNames(["a"]), { shown: ["a"], more: 0 });
+check("capNames empty-set: no ids → nothing shown, nothing more", capNames([]), { shown: [], more: 0 });
 
 // ---------------------------------------------------------------
 if (failures.length) {

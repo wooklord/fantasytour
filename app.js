@@ -1124,6 +1124,8 @@ Save anyway?`)) return;
 
   // src/core/stats.js
   var STAT_COLS = {
+    // Player sorts by name (amendment 2026-10-26, item 5): A–Z is best-first.
+    player: { best: "asc" },
     shows: { best: "desc" },
     avg: { best: "desc" },
     high: { best: "desc" },
@@ -1153,6 +1155,7 @@ Save anyway?`)) return;
   function sortStats(rows, col, dir, nameOf = () => "") {
     const sign = dir === "asc" ? 1 : -1;
     const nm = byName(nameOf);
+    if (col === "player") return rows.slice().sort((a, b) => sign * nm(a[0], b[0]));
     return rows.slice().sort((a, b) => {
       const d = statValue(a[1], col) - statValue(b[1], col);
       if (d !== 0) return sign * d;
@@ -1168,6 +1171,10 @@ Save anyway?`)) return;
   function formatStatsSort({ col, dir }) {
     return `${col}:${dir}`;
   }
+  function capNames(ids, cap = 5) {
+    const shown = (ids || []).slice(0, cap);
+    return { shown, more: Math.max(0, (ids || []).length - shown.length) };
+  }
   function statLeaders(rows, nameOf = () => "", { withZeros = true } = {}) {
     if (!rows.length) return [];
     const nm = byName(nameOf);
@@ -1180,7 +1187,8 @@ Save anyway?`)) return;
     const out = [
       pick("avg", "avg", "Best avg", "max"),
       pick("high", "high", "High score", "max"),
-      pick("wins", "wins", "Most wins", "max")
+      pick("wins", "wins", "Most laurels", "max"),
+      pick("shows", "shows", "Most shows", "max")
     ];
     if (withZeros) out.push(pick("zeros", "zeros", "Fewest zeros", "min"));
     return out;
@@ -1214,36 +1222,38 @@ Save anyway?`)) return;
     const el = document.getElementById("statspanel");
     if (el && lastStats) el.outerHTML = statsPanelHtml(lastStats);
   }
-  var LEADER_LABELS = { avg: "Best avg", high: "High score", wins: "Most wins", zeros: "Fewest zeros" };
   function statsPanelHtml(s) {
     const { pname, season, scopeName } = s;
     const nameOf = (id) => pname[id] || "?";
     const sort = !season && statsSort.col === "zeros" ? DEFAULT_STATS_SORT : statsSort;
     const rows = sortStats(s.statRows, sort.col, sort.dir, nameOf);
-    const th = (col, label) => {
+    const th = (col, label, align = "right") => {
       const sortable = !!STAT_COLS[col] && (season || col !== "zeros");
       const active = sortable && sort.col === col;
       const aria = active ? sort.dir === "asc" ? "ascending" : "descending" : "none";
       const arrow = active ? sort.dir === "asc" ? "\u25B2" : "\u25BC" : "";
-      return `<th style="text-align:right" class="${sortable ? "sortable" : ""}${active ? " active" : ""}"${sortable ? ` onclick="setStatsSort('${col}')" aria-sort="${aria}" title="Sort by ${col === "zeros" ? "zeros" : col}"` : ""}>${label}<span class="arrow">${arrow}</span></th>`;
+      return `<th style="text-align:${align}" class="${sortable ? "sortable" : ""}${active ? " active" : ""}"${sortable ? ` onclick="setStatsSort('${col}')" aria-sort="${aria}" title="Sort by ${col === "zeros" ? "zeros" : col}"` : ""}>${label}<span class="arrow">${arrow}</span></th>`;
     };
     const td = (col, v, extra = "") => `<td class="pts${sort.col === col ? " active" : ""}"${extra}>${v}</td>`;
     const leaders = rows.length ? statLeaders(rows, nameOf, { withZeros: !!season }) : [];
-    const leadersHtml = leaders.length ? `<div class="leaders">${leaders.map((l) => `<div class="leader" data-key="${l.key}"><span class="lbl">${LEADER_LABELS[l.key]}</span><span class="who"><span class="nm" title="${esc(nameOf(l.ids[0]))}">${esc(nameOf(l.ids[0]))}</span>${l.ids.length > 1 ? `<small>+${l.ids.length - 1}</small>` : ""}</span><b>${fmtStat(l.col, l.value)}</b></div>`).join("")}</div>` : "";
+    const leadersHtml = leaders.length ? `<div class="leaders">${leaders.map((l) => {
+      const { shown, more } = capNames(l.ids);
+      return `<div class="leader" data-key="${l.key}"><span class="lbl">${esc(l.label)}</span><span class="who">${shown.map((id) => `<span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span>`).join(", ")}${more > 0 ? `<small>and ${more} more</small>` : ""}</span><b>${fmtStat(l.col, l.value)}</b></div>`;
+    }).join("")}</div>` : "";
     return `<div class="panel" id="statspanel"><h2>Stats <span class="muted" style="font-size:.78rem">\xB7 ${scopeName}</span></h2>
       ${leadersHtml}
-      <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th>${th("shows", "Shows")}${th("avg", "Avg")}${th("high", "High")}${th("zeros", "0s")}${th("wins", winBadge(18))}</tr>
+      <div style="overflow-x:auto"><table class="lb compact"><tr>${th("player", "Player", "left")}${th("shows", "Shows")}${th("avg", "Avg")}${th("high", "High")}${th("zeros", "0s")}${th("wins", winBadge(18))}</tr>
       ${rows.map(([id, r]) => {
       var _a;
       return `<tr class="${id === state.session.id ? "me" : ""}">
-        <td class="pname"><span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span></td>${td("shows", r.shows)}
+        <td class="pname${sort.col === "player" ? " active" : ""}"><span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span></td>${td("shows", r.shows)}
         ${td("avg", fmtStat("avg", statValue(r, "avg")))}
         ${td("high", r.high, ` title="${esc(((_a = r.highShow) == null ? void 0 : _a.venue) || "")}"`)}
         ${td("zeros", season ? r.zeros : "\u2014")}
         ${td("wins", r.wins || 0)}</tr>`;
     }).join("") || '<tr><td colspan="6" class="muted">Stats appear once shows score.</td></tr>'}
       </table></div>
-      <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played \xB7 High = best single show (venue on hover) \xB7 0s = scoring zeros${season ? "" : " (season views only)"} \xB7 wreath = shows won \xB7 tap a column to sort</p>
+      <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played \xB7 High = best single show (venue on hover) \xB7 0s = scoring zeros${season ? "" : " (season views only)"} \xB7 laurels = shows won \xB7 tap a column to sort</p>
     </div>`;
   }
   function arrangePodium(tiers) {
@@ -1407,7 +1417,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"97ba75c-cbb18f7"}</p>
+      <p class="colophon buildid">build ${"9a5094f-c8fc6ec"}</p>
     </div>
   </div>`;
   }

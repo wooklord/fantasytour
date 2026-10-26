@@ -11,6 +11,8 @@
 // best value leads — most shows / highest avg / highest high / most wins
 // descending, fewest zeros ascending.
 export const STAT_COLS = {
+  // Player sorts by name (amendment 2026-10-26, item 5): A–Z is best-first.
+  player: { best: "asc" },
   shows: { best: "desc" },
   avg:   { best: "desc" },
   high:  { best: "desc" },
@@ -47,6 +49,9 @@ const byName = (nameOf) => (a, b) =>
 export function sortStats(rows, col, dir, nameOf = () => ""){
   const sign = dir === "asc" ? 1 : -1;
   const nm = byName(nameOf);
+  // "player" is the name itself, in either direction; nicknames are unique,
+  // so there is no tie to break.
+  if (col === "player") return rows.slice().sort((a, b) => sign * nm(a[0], b[0]));
   return rows.slice().sort((a, b) => {
     const d = statValue(a[1], col) - statValue(b[1], col);
     if (d !== 0) return sign * d;
@@ -65,11 +70,22 @@ export function parseStatsSort(raw){
 }
 export function formatStatsSort({ col, dir }){ return `${col}:${dir}`; }
 
-// Leaders strip (item 6.4): Best avg, High score, Most wins, Fewest zeros,
-// each with the leading value and EVERY id that holds it, in name order
-// (the render shows the first and "+N" for the rest). `withZeros: false`
-// omits Fewest zeros (no season → zeros are not computed — decision 1).
-// Empty rows → []. Values are numbers; fmtStat formats them.
+// The render's cap on listed names (amendment 2026-10-26, item 2): the
+// first `cap` names in full, then "and N more" for the rest. Pure, so the
+// boundary (5 shown and nothing more; 6 → 5 and "and 1 more") is unit-
+// tested rather than inferred from a DOM.
+export function capNames(ids, cap = 5){
+  const shown = (ids || []).slice(0, cap);
+  return { shown, more: Math.max(0, (ids || []).length - shown.length) };
+}
+
+// Leaders strip (item 6.4, amended 2026-10-26): Best avg, High score, Most
+// laurels, Most shows, Fewest zeros — in that order — each with the
+// leading value and EVERY id that holds it, in name order (the render
+// lists them, capped by capNames). `withZeros: false` omits Fewest zeros
+// (no season → zeros are not computed — decision 1). Empty rows → [].
+// Values are numbers; fmtStat formats them. `label` is the one source of
+// the row's wording — "Most laurels", never "Most wins".
 export function statLeaders(rows, nameOf = () => "", { withZeros = true } = {}){
   if (!rows.length) return [];
   const nm = byName(nameOf);
@@ -82,7 +98,8 @@ export function statLeaders(rows, nameOf = () => "", { withZeros = true } = {}){
   const out = [
     pick("avg", "avg", "Best avg", "max"),
     pick("high", "high", "High score", "max"),
-    pick("wins", "wins", "Most wins", "max"),
+    pick("wins", "wins", "Most laurels", "max"),
+    pick("shows", "shows", "Most shows", "max"),
   ];
   if (withZeros) out.push(pick("zeros", "zeros", "Fewest zeros", "min"));
   return out;

@@ -2293,13 +2293,14 @@ export async function runSyncFlagScenario({ html, scripts, mode }){
 // are DOM facts only; the bold/arrow CSS is asserted statically.
 export async function runStatsScenario({ html, scripts, mode }){
   const day = o => new Date(Date.now() + o*864e5).toISOString().slice(0,10);
-  async function load({ scores, preset, allTime = false }){
+  async function load({ scores, preset, allTime = false, roster = ["p1", "p2", "p4"], mutate = () => {} }){
     const { tables, ids } = makeFixtures();
+    mutate(tables, ids);
     tables.shows.push({ id: 3, showdate: day(-3), venue: "Side Room", city: "Kingston", state: "NY", sync_flag: null });
     tables.shows.push({ id: 4, showdate: day(-2), venue: "Back Room", city: "Kingston", state: "NY", sync_flag: null });
     for (const [sid, off] of [[3, -3], [4, -2]]) tables.league_shows.push({ league_id: ids.LEAGUE_ID, show_id: sid, cutoff_at: new Date(Date.now()+off*864e5).toISOString(), format: "standard", status: "final", remind_sent: null, lock_sent: null, winner_sent: null });
     tables.seasons.push({ id: 502, bracket_id: ids.OFFICIAL_ID, name: "Live Season", start_date: day(-30), end_date: day(30), roster_locked_at: null });
-    for (const id of ["p1", "p2", "p4"]) tables.season_rosters.push({ season_id: 502, player_id: id, added_at: day(-30) + "T00:00:00Z" });
+    for (const id of roster) tables.season_rosters.push({ season_id: 502, player_id: id, added_at: day(-30) + "T00:00:00Z" });
     tables.scores = scores(ids);
     const calls = [];
     const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
@@ -2324,11 +2325,15 @@ export async function runStatsScenario({ html, scripts, mode }){
           ariaSort: t.getAttribute("aria-sort"), onclick: t.getAttribute("onclick") ?? "" })) : [],
         rows: tbl ? [...tbl.querySelectorAll("tr")].filter(tr => tr.querySelector("td.pname")).map(tr => ({
           name: tr.querySelector(".nm")?.textContent, me: tr.classList.contains("me"),
+          nameActive: tr.querySelector("td.pname")?.classList.contains("active") ?? false,
           cells: [...tr.querySelectorAll("td.pts")].map(td => ({ v: td.textContent, active: td.classList.contains("active") })) })) : [],
         emptyRow: tbl?.querySelector("td[colspan]")?.textContent ?? null,
         leadersPresent: !!p?.querySelector(".leaders"),
+        // Stacked rows (amendment 2026-10-26): every listed name, the
+        // "and N more" tail if any, and the value.
         leaders: p ? [...p.querySelectorAll(".leader")].map(l => ({ key: l.dataset.key, label: l.querySelector(".lbl")?.textContent,
-          name: l.querySelector(".nm")?.textContent, extra: l.querySelector("small")?.textContent ?? null, value: l.querySelector("b")?.textContent })) : [],
+          names: [...l.querySelectorAll(".nm")].map(e => e.textContent), more: l.querySelector("small")?.textContent ?? null,
+          plus: /\+\d/.test(l.textContent), value: l.querySelector("b")?.textContent })) : [],
         legend: p?.querySelector("p.muted")?.textContent ?? "",
         stored: w.localStorage.getItem("ft_stats_sort"),
         rpcCount: calls.filter(c => c.type === "rpc").length,
@@ -2357,7 +2362,36 @@ export async function runStatsScenario({ html, scripts, mode }){
   if (allTimeZerosPreset.setterOnWindow === "function") b.w.setStatsSort("zeros");
   await tick();
   const allTimeZerosTap = b.read();
-  return { dflt, zerosAsc, zerosDesc, presetWins, presetBogus, empty, allTime, allTimeZerosPreset, allTimeZerosTap };
+
+  // Player sort (amendment 2026-10-26, item 5): A–Z on the first tap, Z–A
+  // on the second, on a fresh default load.
+  const pl = await load({ scores: three });
+  if (dflt.setterOnWindow === "function") pl.w.setStatsSort("player");
+  await tick();
+  const playerAsc = pl.read();
+  if (dflt.setterOnWindow === "function") pl.w.setStatsSort("player");
+  await tick();
+  const playerDesc = pl.read();
+
+  // Two-way ties (amendment item 2): p1 (3,3) and p2 (3,3) share avg 3.0
+  // and two laurels each (both top show 2 and show 3); p4 (1,2,4) alone on
+  // high 4, shows 3 and zeros 0. Both names must list, no "+".
+  const twoWayScores = ids => [O(ids, "p1", 2, 3), O(ids, "p1", 3, 3), O(ids, "p2", 2, 3), O(ids, "p2", 3, 3), O(ids, "p4", 2, 1), O(ids, "p4", 3, 2), O(ids, "p4", 4, 4)];
+  const twoWay = (await load({ scores: twoWayScores })).read();
+
+  // Six-way ties (the cap): three invented extra members, everyone scores
+  // 2 on show 2 only, so every row ties six ways → five names in name
+  // order plus "and 1 more". Invented nicknames, not real ones.
+  const extras = [["p5", "Marigold"], ["p6", "Quartz"], ["p7", "Tumbleweed"]];
+  const sixScores = ids => ["p1", "p2", "p4", "p5", "p6", "p7"].map(pid => O(ids, pid, 2, 2));
+  const sixWay = (await load({
+    scores: sixScores, roster: ["p1", "p2", "p4", "p5", "p6", "p7"],
+    mutate: (t, ids) => { for (const [id, name] of extras){
+      t.players_public.push({ id, name, created_at: "2026-01-05" });
+      t.league_members.push({ league_id: ids.LEAGUE_ID, player_id: id, is_league_admin: false, official_opt_in: true });
+    } },
+  })).read();
+  return { dflt, zerosAsc, zerosDesc, presetWins, presetBogus, empty, allTime, allTimeZerosPreset, allTimeZerosTap, playerAsc, playerDesc, twoWay, sixWay };
 }
 
 // Members panel rows (admin-panel.md → "Members panel cleanup", LOCKED

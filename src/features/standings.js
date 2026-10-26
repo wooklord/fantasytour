@@ -7,7 +7,7 @@ import { trophy, rankNumeral, winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
 import { currentBracket } from "../core/switcher.js";
 import { computeStandings, rankStandings, groupTies, ordinal, layerDisplayValue, decidedByText, TIEBREAK_SHORT_LABELS } from "../core/tiebreak.js";
-import { STAT_COLS, DEFAULT_STATS_SORT, statValue, fmtStat, bestDir, flipDir, sortStats, parseStatsSort, formatStatsSort, statLeaders } from "../core/stats.js";
+import { STAT_COLS, DEFAULT_STATS_SORT, statValue, fmtStat, bestDir, flipDir, sortStats, parseStatsSort, formatStatsSort, statLeaders, capNames } from "../core/stats.js";
 
 // Bound to the standings-select onchange (see renderBoard below) — replaces the
 // original inline `boardSeason=this.value; renderBoard();` now that boardSeason
@@ -58,7 +58,6 @@ export function setStatsSort(col){
   const el = document.getElementById("statspanel");
   if (el && lastStats) el.outerHTML = statsPanelHtml(lastStats);
 }
-const LEADER_LABELS = { avg: "Best avg", high: "High score", wins: "Most wins", zeros: "Fewest zeros" };
 function statsPanelHtml(s){
   const { pname, season, scopeName } = s;
   const nameOf = id => pname[id] || "?";
@@ -67,36 +66,43 @@ function statsPanelHtml(s){
   // a switch back to a season.
   const sort = (!season && statsSort.col === "zeros") ? DEFAULT_STATS_SORT : statsSort;
   const rows = sortStats(s.statRows, sort.col, sort.dir, nameOf);
-  // Header: sortable numeric columns carry the tap, aria-sort on the
-  // active one ("none" elsewhere) and the arrow ▼/▲ on the active one
-  // only (decision 3). Player is not sortable; Zeros is not without a
+  // Header: every column carries the tap — Player alphabetically
+  // (amendment 2026-10-26, item 5), the numeric ones best-first — with
+  // aria-sort on the active one ("none" elsewhere) and the arrow ▼/▲ on
+  // the active one only (decision 3). Zeros is not sortable without a
   // season.
-  const th = (col, label) => {
+  const th = (col, label, align = "right") => {
     const sortable = !!STAT_COLS[col] && (season || col !== "zeros");
     const active = sortable && sort.col === col;
     const aria = active ? (sort.dir === "asc" ? "ascending" : "descending") : "none";
     const arrow = active ? (sort.dir === "asc" ? "▲" : "▼") : "";
-    return `<th style="text-align:right" class="${sortable ? "sortable" : ""}${active ? " active" : ""}"${
+    return `<th style="text-align:${align}" class="${sortable ? "sortable" : ""}${active ? " active" : ""}"${
       sortable ? ` onclick="setStatsSort('${col}')" aria-sort="${aria}" title="Sort by ${col === "zeros" ? "zeros" : col}"` : ""}>${label}<span class="arrow">${arrow}</span></th>`;
   };
-  // The active column's values render bold (item 6.3) via .active.
+  // The active column's values render bold (item 6.3) via .active — the
+  // name cell too, when Player is the sort.
   const td = (col, v, extra = "") => `<td class="pts${sort.col === col ? " active" : ""}"${extra}>${v}</td>`;
+  // Leaders strip, STACKED ROWS (amendment 2026-10-26): label · every
+  // tied name in name order, capped at five with "and N more" · value.
   const leaders = rows.length ? statLeaders(rows, nameOf, { withZeros: !!season }) : [];
-  const leadersHtml = leaders.length ? `<div class="leaders">${leaders.map(l =>
-    `<div class="leader" data-key="${l.key}"><span class="lbl">${LEADER_LABELS[l.key]}</span><span class="who"><span class="nm" title="${esc(nameOf(l.ids[0]))}">${esc(nameOf(l.ids[0]))}</span>${
-      l.ids.length > 1 ? `<small>+${l.ids.length - 1}</small>` : ""}</span><b>${fmtStat(l.col, l.value)}</b></div>`).join("")}</div>` : "";
+  const leadersHtml = leaders.length ? `<div class="leaders">${leaders.map(l => {
+    const { shown, more } = capNames(l.ids);
+    return `<div class="leader" data-key="${l.key}"><span class="lbl">${esc(l.label)}</span><span class="who">${
+      shown.map(id => `<span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span>`).join(", ")}${
+      more > 0 ? `<small>and ${more} more</small>` : ""}</span><b>${fmtStat(l.col, l.value)}</b></div>`;
+  }).join("")}</div>` : "";
   return `<div class="panel" id="statspanel"><h2>Stats <span class="muted" style="font-size:.78rem">· ${scopeName}</span></h2>
       ${leadersHtml}
-      <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th>${th("shows", "Shows")}${th("avg", "Avg")}${th("high", "High")}${th("zeros", "0s")}${th("wins", winBadge(18))}</tr>
+      <div style="overflow-x:auto"><table class="lb compact"><tr>${th("player", "Player", "left")}${th("shows", "Shows")}${th("avg", "Avg")}${th("high", "High")}${th("zeros", "0s")}${th("wins", winBadge(18))}</tr>
       ${rows.map(([id, r]) => `<tr class="${id===state.session.id?"me":""}">
-        <td class="pname"><span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span></td>${td("shows", r.shows)}
+        <td class="pname${sort.col === "player" ? " active" : ""}"><span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span></td>${td("shows", r.shows)}
         ${td("avg", fmtStat("avg", statValue(r, "avg")))}
         ${td("high", r.high, ` title="${esc(r.highShow?.venue||"")}"`)}
         ${td("zeros", season ? r.zeros : "—")}
         ${td("wins", r.wins||0)}</tr>`).join("")
         || '<tr><td colspan="6" class="muted">Stats appear once shows score.</td></tr>'}
       </table></div>
-      <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played · High = best single show (venue on hover) · 0s = scoring zeros${season ? "" : " (season views only)"} · wreath = shows won · tap a column to sort</p>
+      <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played · High = best single show (venue on hover) · 0s = scoring zeros${season ? "" : " (season views only)"} · laurels = shows won · tap a column to sort</p>
     </div>`;
 }
 
