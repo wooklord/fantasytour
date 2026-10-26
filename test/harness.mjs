@@ -2131,7 +2131,14 @@ export async function runWhosPickedScenario({ html, scripts, mode }){
         on: r ? [...r.querySelectorAll(".switcher-btn.on")].map(b => b.textContent) : [],
         rows: r ? [...r.querySelectorAll(".roster-row")].map(x => ({
           name: x.querySelector(".nm")?.textContent, status: x.dataset.status,
-          pill: x.querySelector(".pill")?.textContent, l2: x.querySelector(".roster-l2")?.textContent })) : [],
+          pill: x.querySelector(".pill")?.textContent, l2: x.querySelector(".roster-l2")?.textContent,
+          // Refinement 2026-10-26 (admin-panel.md → Who's Picked): the row
+          // still carries .miss for no-picks; the name must sit outside
+          // every dimmed element (pill, line two) and must not be the
+          // row's first span (that is the mark, which IS dimmed).
+          miss: x.classList.contains("miss"),
+          nameInDimmed: !!x.querySelector(".nm")?.closest(".pill, .roster-l2"),
+          nameIsFirstSpan: x.firstElementChild === x.querySelector(".nm") })) : [],
         empty: r?.querySelector("#roster-empty")?.textContent || "",
         html: r?.innerHTML || "",
       };

@@ -506,7 +506,17 @@ html[data-theme="light"] .panel.live-halo{
 .pickres .sl{font-family:var(--mono);font-size:.7rem;color:var(--cream-dim);min-width:64px;text-transform:uppercase}
 .pickres .pt{margin-left:auto;font-family:var(--mono)}
 .pickres.hit .pt{color:var(--mint)}
-.pickres.miss{opacity:.55}
+/* Row-level dim for every .pickres list EXCEPT Who's Picked rows: the
+   season-roster override list, the ban list and the Scores page's missed
+   picks all rely on it (docs/decisions/admin-panel.md → Who's Picked,
+   refinement 2026-10-26). */
+.pickres.miss:not(.roster-row){opacity:.55}
+/* Who's Picked (.roster-row): the NAME stays at full color on every row;
+   only the status parts dim — the leading mark (the row's first span),
+   the status pill and the line-two text. The Show chip already says why
+   a row is listed, so a dimmed name only cost legibility. */
+.pickres.roster-row.miss > span:first-child,.pickres.roster-row.miss .pill,.pickres.roster-row.miss .roster-l2{opacity:.55}
+.pickres.roster-row.miss .nm{opacity:1;color:var(--cream)}
 /* Members list rows (docs/decisions/admin-panel.md → "Members panel
    cleanup", LOCKED 2026-10-26, ROWS A): two lines. The name is .mname,
    deliberately NOT .nm — admin lists never truncate, the live

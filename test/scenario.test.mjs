@@ -1102,6 +1102,22 @@ async function runMode(mode){
     wp.everyoneDone.rows.length === 0 && /Everyone has picks in/.test(wp.everyoneDone.empty)
       && wp.everyoneDoneAll.rows.length === 1 && wp.everyoneDoneAll.empty === "",
     `empty: "${wp.everyoneDone.empty}" rows: ${wp.everyoneDone.rows.length} all: ${wp.everyoneDoneAll.rows.length}`);
+  // Refinement 2026-10-26 (admin-panel.md → Who's Picked): names at full
+  // color on every row; dim only the status parts. CSS is checked
+  // statically (jsdom cannot compute opacity); the DOM facts prove the
+  // name sits outside every dimmed element on a row that still has .miss.
+  check("Who's Picked: a no-picks row still carries .miss, and its name is neither inside a dimmed element (pill, line two) nor the row's first span (the mark); picked rows carry no .miss",
+    rowOf(wp.show1Needs, "GlobalAdmin")?.miss === true && rowOf(wp.show1Needs, "GlobalAdmin")?.nameInDimmed === false
+      && rowOf(wp.show1Needs, "GlobalAdmin")?.nameIsFirstSpan === false
+      && rowOf(wp.show1Needs, "Wooklord")?.miss === false && rowOf(wp.show2All, "Wooklord")?.miss === false,
+    `rows: ${JSON.stringify(wp.show1Needs.rows.map(r => [r.name, r.status, r.miss, r.nameInDimmed, r.nameIsFirstSpan]))}`);
+  check("stylesheet, statically: no bare .pickres.miss opacity rule on the row; the row dim survives only as .pickres.miss:not(.roster-row) for the other lists; .roster-row.miss dims exactly its first span, .pill and .roster-l2; .roster-row.miss .nm is pinned to opacity:1 at full color; and no roster-row rule dims .nm",
+    !/\.pickres\.miss\{[^}]*opacity/.test(css)
+      && /\.pickres\.miss:not\(\.roster-row\)\{opacity:\.55\}/.test(css)
+      && /\.pickres\.roster-row\.miss > span:first-child,\.pickres\.roster-row\.miss \.pill,\.pickres\.roster-row\.miss \.roster-l2\{opacity:\.55\}/.test(css)
+      && /\.pickres\.roster-row\.miss \.nm\{opacity:1;color:var\(--cream\)\}/.test(css)
+      && !/roster-row[^{]*\.nm[^{]*\{[^}]*opacity:(0?\.\d+|0)\b/.test(css),
+    "styles.css: .pickres.miss / .pickres.roster-row.miss rules");
 
   // (4) registration cap
   const reg = await runRegisterLengthScenario({ html, scripts, mode });

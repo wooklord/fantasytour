@@ -128,6 +128,32 @@ same day, before any code; sibling record for the same batch:
   empty — an empty-set case belongs in the harness scenario.
 - Unchanged: the section stays FIRST, above the first divider, with its
   own `Who's picked: <Bracket>` scope heading (see above).
+- **Refinement 2026-10-26 (dev's call after the live look): nicknames
+  render at full text color on EVERY row, picked or not.** The
+  `.pickres.miss` row-level opacity dimmed the whole row including the
+  name, which hurt legibility now that the Show chip already explains
+  why a row is listed. Dim stays on the status parts only — the leading
+  mark, the status pill, and the line-two text — never on the name.
+  **Build, same day:** the row rule `.pickres.miss{opacity:.55}` is gone
+  AS A ROW RULE for Who's Picked rows; its three other users — the
+  season-roster override list (not-on-roster members), the ban list, and
+  the Scores page's missed picks (`picks.js`) — all rely on the row dim,
+  so it survives for them as `.pickres.miss:not(.roster-row)`, behaviour
+  unchanged. `.roster-row.miss` dims its first span (the mark), `.pill`
+  and `.roster-l2` individually, and `.roster-row.miss .nm` is pinned to
+  `opacity:1; color:var(--cream)`. No markup change: the mark was
+  already the row's first span and the name already `.nm`. Harness: a
+  static stylesheet check (no bare `.pickres.miss` opacity rule, the
+  scoped survivor present, the three status parts dimmed, the name rule
+  full and no roster-row rule dimming `.nm`), plus DOM facts on the
+  Who's Picked scenario (no-picks rows still carry `.miss`; the name is
+  not inside a dimmed element and is not the first span). One mutation:
+  dim re-applied to the name.
+  **BUILT 2026-10-26, bundle `cb905bf-b660a59`.** CSS only plus the
+  harness; no markup change was needed. Mutation result: `opacity:.55`
+  on the `.roster-row.miss .nm` rule failed the static stylesheet check
+  in both modes; revert verified byte-identical, bundle matched the
+  index after the rebuild.
 
 ---
 
