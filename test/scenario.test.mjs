@@ -1127,12 +1127,12 @@ async function runMode(mode){
       && J(activeHeaders(st.allTimeZerosPreset)) === J([2]) && st.allTimeZerosPreset.stored === "zeros:asc"
       && J(activeHeaders(st.allTimeZerosTap)) === J([2]) && st.allTimeZerosTap.stored === "zeros:asc" && st.allTimeZerosTap.rpcCount === st.allTimeZerosPreset.rpcCount,
     `allTime: ${J(st.allTime.headers)} leaders ${J(st.allTime.leaders.map(l => l.key))} preset: ${J(activeHeaders(st.allTimeZerosPreset))}/${st.allTimeZerosPreset.stored} tap: ${J(activeHeaders(st.allTimeZerosTap))}/${st.allTimeZerosTap.stored}`);
-  check("Stats stylesheet, statically: the arrow lives only in .lb th .arrow with no reserved width, .lb td.active is bold, .leaders is a stacked column and each .leader is a three-column grid — fixed 7.2em small-caps label, left-aligned names, a right-aligned value column at least 3ch wide — with 14px column gaps; the strip itself is not a grid",
+  check("Stats stylesheet, statically: the arrow lives only in .lb th .arrow with no reserved width, .lb td.active is bold, .leaders is a stacked column and each .leader is a three-column grid — a fixed 5.2rem label track (rem, never em: an em track resolves against the ROW font, which made 7.2em 115px; 5.2rem is the original ~83px, which fits the longest .72rem small-caps label on one line, measured), left-aligned names, a right-aligned value column at least 3ch wide — with 14px column gaps; the strip itself is not a grid",
     /\.lb th \.arrow\{font-size:\.6rem;margin-left:2px;vertical-align:middle\}/.test(css)
       && /\.lb td\.active\{font-weight:700;color:var\(--cream\)\}/.test(css)
       && /\.leaders\{display:flex;flex-direction:column/.test(css)
-      && /\.leader\{display:grid;grid-template-columns:7\.2em minmax\(0,1fr\) minmax\(3ch,max-content\);column-gap:14px/.test(css)
-      && /\.leader \.lbl\{[^}]*font-variant:small-caps/.test(css)
+      && /\.leader\{display:grid;grid-template-columns:5\.2rem minmax\(0,1fr\) minmax\(3ch,max-content\);column-gap:14px/.test(css)
+      && /\.leader \.lbl\{font-size:\.72rem;font-variant:small-caps/.test(css)
       && /\.leader b\{[^}]*text-align:right/.test(css)
       && !/\.leaders\{display:grid/.test(css),
     "styles.css: .lb th .arrow / .lb td.active / .leaders / .leader rules");

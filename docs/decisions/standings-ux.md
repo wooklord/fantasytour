@@ -547,11 +547,27 @@
    and that no `.leader .who` rule remains; removing the clip fails it.
    **Visible side effect, stated:** leader names now render at full
    cream; the collision had been greying them with the header's
-   `--cream-dim` since `d08e486`. **Observed, not changed:** the label
+   `--cream-dim` since `d08e486`. **Observed, then RESOLVED (next paragraph):** the label
    column's `7.2em` now resolves against the row's 16px font (115px),
    not the label's .72rem as the old `flex:0 0 7.2em` did (83px) — the
    spacing fix widened it by 32px, leaving the names track 103px at
    360px. A one-value change if the device look wants the room back.
+   **Label column, RESOLVED same day, bundle `ef5032a-d2ffaaf`** (dev's
+   call): the first track is `5.2rem` (83.2px), back to the original
+   ~83px, and in rem so it no longer depends on which element's font it
+   resolves against. **Measured, headless Chrome at 320/360/412px**, with
+   Outfit loaded and again with the system fallback (Windows' system-ui,
+   not a phone's): every label renders on one line. The longest is "Most
+   laurels", 66.8px in Outfit (16.4px spare) and 74.2px in the fallback
+   (9.0px spare); "Fewest zeros" is 66.1px / 72.0px. Names track at
+   360px: 135px in the fallback, the font the earlier 103px was measured
+   in, and 129px in Outfit. The static check pins
+   `grid-template-columns:5.2rem …` and the label's `.72rem`; putting
+   `7.2em` back fails it in both modes, reverted. **Observed, not
+   changed:** the value column's `3ch` minimum is the same mechanism. It
+   resolves against the row's font, Outfit 16px, not the value's mono
+   .95rem, which is why the names track differs by font. It still means
+   "at least ~3ch" as specified, in row units.
 
 ## Why these and not the alternatives
 

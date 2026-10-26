@@ -446,7 +446,8 @@ html[data-theme="light"] .panel.live-halo{
 .lb th.active{color:var(--cream)}
 .lb td.active{font-weight:700;color:var(--cream)}
 .leaders{display:flex;flex-direction:column;margin:4px 0 10px;background:var(--pit);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.leader{display:grid;grid-template-columns:7.2em minmax(0,1fr) minmax(3ch,max-content);column-gap:14px;align-items:baseline;min-width:0;padding:6px 10px}
+/* Label track in rem, not em: a grid track resolves em against the ROW font (16px), not the label's .72rem — 7.2em there was 115px. 5.2rem = the original ~83px. */
+.leader{display:grid;grid-template-columns:5.2rem minmax(0,1fr) minmax(3ch,max-content);column-gap:14px;align-items:baseline;min-width:0;padding:6px 10px}
 .leader+.leader{border-top:1px dashed var(--dash)}
 .leader .lbl{font-size:.72rem;font-variant:small-caps;letter-spacing:.5px;color:var(--cream-dim)}
 .leader .ldr-names{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:flex-start;column-gap:.35em;min-width:0;overflow:hidden;font-size:.85rem;line-height:1.4;text-align:left}
