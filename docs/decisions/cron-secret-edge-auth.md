@@ -135,6 +135,12 @@ The shape of the fix is settled; only the implementation is outstanding.
   mentioned once:** a date moved from the past into the future leaves an
   overlay already at `status = 'live'` as live; nothing resets it to
   upcoming. No decision was taken on it.
+  **Observed 2026-10-26, not changed:** the admin Shows section lists shows
+  from 7 days back (`renderAdmin`, `src/features/admin.js`) while the sync
+  window reaches 14, so a flag on a show 8–14 days old is in the database
+  but not in the panel; `select id, showdate, venue, sync_flag from shows
+  where sync_flag is not null` is the authoritative view. Widening the
+  panel to 14 days is a candidate for a later batch, not a decision.
   **BUILD PLAN — approved in Chat 2026-10-25, build starts 2026-10-26:
   `docs/show_sync_plan.md`** (full plan, the two approval decisions —
   `syncSongs` stays out of the daily run; `admin_clear_sync_flag` is any

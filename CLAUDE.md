@@ -310,10 +310,10 @@ a tenant.
   memberships.
 - **Official opt-in defaults TRUE** (reaffirmed 2026-10-12) and the toggle is
   locked while a season runs; a league admin can override via the roster.
-  The live column default is still `false` because Stage F was never
-  applied — item (e) of the post-first-show batch. There is no self-service
-  opt-out UI (`set_official_opt_in` has no caller). Full record and the
-  Stage F correction: `docs/decisions/official-opt-in-default.md`.
+  Stage F APPLIED 2026-10-26: live default `true`, zero `false` rows; batch
+  item (e) done. There is no self-service opt-out UI (`set_official_opt_in`
+  has no caller). Full record and the Stage F history:
+  `docs/decisions/official-opt-in-default.md`.
 - **Onboarding LOCKED 2026-10-24** — `leagues.config` jsonb for community
   links, three derived states, join codes, Stage F as its own batch, and
   a public-select conflict found during the write: `docs/decisions/onboarding.md`.

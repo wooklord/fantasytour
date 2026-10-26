@@ -144,6 +144,36 @@
      identifier (one factor of the name+PIN credential pair); a rename is
      a credential change, not a display tweak.
 
+5. **LOCKED 2026-10-26 — tie groups on the standings board (tiebreak
+   legibility).** Tied players render as a GROUP: a thin left bracket runs
+   down the tied rows; one tag line beneath the group reads
+   **"Tie for <place> · decided by <layer label>"**, or **"Tie for <place>
+   · shared"** when no layer splits them; a **"+"** on the tag expands a
+   full-width sub-row listing every configured layer in order with each
+   tied player's value, the deciding layer marked. **Collapsed by default;
+   expand state in memory only, never persisted.** The name cell returns
+   to the name alone — the tiebreak lines (`layerLines`) leave it.
+   **Rejected:** color-coding layers (needs a legend, and yolk is already
+   the own-row outline); a global chip (per-group expand is the right
+   scope, and the board chip was reverted 2026-10-25).
+   **Bracket color — PROPOSED by the survey 2026-10-26, NOT locked, dev to
+   confirm: `--mint`.** Existing token; against `--panel` it measures
+   11.18:1 dark / 3.79:1 light, clearing the 3:1 AA floor for non-text UI
+   (WCAG 1.4.11) in both themes, and it is hue-distinct from yolk (own
+   row) and coral (destructive controls, links). Caveat at its weight:
+   mint is the app's "done / hit / open" accent (`.pill.open`,
+   `.pickmark.done`, `.pickres.hit .pt`), so a bracket in it carries a
+   faint positive connotation. Fallback if that reads wrong: `--cream-dim`
+   (9.61 / 3.85, the muted-text color, quieter). Ruled out: `--yolk-deep`
+   (reads as yolk in the dark theme), `--coral` (semantic clash),
+   `--line` / `--line2` / `--dash` (all under 1.8:1 — invisible as a
+   bracket). The tag line is TEXT, not a component: it takes the existing
+   `.muted` style, whose light-theme ratio (3.85:1 on the panel) is a
+   pre-existing board-wide condition, not introduced here.
+   **Status:** docs only as of 2026-10-26; the read-only survey and the
+   change plan were produced the same day and the plan awaits approval.
+   Nothing in `src/` has changed for this item.
+
 ## Why these and not the alternatives
 
 - Compact-by-default because the board is read far more often than it is
