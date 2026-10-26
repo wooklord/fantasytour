@@ -24,7 +24,8 @@ until then.)
 
 **Remaining:** Batch 3 (welcome card, install guide, first-save toast) —
 LOCKED 2026-10-26 under decision 6 below; plan APPROVED the same day with
-six decisions recorded there; build in progress. Then Batch 4 (join codes).
+six decisions recorded there; BUILT the same day (bundle `7b4f28f-503c56d`),
+device checks listed there still open. Then Batch 4 (join codes).
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -219,6 +220,43 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
       **Follow-up candidate, NOT in this batch:** a maskable manifest
       icon. Android shows the current icon inside a white circle because
       none of the manifest's icons is marked maskable.
+      **BUILT 2026-10-26, bundle `7b4f28f-503c56d`.** New
+      `src/core/install.js` (pure detection, standalone check and branch
+      text, plus the prompt capture wired before `boot()`), the card and
+      bar slot in `shows.js`, the toast in `picks.js` with a 10-second
+      `toast()` duration, the switch in `settings.js`, `BAND_NAME` in
+      `config.js`. Tests: `test/install.test.mjs` (a user-agent table of
+      13 shapes, the standalone table, every branch's text) and
+      `runOnboardingScenario` (21 checks per mode, one of them a static check).
+      **Mutations, all five failed their target checks in both modes;
+      every revert byte-identical and the bundle matched:** standalone
+      ignored (1 scenario, 3 unit); Facebook detected as plain iOS (1
+      scenario, 5 unit); the toast on every save (1); logout clearing
+      `ft_install_dismissed` (1); the bar back to players-with-picks only,
+      the pre-amendment rule (1).
+      **Judgment calls made in the build, stated:**
+      - The heading reads "Welcome to <league name>".
+      - The card's ✕ is labelled "Hide this card", to keep it distinct
+        from "Don't show again".
+      - The Settings switch is hidden on desktop as well as in
+        standalone, because install help never applies off a phone.
+      - **The bar wraps to two lines below about 360px instead of
+        truncating.** Measured in headless Chrome with the real stylesheet:
+        at .85rem with an ellipsis it cut "screen" off the locked sentence
+        at 320px and 360px. It is now one line from 360px up and two lines
+        at 320px. The card, its section, the expanded "How?" and the switch
+        rendered cleanly in both themes with nothing overflowing.
+      - Wide layouts show Settings beside the list (an iPad in landscape
+        is a "phone" here), so a dismissal also syncs the switch.
+      **Device checks (jsdom cannot do these):** a real install through
+      the Install button, and `appinstalled` firing; Chrome's engagement
+      delay (about 30 seconds and a tap) before the Install button can
+      appear; Samsung Internet's actual behaviour and its ≡ menu path;
+      the iOS sign-in-again line (home-screen storage separate from
+      Safari's); real user agents from the Facebook, Messenger and
+      Instagram in-app browsers on both OSes, to add to the unit table;
+      links opened from Discord, whose built-in browser view is not on the
+      detection list.
    4. Join codes: `league_join_codes` table + its three RPCs, entry on the
       no-league screen, rotation in Community.
 

@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -1296,6 +1296,116 @@ async function runMode(mode){
   check("the default fixture (sync_flag null on every show) renders no notice at all (empty-set case)",
     sf.none.sectionPresent && sf.none.rowCount === 2 && sf.none.notices.length === 0,
     `none: ${JSON.stringify(sf.none)}`);
+
+  // ---------- Onboarding Batch 3 (docs/decisions/onboarding.md, decision 6) ----------
+  const ob = await runOnboardingScenario({ html, scripts, mode });
+  const OB_C = ob.ids.CASUAL_ID, OB_O = ob.ids.OFFICIAL_ID;
+  const HOWTO = [
+    "Before each show, pick the songs you think Eggy will play.",
+    "Picks partly score in realtime and finalize once the setlist is in.",
+    "Standings update after every show.",
+    "Change your picks any time until the cutoff.",
+    "Scoring details are in The Rules under every pick sheet.",
+  ];
+  const MENU_B = "Browser menu (⋮) → Install app / Add to Home screen";
+  const IOS_STEPS = ["Tap Share, then Add to Home Screen.", "You'll sign in once more inside the app, so keep your PIN handy."];
+  const IN_APP = (app, menu) => `You're in ${app}'s browser, which can't install apps. Tap ${menu} → Open in browser, then install from there.`;
+  const FIRST_TOAST = "Picks locked in ✔ Change them any time before cutoff. Scores show up on the show's Scores page after it ends.";
+  const DONT = "Don't show again";
+  const noHelp = r => !r.section && !r.bar;
+  // Desktop renders Settings beside the list, so a dismissal must leave any
+  // on-screen switch unchecked; on mobile the switch is simply not there.
+  const tipsOff = r => r.tips === null || r.tips.checked === false;
+  const nw = ob.newPlayer;
+  check("welcome card, no-picks player: 'Welcome to <league>', the five how-to lines verbatim (band from config), the next open show's cutoff with 'Make your picks' wired to openShow(1), community links through the https-only guard (the javascript: one dropped), and a ✕ labelled as hiding only the card",
+    nw.card && nw.heading === "Welcome to Ambassadors" && J(nw.howto) === J(HOWTO)
+      && /^Next cutoff: The Barn · .+ Make your picks$/.test(nw.next ?? "") && nw.nextOnclick === "openShow(1)"
+      && J(nw.links) === J([["Facebook group", "https://example.com/group"]])
+      && nw.cardX?.onclick === "dismissWelcome()" && nw.cardX?.label === "Hide this card",
+    `newPlayer: ${J(nw)}`);
+  check("'Make your picks' is wired to something real: firing its onclick renders the pick sheet for that show",
+    ob.buttonFired === true && ob.buttonOpenedSheet === true,
+    `fired: ${ob.buttonFired} opened: ${ob.buttonOpenedSheet}`);
+  check("Android phone, no captured prompt: the card's section shows branch (b) with a visible 'Don't show again', and NO bar while the section is on screen",
+    nw.section && J(nw.sectionSteps) === J([MENU_B]) && nw.sectionDismiss?.text === DONT && nw.sectionDismiss?.onclick === "dismissInstall()" && !nw.bar,
+    `section: ${J(nw.sectionSteps)} dismiss: ${J(nw.sectionDismiss)} bar: ${nw.bar}`);
+  check("derivation is league-wide (decision 1) and free for a returning player: picks here → ONE pick-count call (this bracket), no card; Official-only picks seen from Casual → two calls, no card; no picks anywhere → two calls, card",
+    J(ob.hasPicksCalls) === J([OB_C]) && !ob.hasPicks.card
+      && J(ob.officialOnlyCalls) === J([OB_C, OB_O]) && !ob.officialOnly.card
+      && J(ob.newPlayerCalls) === J([OB_C, OB_O]) && nw.card,
+    `calls picks ${J(ob.hasPicksCalls)} officialOnly ${J(ob.officialOnlyCalls)} new ${J(ob.newPlayerCalls)}`);
+  check("a draft counts as picks in either bracket: a draft in the other bracket suppresses the card WITHOUT querying that bracket; a draft in this one suppresses it too",
+    !ob.draftOther.card && J(ob.draftOtherCalls) === J([OB_C]) && !ob.draftHere.card,
+    `draftOther: card ${ob.draftOther.card} calls ${J(ob.draftOtherCalls)} draftHere: card ${ob.draftHere.card}`);
+  check("decision 3: the shows list silently sets ft_first_save_<id> whenever it sees SAVED picks in either bracket, and never for a no-picks player or a draft alone",
+    ob.hasPicksFirstSave === "1" && ob.officialOnlyFirstSave === "1" && ob.newPlayerFirstSave === null && ob.draftOtherFirstSave === null,
+    `p1 ${ob.hasPicksFirstSave} p6 ${ob.officialOnlyFirstSave} new ${ob.newPlayerFirstSave} draft ${ob.draftOtherFirstSave}`);
+  check("empty case, no show open: the card renders without the deadline line or its button, everything else intact",
+    ob.noOpenShow.card && ob.noOpenShow.next === null && ob.noOpenShow.nextOnclick === null && J(ob.noOpenShow.howto) === J(HOWTO) && ob.noOpenShow.section,
+    `noOpenShow: ${J(ob.noOpenShow)}`);
+  check("a player with picks on a phone gets the slim bar: 'Add Fantasy Eggy to your home screen', a collapsed 'How?', and a ✕ whose aria-label AND title read 'Don't show again'",
+    ob.hasPicks.bar && ob.hasPicks.barText === "Add Fantasy Eggy to your home screen" && ob.hasPicks.barHow?.onclick === "toggleInstallHow()"
+      && ob.hasPicks.howHidden === true && ob.hasPicks.barX?.label === DONT && ob.hasPicks.barX?.title === DONT && ob.hasPicks.barX?.onclick === "dismissInstall()",
+    `bar: ${J({ text: ob.hasPicks.barText, how: ob.hasPicks.barHow, x: ob.hasPicks.barX, hidden: ob.hasPicks.howHidden })}`);
+  check("'How?' expands the same platform instructions (iPhone: the iOS text)",
+    ob.barHowIos.howHidden === false && J(ob.barHowIos.howSteps) === J(IOS_STEPS),
+    `how: hidden ${ob.barHowIos.howHidden} ${J(ob.barHowIos.howSteps)}`);
+  check("amended bar rule (decision 6): the card's ✕ hides ONLY the card (ft_welcome_<id>, no install flag) and the bar appears at once and after a reload; another player on the same device still gets the card and its section",
+    ob.cardXFired === true && !ob.afterCardX.card && ob.afterCardX.bar && ob.afterCardXStorage["ft_welcome_p2"] === "1" && !("ft_install_dismissed" in ob.afterCardXStorage)
+      && !ob.afterCardXReload.card && ob.afterCardXReload.bar && ob.otherPlayerSameDevice.card && ob.otherPlayerSameDevice.section,
+    `after ✕: ${J({ card: ob.afterCardX.card, bar: ob.afterCardX.bar })} storage ${J(Object.keys(ob.afterCardXStorage))} reload ${J({ card: ob.afterCardXReload.card, bar: ob.afterCardXReload.bar })} p5 ${J({ card: ob.otherPlayerSameDevice.card, section: ob.otherPlayerSameDevice.section })}`);
+  check("standalone hides ALL install help: the card keeps its welcome but loses its section, no bar for a player with picks, iOS navigator.standalone counts too, and no Settings switch",
+    ob.standaloneNew.card && noHelp(ob.standaloneNew) && noHelp(ob.standalonePicks) && noHelp(ob.iosNavStandalone) && ob.standaloneSettings.tips === null,
+    `new ${J({ card: ob.standaloneNew.card, section: ob.standaloneNew.section, bar: ob.standaloneNew.bar })} picks bar ${ob.standalonePicks.bar} iosNav bar ${ob.iosNavStandalone.bar} tips ${J(ob.standaloneSettings.tips)}`);
+  check("not a phone (desktop agent): no install help and no switch; a phone not running standalone gets the switch, checked, wired to setInstallTips(this.checked)",
+    ob.desktopNew.card && noHelp(ob.desktopNew) && noHelp(ob.desktopPicks) && ob.desktopSettings.tips === null
+      && ob.phoneSettings.tips?.checked === true && ob.phoneSettings.tips?.onchange === "setInstallTips(this.checked)",
+    `desktop ${J({ section: ob.desktopNew.section, bar: ob.desktopPicks.bar, tips: ob.desktopSettings.tips })} phone tips ${J(ob.phoneSettings.tips)}`);
+  check("each platform branch through the DOM: iPhone (c) with the sign-in line; Facebook on iOS (d) with ⋯; Messenger on Android (d) with ⋮; Instagram on iOS (d); Samsung Internet (b) with ≡",
+    J(ob.branchIos.sectionSteps) === J(IOS_STEPS)
+      && J(ob.branchFbIos.sectionSteps) === J([IN_APP("Facebook", "⋯")])
+      && J(ob.branchMsgrAndroid.sectionSteps) === J([IN_APP("Messenger", "⋮")])
+      && J(ob.branchIgIos.sectionSteps) === J([IN_APP("Instagram", "⋯")])
+      && J(ob.branchSamsung.sectionSteps) === J(["Browser menu (≡) → Add page to → Home screen"]),
+    `ios ${J(ob.branchIos.sectionSteps)} fb ${J(ob.branchFbIos.sectionSteps)} msgr ${J(ob.branchMsgrAndroid.sectionSteps)} ig ${J(ob.branchIgIos.sectionSteps)} samsung ${J(ob.branchSamsung.sectionSteps)}`);
+  check("a captured beforeinstallprompt, branch (a): preventDefault'd, ONE Install button replaces the menu text; firing it calls prompt() exactly once, then the menu text returns; appinstalled sets ft_install_dismissed and clears the help (decision 4)",
+    ob.prompt.prevented === true && ob.prompt.before.sectionInstall === "promptInstall()" && J(ob.prompt.before.sectionSteps) === J([])
+      && ob.prompt.prompted === 1 && ob.prompt.after.sectionInstall === null && J(ob.prompt.after.sectionSteps) === J([MENU_B])
+      && ob.prompt.installedFlag === "1" && noHelp(ob.prompt.installed),
+    `prompt: ${J({ prevented: ob.prompt.prevented, before: ob.prompt.before.sectionInstall, prompted: ob.prompt.prompted, after: ob.prompt.after.sectionSteps, flag: ob.prompt.installedFlag })}`);
+  check("the captured prompt reaches the bar's 'How?' too; on a dismissed device or a desktop the event is left alone (no preventDefault), keeping the browser's own install offer",
+    ob.promptInBar.bar && ob.promptInBar.howInstall === "promptInstall()"
+      && ob.promptWhenDismissed.prevented === false && !ob.promptWhenDismissed.read.section && ob.promptOnDesktop.prevented === false,
+    `bar how ${ob.promptInBar.howInstall} dismissed ${ob.promptWhenDismissed.prevented} desktop ${ob.promptOnDesktop.prevented}`);
+  check("ONE permanent flag, from the bar: 'Don't show again' sets ft_install_dismissed; after a reload neither the bar nor the card's section shows, for this player or a no-picks one",
+    ob.barDismiss.flag === "1" && noHelp(ob.barDismiss.read) && tipsOff(ob.barDismiss.read)
+      && noHelp(ob.barDismissReload) && ob.barDismissNewPlayer.card && noHelp(ob.barDismissNewPlayer),
+    `flag ${ob.barDismiss.flag} after ${J({ bar: ob.barDismiss.read.bar, tips: ob.barDismiss.read.tips })} reload bar ${ob.barDismissReload.bar} new ${J({ card: ob.barDismissNewPlayer.card, section: ob.barDismissNewPlayer.section })}`);
+  check("ONE permanent flag, from the card's section: the bar never appears, not beside the card, not after the card's ✕, not for a player with picks",
+    ob.sectionDismiss.flag === "1" && ob.sectionDismiss.read.card && noHelp(ob.sectionDismiss.read) && tipsOff(ob.sectionDismiss.read)
+      && !ob.sectionDismissThenCardX.card && noHelp(ob.sectionDismissThenCardX) && noHelp(ob.sectionDismissPicksPlayer),
+    `flag ${ob.sectionDismiss.flag} then ✕ ${J({ card: ob.sectionDismissThenCardX.card, bar: ob.sectionDismissThenCardX.bar })} p1 bar ${ob.sectionDismissPicksPlayer.bar}`);
+  check("logout keeps the device flag, and a different player logging in on the same device still sees no install help (nor the same player)",
+    ob.logout.sessionGone && ob.logout.flag === "1" && ob.logoutOtherPlayer.card && noHelp(ob.logoutOtherPlayer) && noHelp(ob.logoutSamePlayer),
+    `logout ${J(ob.logout)} other ${J({ card: ob.logoutOtherPlayer.card, section: ob.logoutOtherPlayer.section, bar: ob.logoutOtherPlayer.bar })} same bar ${ob.logoutSamePlayer.bar}`);
+  check("the Settings switch is the undo: unchecked while dismissed; checking it clears the flag and BOTH the card's section and the bar come back; unchecking sets the flag again",
+    ob.switchBefore.tips?.checked === false && ob.switchOnFlag === null && ob.switchOnShows.section && ob.switchOnPicksPlayer.bar && ob.switchOffFlag === "1",
+    `before ${J(ob.switchBefore.tips)} on-flag ${ob.switchOnFlag} section ${ob.switchOnShows.section} bar ${ob.switchOnPicksPlayer.bar} off-flag ${ob.switchOffFlag}`);
+  check("first-save toast: the long text on a new player's first save and the flag set; 'Picks saved ✔' on the next save and after a reload; a second player on the device gets it once; a player the shows list saw with picks never gets it",
+    ob.firstSave.saved && J(ob.firstSave.toasts1) === J([FIRST_TOAST]) && ob.firstSave.flag === "1"
+      && J(ob.firstSave.toasts2) === J([FIRST_TOAST, "Picks saved ✔"]) && J(ob.firstSave.reloadToasts) === J(["Picks saved ✔"])
+      && J(ob.firstSave.otherPlayerToasts) === J([FIRST_TOAST]) && J(ob.firstSave.veteranToasts) === J(["Picks saved ✔"]),
+    `firstSave: ${J(ob.firstSave)}`);
+  {
+    const showsSrc = readFileSync(join(root, "src/features/shows.js"), "utf8");
+    const configSrc = readFileSync(join(root, "src/core/config.js"), "utf8");
+    const cssSrc = readFileSync(join(root, "styles.css"), "utf8");
+    const block = cssSrc.slice(cssSrc.indexOf("/* Onboarding Batch 3"), cssSrc.indexOf(".tips-switch input"));
+    check("statically: the band comes from config.BAND_NAME (no literal in the how-to copy), and no onboarding rule uses var(--cream-dim) (under AA on the light panel) and hide the empty bar slot",
+      /export const BAND_NAME = "Eggy";/.test(configSrc) && /think \$\{BAND_NAME\} will play/.test(showsSrc) && !/think Eggy/.test(showsSrc)
+        && block.length > 200 && !/var\(--cream-dim\)/.test(block) && /#install-bar:empty\{display:none\}/.test(cssSrc),
+      `block length ${block.length}`);
+  }
 
   return failures.length;
 }

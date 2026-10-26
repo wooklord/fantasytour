@@ -2,11 +2,57 @@ import { $, esc, footerHtml } from "../core/dom.js";
 import { rpc } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
 import { fetchShows } from "../core/leagueShows.js";
-import { fmtDateParts, countdown, clearTimersFor, showState } from "../core/format.js";
+import { fmtDateParts, fmtCutoff, countdown, clearTimersFor, showState } from "../core/format.js";
 import { winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
-import { currentBracket } from "../core/switcher.js";
-import { slotDefs, draftKey, openShow } from "./picks.js";
+import { currentBracket, bracketsForLeague } from "../core/switcher.js";
+import { slotDefs, draftKey, draftPrefix, firstSaveKey, openShow } from "./picks.js";
+import { communityLinks } from "../core/community.js";
+import { BAND_NAME } from "../core/config.js";
+import { renderInstallSlots } from "../core/install.js";
+
+// ---------- Welcome card (onboarding.md, decision 6, Batch 3) ----------
+// The in-league-no-picks state, derived, never stored: no saved pick in
+// EITHER of the league's brackets and no draft for either (approved
+// decision 1). Its ✕ hides only the card, per player per device (decision
+// 6); install help has its own flag (core/install.js).
+const welcomeKey = () => `ft_welcome_${state.session.id}`;
+const hasSaved = rows => (rows || []).some(c => c.pick_count > 0);
+function hasDraftFor(bracketId){
+  const pre = draftPrefix(bracketId);
+  try { for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i)?.startsWith(pre)) return true; }
+  catch { /* storage blocked: no drafts readable */ }
+  return false;
+}
+function welcomeDismissed(){ try { return localStorage.getItem(welcomeKey()) === "1"; } catch { return false; } }
+const howToLines = () => [
+  `Before each show, pick the songs you think ${BAND_NAME} will play.`,
+  "Picks partly score in realtime and finalize once the setlist is in.",
+  "Standings update after every show.",
+  "Change your picks any time until the cutoff.",
+  "Scoring details are in The Rules under every pick sheet.",
+];
+// `next` is the first show still open for picks, or undefined: then the
+// deadline line and its button are omitted and the rest of the card stands.
+function welcomeHtml(next){
+  const row = currentBracket();
+  const links = communityLinks(row);
+  return `<div class="noticebox welcome" id="welcome-card">
+    <div class="welcome-head"><h2>Welcome to ${esc(row?.league_name || "")}</h2>
+      <button class="linkbtn welcome-x" onclick="dismissWelcome()" aria-label="Hide this card" title="Hide this card">✕</button></div>
+    <ul class="howto">${howToLines().map(l => `<li>${esc(l)}</li>`).join("")}</ul>
+    ${next ? `<div class="welcome-next" id="welcome-next"><span>Next cutoff: <b>${esc(next.venue || "TBA")}</b> · ${fmtCutoff(next.cutoff_at)}</span>
+      <button class="btn small" onclick="openShow(${Number(next.id)})">Make your picks</button></div>` : ""}
+    ${links.length ? `<div class="welcome-links">Community: ${links.map(k =>
+      `<a href="${esc(k.url)}" target="_blank" rel="noopener noreferrer">${k.label}</a>`).join(" · ")}</div>` : ""}
+    <div id="welcome-install"></div>
+  </div>`;
+}
+export function dismissWelcome(){
+  try { localStorage.setItem(welcomeKey(), "1"); } catch { /* storage blocked */ }
+  document.getElementById("welcome-card")?.remove();
+  renderInstallSlots(); // the section left with the card, so the bar takes over
+}
 
 // The Shows nav-tab entry point — deliberately distinct from renderShows()
 // itself, which the "← shows" back-link inside a pick sheet/detail view
@@ -35,6 +81,25 @@ export async function renderShows(){
     rpc("get_my_pick_counts", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: state.currentBracketId }),
   ]);
   const savedCountOf = Object.fromEntries((myCounts||[]).map(c => [c.show_id, c.pick_count]));
+  // Welcome-card derivation, league-wide (approved decision 1): the other
+  // bracket is queried ONLY when the current one shows no saved pick and no
+  // draft, so a returning player costs no extra call. An error there fails
+  // closed (no card) rather than nagging a player whose picks we could not
+  // read. Any saved pick seen here also sets the first-save flag silently
+  // (approved decision 3).
+  let seenSaved = hasSaved(myCounts), newPlayer = false;
+  if (!seenSaved && !hasDraftFor(state.currentBracketId)){
+    const other = bracketsForLeague(state.currentLeagueId).find(b => b.bracket_id !== state.currentBracketId);
+    if (!other) newPlayer = true;
+    else if (!hasDraftFor(other.bracket_id)){
+      try{
+        const oc = await rpc("get_my_pick_counts", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id: other.bracket_id });
+        if (hasSaved(oc)) seenSaved = true; else newPlayer = true;
+      }catch(e){ /* fail closed */ }
+    }
+  }
+  if (seenSaved){ try { localStorage.setItem(firstSaveKey(), "1"); } catch { /* storage blocked */ } }
+  const showWelcome = newPlayer && !welcomeDismissed();
   // Pick/Score button: label, marker, and layout for one show — folded
   // into the button itself, no separate row element (every earlier
   // layout, a floating circle, a stacked column, reserved its own slot;
@@ -244,11 +309,14 @@ export async function renderShows(){
   }
   $("#main").innerHTML = `
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
+    ${showWelcome ? welcomeHtml(upcoming.find(s => showState(s) === "open")) : ""}
+    <div id="install-bar"></div>
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     ${liveNow.length ? `<div class="panel live-halo"><h2>Live</h2>${liveNow.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons([...extraRecent, ...(past||[])]) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;
+  renderInstallSlots();
   state.timers.push(setInterval(() => {
     document.querySelectorAll("[data-cd]").forEach(el => {
       if (!el.dataset.cd) return;

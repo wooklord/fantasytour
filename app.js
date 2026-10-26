@@ -34,6 +34,7 @@
   var SUPABASE_ANON = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo";
   var RANKED_CHOICE_ENABLED = true;
   var APP_NAME = "Fantasy Eggy";
+  var BAND_NAME = "Eggy";
   var THEME_COLOR_LIGHT = "#F4ECD9";
   var THEME_COLOR_DARK = "#171233";
   var CARTON_SITE_BASE = "https://thecarton.net/setlists";
@@ -190,7 +191,7 @@
 
   // src/core/toast.js
   var seenToasts = /* @__PURE__ */ new Set();
-  function toast(msg, cls = "", key = null) {
+  function toast(msg, cls = "", key = null, ms = 6e3) {
     if (key) {
       if (seenToasts.has(key)) return;
       seenToasts.add(key);
@@ -202,7 +203,7 @@
     t.innerHTML = msg;
     t.onclick = () => t.remove();
     box.appendChild(t);
-    setTimeout(() => t.remove(), 6e3);
+    setTimeout(() => t.remove(), ms);
   }
 
   // src/core/format.js
@@ -454,9 +455,16 @@
   var normSong = (v) => (v || "").trim().toLowerCase();
   var isWildcard = (v) => normSong(v) === "any debut";
   var UNLOCKED_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
-  function draftKey(showId) {
-    return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`;
+  function draftPrefix(bracketId) {
+    return `ft_draft_${state.session.id}_${bracketId}_`;
   }
+  function draftKey(showId) {
+    return draftPrefix(state.currentBracketId) + showId;
+  }
+  function firstSaveKey() {
+    return `ft_first_save_${state.session.id}`;
+  }
+  var FIRST_SAVE_TOAST = "<b>Picks locked in \u2714</b> Change them any time before cutoff. Scores show up on the show's Scores page after it ends.";
   var SCORES_VIEWS = ["compact", "detail"];
   var scoresView = SCORES_VIEWS.includes(localStorage.getItem("ft_scores_view")) ? localStorage.getItem("ft_scores_view") : "compact";
   var lastDetail = null;
@@ -725,7 +733,15 @@ Save anyway?`)) return;
     try {
       await rpc("submit_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: state.currentShow.id, p_picks: picks });
       localStorage.removeItem(draftKey(state.currentShow.id));
-      toast("Picks saved \u2714", "score");
+      let first = false;
+      try {
+        first = !localStorage.getItem(firstSaveKey());
+        localStorage.setItem(firstSaveKey(), "1");
+      } catch {
+        first = false;
+      }
+      if (first) toast(FIRST_SAVE_TOAST, "score", null, 1e4);
+      else toast("Picks saved \u2714", "score");
       openShow(state.currentShow.id);
     } catch (e) {
       $("#p-err").textContent = e.message;
@@ -829,7 +845,170 @@ Save anyway?`)) return;
     ${footerHtml()}`;
   }
 
+  // src/core/install.js
+  var INSTALL_FLAG = "ft_install_dismissed";
+  function detectPlatform(ua, { maxTouchPoints = 0 } = {}) {
+    const s = String(ua || "");
+    const ios = /iPhone|iPad|iPod/.test(s) || /Macintosh/.test(s) && maxTouchPoints > 1;
+    const android = !ios && /Android/.test(s);
+    const os = ios ? "ios" : android ? "android" : null;
+    if (!os) return { kind: "desktop", os: null, phone: false };
+    const app = /Instagram/.test(s) ? "Instagram" : /MessengerForiOS|MessengerLiteForiOS|FBAN\/Messenger|Orca-Android/.test(s) ? "Messenger" : /FBAN\/|FBAV\/|FB_IAB\//.test(s) ? "Facebook" : null;
+    if (app) return { kind: "inapp", os, app, phone: true };
+    if (ios) return { kind: "ios", os, phone: true };
+    return { kind: "android", os, phone: true, samsung: /SamsungBrowser\//.test(s) };
+  }
+  function isStandalone(win) {
+    var _a, _b, _c;
+    let mm = false;
+    try {
+      mm = !!((_b = (_a = win == null ? void 0 : win.matchMedia) == null ? void 0 : _a.call(win, "(display-mode: standalone)")) == null ? void 0 : _b.matches);
+    } catch {
+      mm = false;
+    }
+    return mm || ((_c = win == null ? void 0 : win.navigator) == null ? void 0 : _c.standalone) === true;
+  }
+  function installStepsHtml(p, { canPrompt = false } = {}) {
+    if (!(p == null ? void 0 : p.phone)) return "";
+    if (p.kind === "inapp") {
+      const menu = p.os === "ios" ? "\u22EF" : "\u22EE";
+      return `<p class="ih-step">You're in ${p.app}'s browser, which can't install apps. Tap ${menu} \u2192 Open in browser, then install from there.</p>`;
+    }
+    if (p.kind === "ios")
+      return `<p class="ih-step">Tap Share, then Add to Home Screen.</p><p class="ih-step">You'll sign in once more inside the app, so keep your PIN handy.</p>`;
+    if (canPrompt) return `<button class="btn small ih-install" onclick="promptInstall()">Install</button>`;
+    return p.samsung ? `<p class="ih-step">Browser menu (\u2261) \u2192 Add page to \u2192 Home screen</p>` : `<p class="ih-step">Browser menu (\u22EE) \u2192 Install app / Add to Home screen</p>`;
+  }
+  var deferredPrompt = null;
+  var platformNow = () => detectPlatform(navigator.userAgent, { maxTouchPoints: navigator.maxTouchPoints || 0 });
+  function installDismissed() {
+    try {
+      return localStorage.getItem(INSTALL_FLAG) === "1";
+    } catch {
+      return false;
+    }
+  }
+  function setDismissed(on) {
+    try {
+      on ? localStorage.setItem(INSTALL_FLAG, "1") : localStorage.removeItem(INSTALL_FLAG);
+    } catch {
+    }
+  }
+  function installHelpPossible() {
+    return platformNow().phone && !isStandalone(window);
+  }
+  function installHelpApplies() {
+    return installHelpPossible() && !installDismissed();
+  }
+  var DONT = "Don't show again";
+  function sectionHtml(p) {
+    return `<div class="install-help" id="install-section">
+    <div class="ih-head"><b>Get the app</b><button class="linkbtn ih-dismiss" onclick="dismissInstall()" title="${DONT}">${DONT}</button></div>
+    ${installStepsHtml(p, { canPrompt: !!deferredPrompt })}</div>`;
+  }
+  function barHtml(p) {
+    return `<div class="installbar"><span class="ib-text">Add ${APP_NAME} to your home screen</span>
+    <button class="linkbtn ib-how" id="install-how-btn" onclick="toggleInstallHow()" aria-expanded="false">How?</button>
+    <button class="linkbtn ib-x" onclick="dismissInstall()" aria-label="${DONT}" title="${DONT}">\u2715</button></div>
+    <div class="installhow hidden" id="install-how">${installStepsHtml(p, { canPrompt: !!deferredPrompt })}</div>`;
+  }
+  function renderInstallSlots() {
+    const sec = document.getElementById("welcome-install");
+    const bar = document.getElementById("install-bar");
+    const applies = installHelpApplies(), p = platformNow();
+    if (sec) sec.innerHTML = applies ? sectionHtml(p) : "";
+    if (bar) bar.innerHTML = applies && !sec ? barHtml(p) : "";
+    const box = document.getElementById("install-tips");
+    if (box) box.checked = !installDismissed();
+  }
+  function dismissInstall() {
+    setDismissed(true);
+    renderInstallSlots();
+  }
+  function setInstallTips(on) {
+    setDismissed(!on);
+    renderInstallSlots();
+  }
+  function toggleInstallHow() {
+    var _a;
+    const el = document.getElementById("install-how");
+    if (!el) return;
+    const open = !el.classList.toggle("hidden");
+    (_a = document.getElementById("install-how-btn")) == null ? void 0 : _a.setAttribute("aria-expanded", String(open));
+  }
+  async function promptInstall() {
+    const e = deferredPrompt;
+    if (!e) return;
+    deferredPrompt = null;
+    try {
+      await e.prompt();
+      await e.userChoice;
+    } catch {
+    }
+    renderInstallSlots();
+  }
+  function captureInstallPrompt() {
+    window.addEventListener("beforeinstallprompt", (e) => {
+      if (!installHelpApplies()) return;
+      e.preventDefault();
+      deferredPrompt = e;
+      renderInstallSlots();
+    });
+    window.addEventListener("appinstalled", () => {
+      deferredPrompt = null;
+      setDismissed(true);
+      renderInstallSlots();
+    });
+  }
+
   // src/features/shows.js
+  var welcomeKey = () => `ft_welcome_${state.session.id}`;
+  var hasSaved = (rows) => (rows || []).some((c) => c.pick_count > 0);
+  function hasDraftFor(bracketId) {
+    var _a;
+    const pre = draftPrefix(bracketId);
+    try {
+      for (let i = 0; i < localStorage.length; i++) if ((_a = localStorage.key(i)) == null ? void 0 : _a.startsWith(pre)) return true;
+    } catch {
+    }
+    return false;
+  }
+  function welcomeDismissed() {
+    try {
+      return localStorage.getItem(welcomeKey()) === "1";
+    } catch {
+      return false;
+    }
+  }
+  var howToLines = () => [
+    `Before each show, pick the songs you think ${BAND_NAME} will play.`,
+    "Picks partly score in realtime and finalize once the setlist is in.",
+    "Standings update after every show.",
+    "Change your picks any time until the cutoff.",
+    "Scoring details are in The Rules under every pick sheet."
+  ];
+  function welcomeHtml(next) {
+    const row = currentBracket();
+    const links = communityLinks(row);
+    return `<div class="noticebox welcome" id="welcome-card">
+    <div class="welcome-head"><h2>Welcome to ${esc((row == null ? void 0 : row.league_name) || "")}</h2>
+      <button class="linkbtn welcome-x" onclick="dismissWelcome()" aria-label="Hide this card" title="Hide this card">\u2715</button></div>
+    <ul class="howto">${howToLines().map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
+    ${next ? `<div class="welcome-next" id="welcome-next"><span>Next cutoff: <b>${esc(next.venue || "TBA")}</b> \xB7 ${fmtCutoff(next.cutoff_at)}</span>
+      <button class="btn small" onclick="openShow(${Number(next.id)})">Make your picks</button></div>` : ""}
+    ${links.length ? `<div class="welcome-links">Community: ${links.map((k) => `<a href="${esc(k.url)}" target="_blank" rel="noopener noreferrer">${k.label}</a>`).join(" \xB7 ")}</div>` : ""}
+    <div id="welcome-install"></div>
+  </div>`;
+  }
+  function dismissWelcome() {
+    var _a;
+    try {
+      localStorage.setItem(welcomeKey(), "1");
+    } catch {
+    }
+    (_a = document.getElementById("welcome-card")) == null ? void 0 : _a.remove();
+    renderInstallSlots();
+  }
   function enterShowsTab() {
     if (state.currentShow) openShow(state.currentShow.id);
     else renderShows();
@@ -849,6 +1028,26 @@ Save anyway?`)) return;
       rpc("get_my_pick_counts", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId })
     ]);
     const savedCountOf = Object.fromEntries((myCounts || []).map((c) => [c.show_id, c.pick_count]));
+    let seenSaved = hasSaved(myCounts), newPlayer = false;
+    if (!seenSaved && !hasDraftFor(state.currentBracketId)) {
+      const other = bracketsForLeague(state.currentLeagueId).find((b) => b.bracket_id !== state.currentBracketId);
+      if (!other) newPlayer = true;
+      else if (!hasDraftFor(other.bracket_id)) {
+        try {
+          const oc = await rpc("get_my_pick_counts", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: other.bracket_id });
+          if (hasSaved(oc)) seenSaved = true;
+          else newPlayer = true;
+        } catch (e) {
+        }
+      }
+    }
+    if (seenSaved) {
+      try {
+        localStorage.setItem(firstSaveKey(), "1");
+      } catch {
+      }
+    }
+    const showWelcome = newPlayer && !welcomeDismissed();
     const pickButtonInfo = (s) => {
       const st = showState(s);
       const label = st === "open" ? "Pick" : "Score";
@@ -955,11 +1154,14 @@ Save anyway?`)) return;
     }
     $("#main").innerHTML = `
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
+    ${showWelcome ? welcomeHtml(upcoming.find((s) => showState(s) === "open")) : ""}
+    <div id="install-bar"></div>
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     ${liveNow.length ? `<div class="panel live-halo"><h2>Live</h2>${liveNow.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet \u2014 admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons([...extraRecent, ...past || []]) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;
+    renderInstallSlots();
     state.timers.push(setInterval(() => {
       document.querySelectorAll("[data-cd]").forEach((el) => {
         if (!el.dataset.cd) return;
@@ -1405,11 +1607,17 @@ Save anyway?`)) return;
   }
 
   // src/features/settings.js
+  function installTipsHtml() {
+    if (!installHelpPossible()) return "";
+    return `<label class="tips-switch"><input type="checkbox" id="install-tips" ${installDismissed() ? "" : "checked"}
+    onchange="setInstallTips(this.checked)"> Show install tips</label>`;
+  }
   function settingsPanelHtml() {
     return `<div class="panel"><h2>Settings</h2>
     <div class="field"><label>Bracket</label><div class="switcher" id="bracketToggle"></div></div>
     <div id="leagueSelect"></div>
     <div id="leagueLinks"></div>
+    ${installTipsHtml()}
     <p class="muted" style="margin-top:16px;font-weight:600">Change PIN</p>
     <div class="field"><label>Current PIN</label><input id="pin-current" inputmode="numeric" autocomplete="current-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
     <div class="field"><label>New PIN (4\u20138 digits)</label><input id="pin-new" inputmode="numeric" autocomplete="new-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
@@ -1422,7 +1630,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"1809a0b-8fc54e5"}</p>
+      <p class="colophon buildid">build ${"7b4f28f-503c56d"}</p>
     </div>
   </div>`;
   }
@@ -2797,8 +3005,14 @@ Switch anyway?`
     setRosterFilter,
     clearSyncFlag,
     switchToBracket,
-    switchToLeague
+    switchToLeague,
+    promptInstall,
+    dismissInstall,
+    toggleInstallHow,
+    setInstallTips,
+    dismissWelcome
   });
+  captureInstallPrompt();
   boot();
 })();
 //# sourceMappingURL=app.js.map

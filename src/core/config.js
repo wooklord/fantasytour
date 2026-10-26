@@ -18,6 +18,9 @@ export const RANKED_CHOICE_ENABLED = true;
 
 // Instance constants: name, branding, data source.
 export const APP_NAME = "Fantasy Eggy";
+// The band, for player-facing copy (the welcome card's how-to lines,
+// onboarding.md Batch 3). Feature code reads this, never a literal.
+export const BAND_NAME = "Eggy";
 export const THEME_COLOR_LIGHT = "#F4ECD9";
 export const THEME_COLOR_DARK  = "#171233";
 export const CARTON_SITE_BASE = "https://thecarton.net/setlists";

@@ -166,6 +166,20 @@ target is actually reached before trusting a check that names it.**
   check: if the only hits are a fake handler and a render assertion, the
   behaviour is untested no matter how well-covered the panel looks. Do this
   before trusting green on any control that writes or deletes.
+- **`.click()` on an `onclick`-ATTRIBUTE button does NOTHING in this
+  harness (found 2026-10-26, onboarding Batch 3).** jsdom runs inline
+  handler attributes only under `runScripts: "dangerously"`; the harness
+  uses `"outside-only"`. The click returns normally and nothing happens, so
+  a test that clicks such a button and then asserts "nothing changed" passes
+  for the wrong reason. Found because the first dump of the onboarding
+  scenario showed every dismiss, the Install button and "How?" as no-ops
+  while the app was correct. Buttons wired as a PROPERTY (`#save`'s
+  `onclick = savePicks`) do respond to `.click()`. **Use the `fire(el,
+  attr)` helper in `runOnboardingScenario`:** it runs the element's own
+  attribute text in the window's scope with `this` bound to the element,
+  the way a browser does, so a handler missing from `window` throws instead
+  of passing. Older scenarios call `window.<handler>()` directly and read
+  the attribute as a string, which proves the same two halves separately.
 
 ---
 

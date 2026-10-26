@@ -6,6 +6,17 @@ import { markTab } from "../core/layout.js";
 import { toast } from "../core/toast.js";
 import { renderBracketToggle, renderLeagueSelector, currentBracket } from "../core/switcher.js";
 import { communityBlockHtml } from "../core/community.js";
+import { installHelpPossible, installDismissed } from "../core/install.js";
+
+// "Show install tips" (onboarding.md Batch 3, item 3 amendment): the undo
+// for "Don't show again". Checked = tips allowed; unchecking sets the same
+// device flag. Absent where install help can never apply: running as the
+// installed app, or not a phone.
+function installTipsHtml(){
+  if (!installHelpPossible()) return "";
+  return `<label class="tips-switch"><input type="checkbox" id="install-tips" ${installDismissed() ? "" : "checked"}
+    onchange="setInstallTips(this.checked)"> Show install tips</label>`;
+}
 
 // Shared between the standalone Settings tab (non-admins) and a section
 // inside the Admin tab (admins) — one panel, two mounting points, so the
@@ -16,6 +27,7 @@ export function settingsPanelHtml(){
     <div class="field"><label>Bracket</label><div class="switcher" id="bracketToggle"></div></div>
     <div id="leagueSelect"></div>
     <div id="leagueLinks"></div>
+    ${installTipsHtml()}
     <p class="muted" style="margin-top:16px;font-weight:600">Change PIN</p>
     <div class="field"><label>Current PIN</label><input id="pin-current" inputmode="numeric" autocomplete="current-password" type="password" placeholder="••••"></div>
     <div class="field"><label>New PIN (4–8 digits)</label><input id="pin-new" inputmode="numeric" autocomplete="new-password" type="password" placeholder="••••"></div>

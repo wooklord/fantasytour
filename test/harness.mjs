@@ -8,9 +8,18 @@ function stripScripts(html){
   return html.replace(/<script[\s\S]*?<\/script>/gi, "");
 }
 
-function installGlobals(window, mode, tables, rpcHandlers, calls, dbHolder){
+// `env` (onboarding Batch 3) controls the device: `ua` replaces jsdom's own
+// agent (which reads as desktop, so every older scenario sees no install
+// help), `standalone` answers the display-mode query, `navStandalone` sets
+// iOS's navigator.standalone, `maxTouchPoints` sets touch support.
+function installGlobals(window, mode, tables, rpcHandlers, calls, dbHolder, env = {}){
+  const nav = (k, v) => Object.defineProperty(window.navigator, k, { value: v, configurable: true });
+  if (env.ua) nav("userAgent", env.ua);
+  if (env.navStandalone !== undefined) nav("standalone", env.navStandalone);
+  if (env.maxTouchPoints !== undefined) nav("maxTouchPoints", env.maxTouchPoints);
   window.matchMedia = (query) => ({
-    matches: query.includes("min-width:901px") ? mode === "desktop" : false,
+    matches: query.includes("display-mode: standalone") ? !!env.standalone
+      : query.includes("min-width:901px") ? mode === "desktop" : false,
     addEventListener(){}, removeEventListener(){}, addListener(){}, removeListener(){},
   });
   window.confirm = () => true;
@@ -2540,4 +2549,285 @@ export async function runEmptyLadderScenario({ html, scripts, mode }){
   try{ gateOk = await RPC_HANDLERS.admin_update_config({ p_bracket_id: n.ids.CASUAL_ID, p_data: { mode: "ranked_choice", ranked: { ladder: [3] } } }, n.tables); }
   catch(e){ gateOk = { error: e.message }; }
   return { noKey, emptyKey, notice, adminFlag, gateError, gateOk };
+}
+
+// Onboarding Batch 3 (docs/decisions/onboarding.md, decision 6: LOCKED,
+// AMENDED and APPROVED 2026-10-26): the welcome card, install help (the
+// card's "Get the app" section, the slim bar, the Settings undo) and the
+// first-save toast. Every load is a fresh JSDOM. jsdom cannot navigate, so
+// "reload" and "same device, another player" copy localStorage into the
+// next load. Players: p1 has saved Casual picks (base fixture); p2 has
+// none; p5 (a second no-picks member) and p6 (saved picks in OFFICIAL only,
+// for the league-wide derivation) are invented here. A real install,
+// prompt() and appinstalled cannot happen in jsdom: the fake events below
+// prove the wiring only (device checks in the record).
+export async function runOnboardingScenario({ html, scripts, mode }){
+  const UA = {
+    android: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36",
+    samsung: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36",
+    ios: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+    fbIos: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/470.0.0.40.98;FBBV/628475391;FBDV/iPhone15,2;FBMD/iPhone;FBSN/iOS;FBSV/17.5;FBSS/3;FBID/phone;FBLC/en_US;FBOP/5;FBRV/631152116]",
+    msgrAndroid: "Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/AP2A.240805.005; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/127.0.6533.103 Mobile Safari/537.36 [FB_IAB/Orca-Android;FBAV/468.0.0.54.108;]",
+    igIos: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 345.0.0.24.89 (iPhone15,2; iOS 17_5; en_US; en; scale=3.00; 1179x2556; 631484245)",
+    desktop: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+  };
+  const NAMES = { p1: "Wooklord", p2: "EggHead", p5: "Marigold", p6: "Quartz" };
+  async function load({ who = "p2", ua = UA.android, standalone = false, navStandalone, storage = {}, tweak = () => {}, tab = "shows" } = {}){
+    const { tables, ids } = makeFixtures();
+    tables.players_public.push({ id: "p5", name: NAMES.p5, created_at: "2026-01-05" }, { id: "p6", name: NAMES.p6, created_at: "2026-01-06" });
+    tables.league_members.push({ league_id: ids.LEAGUE_ID, player_id: "p5", is_league_admin: false, official_opt_in: true },
+                               { league_id: ids.LEAGUE_ID, player_id: "p6", is_league_admin: false, official_opt_in: true });
+    tables.picks.push({ player_id: "p6", bracket_id: ids.OFFICIAL_ID, show_id: 2, slot: "opener", songname: "Distraction" });
+    // One https link and one that must never become an href: the card goes
+    // through communityLinks(), the shared https-only guard.
+    tables.leagues[0].config = { fb_url: "https://example.com/group", discord_url: "javascript:void(0)" };
+    tweak(tables, ids);
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {}, { ua, standalone, navStandalone });
+    for (const [k, v] of Object.entries(storage)) w.localStorage.setItem(k, v);
+    w.localStorage.setItem("ft_session", JSON.stringify({ id: who, name: NAMES[who], pin: "1234", is_global_admin: false }));
+    w.localStorage.setItem("ft_bracket_id", String(ids.CASUAL_ID));
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    clickTab(w, tab);
+    await tick(); await tick(); await tick();
+    const d = w.document;
+    // jsdom runs inline handler ATTRIBUTES only under runScripts:"dangerously";
+    // this harness uses "outside-only", so .click() on an onclick-attribute
+    // button does nothing. fire() runs the element's own attribute text the
+    // way a browser does: in the window's global scope, `this` = the
+    // element. The attribute is the wiring under test, so a handler missing
+    // from window throws here instead of passing silently.
+    const fire = (el, attr = "onclick") => {
+      const code = el?.getAttribute(attr);
+      if (!code) return false;
+      new w.Function(code).call(el);
+      return true;
+    };
+    const attrs = el => el ? { text: el.textContent.trim(), label: el.getAttribute("aria-label"), title: el.getAttribute("title"), onclick: el.getAttribute("onclick") } : null;
+    const read = () => {
+      const card = d.getElementById("welcome-card"), sec = d.getElementById("install-section");
+      const bar = d.querySelector("#install-bar .installbar"), how = d.getElementById("install-how");
+      const tips = d.getElementById("install-tips");
+      return {
+        card: !!card,
+        heading: card?.querySelector("h2")?.textContent ?? null,
+        cardX: attrs(card?.querySelector(".welcome-x")),
+        howto: card ? [...card.querySelectorAll(".howto li")].map(li => li.textContent) : [],
+        next: d.getElementById("welcome-next")?.textContent.replace(/\s+/g, " ").trim() ?? null,
+        nextOnclick: d.querySelector("#welcome-next button")?.getAttribute("onclick") ?? null,
+        links: card ? [...card.querySelectorAll(".welcome-links a")].map(a => [a.textContent, a.getAttribute("href")]) : [],
+        section: !!sec,
+        sectionSteps: sec ? [...sec.querySelectorAll(".ih-step")].map(p => p.textContent) : [],
+        sectionInstall: sec?.querySelector(".ih-install")?.getAttribute("onclick") ?? null,
+        sectionDismiss: attrs(sec?.querySelector(".ih-dismiss")),
+        bar: !!bar,
+        barText: bar?.querySelector(".ib-text")?.textContent ?? null,
+        barX: attrs(bar?.querySelector(".ib-x")),
+        barHow: attrs(bar?.querySelector(".ib-how")),
+        howHidden: how ? how.classList.contains("hidden") : null,
+        howSteps: how ? [...how.querySelectorAll(".ih-step")].map(p => p.textContent) : [],
+        howInstall: how?.querySelector(".ih-install")?.getAttribute("onclick") ?? null,
+        tips: tips ? { checked: tips.checked, onchange: tips.getAttribute("onchange") } : null,
+        toasts: [...d.querySelectorAll("#toasts .toast")].map(t => t.textContent),
+      };
+    };
+    const storageNow = () => dumpLocalStorage(w);
+    // A clean re-render of the shows list, counting only its own pick-count calls.
+    const countRender = async () => {
+      const before = calls.length;
+      await w.renderShows(); await tick();
+      return calls.slice(before).filter(c => c.type === "rpc" && c.fn === "get_my_pick_counts").map(c => c.args.p_bracket_id);
+    };
+    const save = async song => {
+      w.openShow(1); await tick(); await tick(); await tick();
+      const input = d.querySelector(".slotline input");
+      if (!input) return false;
+      input.value = song;
+      input.dispatchEvent(new w.Event("input", { bubbles: true }));
+      await tick();
+      d.getElementById("save")?.click();
+      await tick(); await tick(); await tick();
+      return true;
+    };
+    // A fake beforeinstallprompt: cancelable, with the two members the app uses.
+    const firePrompt = () => {
+      const e = new w.Event("beforeinstallprompt", { cancelable: true });
+      const out = { prompted: 0, prevented: false };
+      e.prompt = () => { out.prompted++; return Promise.resolve(); };
+      e.userChoice = Promise.resolve({ outcome: "dismissed", platform: "web" });
+      w.dispatchEvent(e);
+      out.prevented = e.defaultPrevented;
+      return out;
+    };
+    const showsTab = async () => { clickTab(w, "shows"); await tick(); await tick(); await tick(); };
+    const settingsTab = async () => { clickTab(w, "admin"); await tick(); await tick(); await tick(); };
+    return { w, d, ids, read, storageNow, countRender, save, firePrompt, showsTab, settingsTab, fire };
+  }
+  const out = {};
+
+  // 1. A no-picks player on an Android phone: the full card, branch (b) in
+  //    its section, no bar while the section is on screen; its button opens
+  //    the show.
+  const a = await load({ who: "p2" });
+  out.ids = a.ids;
+  out.newPlayer = a.read();
+  out.newPlayerCalls = await a.countRender();
+  out.newPlayerFirstSave = a.storageNow()["ft_first_save_p2"] ?? null;
+  out.buttonFired = a.fire(a.d.querySelector("#welcome-next button"));
+  await tick(); await tick(); await tick();
+  out.buttonOpenedSheet = !!a.d.querySelector(".slotline input") && !!a.d.getElementById("save");
+
+  // 2. The derivation is league-wide and costs a returning player nothing.
+  const p1 = await load({ who: "p1" });
+  out.hasPicks = p1.read();
+  out.hasPicksCalls = await p1.countRender();
+  out.hasPicksFirstSave = p1.storageNow()["ft_first_save_p1"] ?? null;
+  const p6 = await load({ who: "p6" });
+  out.officialOnly = p6.read();
+  out.officialOnlyCalls = await p6.countRender();
+  out.officialOnlyFirstSave = p6.storageNow()["ft_first_save_p6"] ?? null;
+  const draftOther = await load({ who: "p2", storage: { [`ft_draft_p2_${a.ids.OFFICIAL_ID}_1`]: "{}" } });
+  out.draftOther = draftOther.read();
+  out.draftOtherCalls = await draftOther.countRender();
+  out.draftOtherFirstSave = draftOther.storageNow()["ft_first_save_p2"] ?? null;
+  const draftHere = await load({ who: "p2", storage: { [`ft_draft_p2_${a.ids.CASUAL_ID}_1`]: "{}" } });
+  out.draftHere = draftHere.read();
+
+  // 3. The empty case: no show open, so no deadline line and no button.
+  const closed = await load({ who: "p2", tweak: t => {
+    const ls = t.league_shows.find(x => x.show_id === 1);
+    ls.cutoff_at = new Date(Date.now() - 3600e3).toISOString(); ls.status = "locked";
+  } });
+  out.noOpenShow = closed.read();
+
+  // 4. The card's ✕ hides only the card, per player; the bar takes over at
+  //    once and after a reload (amended bar rule, decision 6).
+  const x = await load({ who: "p2" });
+  out.cardXFired = x.fire(x.d.querySelector(".welcome-x"));
+  await tick();
+  out.afterCardX = x.read();
+  out.afterCardXStorage = x.storageNow();
+  const xReload = await load({ who: "p2", storage: out.afterCardXStorage });
+  out.afterCardXReload = xReload.read();
+  const otherPlayer = await load({ who: "p5", storage: out.afterCardXStorage });
+  out.otherPlayerSameDevice = otherPlayer.read();
+
+  // 5. Standalone hides all install help and the Settings switch.
+  out.standaloneNew = (await load({ who: "p2", standalone: true })).read();
+  out.standalonePicks = (await load({ who: "p1", standalone: true })).read();
+  out.iosNavStandalone = (await load({ who: "p1", ua: UA.ios, navStandalone: true })).read();
+  const sSet = await load({ who: "p2", standalone: true });
+  await sSet.settingsTab();
+  out.standaloneSettings = sSet.read();
+  const pSet = await load({ who: "p2" });
+  await pSet.settingsTab();
+  out.phoneSettings = pSet.read();
+  const desk = await load({ who: "p2", ua: UA.desktop });
+  out.desktopNew = desk.read();
+  await desk.settingsTab();
+  out.desktopSettings = desk.read();
+  out.desktopPicks = (await load({ who: "p1", ua: UA.desktop })).read();
+
+  // 6. Each platform branch through the DOM.
+  out.branchIos = (await load({ who: "p2", ua: UA.ios })).read();
+  out.branchFbIos = (await load({ who: "p2", ua: UA.fbIos })).read();
+  out.branchMsgrAndroid = (await load({ who: "p2", ua: UA.msgrAndroid })).read();
+  out.branchIgIos = (await load({ who: "p2", ua: UA.igIos })).read();
+  out.branchSamsung = (await load({ who: "p2", ua: UA.samsung })).read();
+  const howIos = await load({ who: "p1", ua: UA.ios });
+  howIos.fire(howIos.d.querySelector("#install-bar .ib-how"));
+  out.barHowIos = howIos.read();
+
+  // 7. A captured prompt: the Install button calls prompt() once, then the
+  //    menu text takes over; appinstalled sets the flag (decision 4). A
+  //    dismissed or desktop device leaves the browser's own offer alone.
+  const pr = await load({ who: "p2" });
+  const ev = pr.firePrompt();
+  await tick();
+  out.prompt = { prevented: ev.prevented, before: pr.read() };
+  pr.fire(pr.d.querySelector("#install-section .ih-install"));
+  await tick(); await tick();
+  out.prompt.prompted = ev.prompted;
+  out.prompt.after = pr.read();
+  pr.w.dispatchEvent(new pr.w.Event("appinstalled"));
+  await tick();
+  out.prompt.installed = pr.read();
+  out.prompt.installedFlag = pr.storageNow()["ft_install_dismissed"] ?? null;
+  const prBar = await load({ who: "p1" });
+  prBar.firePrompt();
+  await tick();
+  out.promptInBar = prBar.read();
+  const prDismissed = await load({ who: "p2", storage: { ft_install_dismissed: "1" } });
+  out.promptWhenDismissed = { prevented: prDismissed.firePrompt().prevented };
+  await tick();
+  out.promptWhenDismissed.read = prDismissed.read();
+  const prDesk = await load({ who: "p2", ua: UA.desktop });
+  out.promptOnDesktop = { prevented: prDesk.firePrompt().prevented };
+
+  // 8. ONE permanent device flag (item 3 amendment).
+  //    a. From the bar: both gone, across a reload and for another player.
+  const db1 = await load({ who: "p1" });
+  db1.fire(db1.d.querySelector("#install-bar .ib-x"));
+  await tick();
+  out.barDismiss = { read: db1.read(), flag: db1.storageNow()["ft_install_dismissed"] ?? null };
+  const dev1 = db1.storageNow();
+  out.barDismissReload = (await load({ who: "p1", storage: dev1 })).read();
+  out.barDismissNewPlayer = (await load({ who: "p2", storage: dev1 })).read();
+  //    b. From the card's section: the bar never appears, even after the
+  //       card is closed, and not for a player with picks either.
+  const ds = await load({ who: "p2" });
+  ds.fire(ds.d.querySelector("#install-section .ih-dismiss"));
+  await tick();
+  out.sectionDismiss = { read: ds.read(), flag: ds.storageNow()["ft_install_dismissed"] ?? null };
+  ds.fire(ds.d.querySelector(".welcome-x"));
+  await tick();
+  out.sectionDismissThenCardX = ds.read();
+  out.sectionDismissPicksPlayer = (await load({ who: "p1", storage: ds.storageNow() })).read();
+  //    c. Logout, then a different player on the same device: still hidden.
+  const lo = await load({ who: "p1", storage: { ft_install_dismissed: "1" } });
+  lo.w.logout();
+  await tick();
+  const afterLogout = lo.storageNow();
+  out.logout = { sessionGone: !("ft_session" in afterLogout), flag: afterLogout["ft_install_dismissed"] ?? null };
+  out.logoutOtherPlayer = (await load({ who: "p2", storage: afterLogout })).read();
+  out.logoutSamePlayer = (await load({ who: "p1", storage: afterLogout })).read();
+  //    d. The Settings switch restores both, and unchecking dismisses again.
+  const sw = await load({ who: "p2", storage: { ft_install_dismissed: "1" } });
+  await sw.settingsTab();
+  out.switchBefore = sw.read();
+  const box = sw.d.getElementById("install-tips");
+  if (box){ box.checked = true; sw.fire(box, "onchange"); }
+  await tick();
+  out.switchOnFlag = sw.storageNow()["ft_install_dismissed"] ?? null;
+  await sw.showsTab();
+  out.switchOnShows = sw.read();
+  out.switchOnPicksPlayer = (await load({ who: "p1", storage: sw.storageNow() })).read();
+  await sw.settingsTab();
+  const box2 = sw.d.getElementById("install-tips");
+  if (box2){ box2.checked = false; sw.fire(box2, "onchange"); }
+  await tick();
+  out.switchOffFlag = sw.storageNow()["ft_install_dismissed"] ?? null;
+
+  // 9. The first-save toast: once per player per device, never for a player
+  //    the shows list has already seen with saved picks (decision 3).
+  const fs = await load({ who: "p2" });
+  out.firstSave = { saved: await fs.save("Distraction") };
+  out.firstSave.toasts1 = fs.read().toasts;
+  out.firstSave.flag = fs.storageNow()["ft_first_save_p2"] ?? null;
+  await fs.save("Rambling Boy");
+  out.firstSave.toasts2 = fs.read().toasts;
+  const fsDevice = fs.storageNow();
+  const fsReload = await load({ who: "p2", storage: fsDevice });
+  await fsReload.save("Space Oddity");
+  out.firstSave.reloadToasts = fsReload.read().toasts;
+  const fsOther = await load({ who: "p5", storage: fsDevice });
+  await fsOther.save("Distraction");
+  out.firstSave.otherPlayerToasts = fsOther.read().toasts;
+  const fsVet = await load({ who: "p1" });
+  await fsVet.save("Distraction");
+  out.firstSave.veteranToasts = fsVet.read().toasts;
+  return out;
 }

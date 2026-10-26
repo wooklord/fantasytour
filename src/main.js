@@ -5,9 +5,10 @@ import "./core/layout.js";
 import "./core/realtime.js";
 import { doLogin, doRegister, submitForcedPinChange } from "./features/auth.js";
 import { openShow, setScoresView } from "./features/picks.js";
-import { renderShows } from "./features/shows.js";
+import { renderShows, dismissWelcome } from "./features/shows.js";
 import { setBoardSeason, toggleTieGroup, setStatsSort } from "./features/standings.js";
 import { changeOwnPin } from "./features/settings.js";
+import { captureInstallPrompt, promptInstall, dismissInstall, toggleInstallHow, setInstallTips } from "./core/install.js";
 import {
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
   toggleFormat, saveCutoff, finalizeShow, reopenShow, toggleBans, unban, runEdge, bootPlayer,
@@ -30,6 +31,10 @@ Object.assign(window, {
   globalCreateLeague, globalSearchPlayers, globalAppointAdmin, globalResetPin,
   saveLeagueConfig, setRosterFilter, clearSyncFlag,
   switchToBracket, switchToLeague,
+  promptInstall, dismissInstall, toggleInstallHow, setInstallTips, dismissWelcome,
 });
 
+// Before boot(): beforeinstallprompt can fire at any point after load, and
+// a missed one is gone (onboarding.md Batch 3).
+captureInstallPrompt();
 boot();

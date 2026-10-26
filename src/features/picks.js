@@ -33,7 +33,15 @@ export const isWildcard = v => normSong(v) === "any debut";
 // the viewer's device happens to render with.
 const UNLOCKED_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
 
-export function draftKey(showId){ return `ft_draft_${state.session.id}_${state.currentBracketId}_${showId}`; }
+// One player's drafts in one bracket share this prefix; the shows list's
+// welcome-card derivation scans it for either of the league's brackets.
+export function draftPrefix(bracketId){ return `ft_draft_${state.session.id}_${bracketId}_`; }
+export function draftKey(showId){ return draftPrefix(state.currentBracketId) + showId; }
+// First-save toast flag (onboarding.md Batch 3, item 4): once per player per
+// device. The shows list also sets it silently whenever it sees saved picks
+// (approved decision 3), so only a genuinely new player gets the long toast.
+export function firstSaveKey(){ return `ft_first_save_${state.session.id}`; }
+const FIRST_SAVE_TOAST = "<b>Picks locked in ✔</b> Change them any time before cutoff. Scores show up on the show's Scores page after it ends.";
 
 // Scores-page View chip (standings-ux.md 2a, LOCKED 2026-10-25): "compact"
 // = every entry collapsed to name + points; "detail" = every entry open
@@ -418,7 +426,10 @@ export async function savePicks(){
   try{
     await rpc("submit_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:state.currentShow.id, p_picks:picks });
     localStorage.removeItem(draftKey(state.currentShow.id));
-    toast("Picks saved ✔", "score");
+    let first = false;
+    try { first = !localStorage.getItem(firstSaveKey()); localStorage.setItem(firstSaveKey(), "1"); } catch { first = false; }
+    if (first) toast(FIRST_SAVE_TOAST, "score", null, 10000);
+    else toast("Picks saved ✔", "score");
     // Re-open rather than leave the just-saved DOM in place — the sheet's
     // dirty markers/revert link were computed against the pre-save `mine`,
     // which is now stale (server has these exact values). openShow() clears
