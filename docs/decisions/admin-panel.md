@@ -32,6 +32,31 @@ consequences were invisible from where you acted.
   by pressing Save rules.** Same lesson as the `!/zero/i` assertion: an
   assertion whose two sides agree by construction proves nothing.
 
+**EMPTY RANKED LADDER — LOCKED 2026-10-26 (dev's call after the Green
+Eggs Casual incident; full record `docs/history/2026-10-26-casual-empty-ladder.md`).**
+The master switch carried a stored empty ladder through a flip to ranked
+mode while the rules region previewed the default ladder without saving
+it; the pick sheet then had zero rows and an empty Rules card. Four
+decisions, owned here because this entry owns `admin_update_config` and
+both save paths:
+1. **Server gate:** `admin_update_config` raises when `mode` is
+   `ranked_choice` and `ranked.ladder` is empty or missing. The client
+   checks stay as courtesy; the RPC is the gate.
+2. **`saveMasterSwitch` writes the ladder together with the mode** when
+   switching to ranked and the stored ladder is empty: from the editor if
+   it is rendered, else the default the region would display. Mode and
+   ladder land in ONE write — never a ranked mode without a ladder.
+3. **Render guard:** in ranked mode with an empty ladder the pick sheet
+   shows a notice naming the league admin instead of a bare "Lock 'em
+   in"; the admin ranked region flags an unsaved default ladder.
+4. **Tests, both the empty-set case the ranked scenario skipped:** flip
+   to ranked on a slots bracket with no `ranked` key, press nothing else,
+   open a show, assert rows or the notice; and assert that
+   `saveMasterSwitch`'s `admin_update_config` payload never carries
+   ranked mode with an empty ladder.
+Status: docs only as of 2026-10-26; the change plan (SQL Stage V, the
+client changes, the scenarios, three mutations) awaits approval.
+
 **The admin tab is GROUPED BY SCOPE and ordered by FREQUENCY within each
 group. The order is load-bearing — read this before reordering anything in
 `renderAdmin`.** Current order (revised late 2026-08-17; an earlier version
