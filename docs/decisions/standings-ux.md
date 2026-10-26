@@ -499,6 +499,15 @@
    board checks per mode), Player sort ignored (2 unit + 1 board), label
    reverted (1 unit + 1 board). Phone seam: the stacked rows' label
    column at 360px against a long name list is unmeasured here.
+   **Spacing fix, same day, CSS-only, bundle `a88fb44-1080130`** (dev's
+   call after the live look: the names ran into the value). Each
+   `.leader` is now a three-column grid — the label fixed at 7.2em, the
+   names left-aligned in a column that shrinks and wraps, the value in
+   its own right-aligned column at least 3ch wide — with 14px column
+   gaps, so no name touches the number even when the list wraps; "and N
+   more" stays in the names column by construction. The static
+   stylesheet check asserts the grid, the gap, the left/right alignments
+   and that the strip itself is not a grid. No markup or script change.
 
 ## Why these and not the alternatives
 

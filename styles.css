@@ -425,21 +425,24 @@ html[data-theme="light"] .panel.live-halo{
    empty span elsewhere, so inactive columns reserve no width at 360px);
    the active column's values go bold at full color. The leaders strip is
    STACKED ROWS (amendment 2026-10-26 — the 2×2 grid broke with three
-   chips or a long name): fixed-width small-caps label · every tied name
-   at full width (.nm, inline so a comma list wraps) · mono value right-
-   aligned. */
+   chips or a long name): a three-column grid — fixed-width small-caps
+   label · every tied name, left-aligned, in a column that shrinks and
+   wraps (.nm inline so a comma list wraps; "and N more" rides the last
+   line) · the mono value in ITS OWN right-aligned column, at least 3ch
+   wide, with a 14px gap so no name ever touches the number even when
+   the list wraps (spacing fix, same day, item 6 build note). */
 .lb th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
 .lb th .arrow{font-size:.6rem;margin-left:2px;vertical-align:middle}
 .lb th.active{color:var(--cream)}
 .lb td.active{font-weight:700;color:var(--cream)}
 .leaders{display:flex;flex-direction:column;margin:4px 0 10px;background:var(--pit);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.leader{display:flex;align-items:baseline;gap:8px;min-width:0;padding:6px 10px}
+.leader{display:grid;grid-template-columns:7.2em minmax(0,1fr) minmax(3ch,max-content);column-gap:14px;align-items:baseline;min-width:0;padding:6px 10px}
 .leader+.leader{border-top:1px dashed var(--dash)}
-.leader .lbl{flex:0 0 7.2em;font-size:.72rem;font-variant:small-caps;letter-spacing:.5px;color:var(--cream-dim)}
-.leader .who{flex:1 1 auto;min-width:0;font-size:.85rem;line-height:1.4}
+.leader .lbl{font-size:.72rem;font-variant:small-caps;letter-spacing:.5px;color:var(--cream-dim)}
+.leader .who{min-width:0;font-size:.85rem;line-height:1.4;text-align:left}
 .leader .who .nm{display:inline-block;max-width:100%;vertical-align:bottom}
 .leader .who small{color:var(--cream-dim);font-size:.72rem;margin-left:4px;white-space:nowrap}
-.leader b{flex:0 0 auto;font-family:var(--mono);font-size:.95rem;text-align:right}
+.leader b{font-family:var(--mono);font-size:.95rem;text-align:right;white-space:nowrap}
 /* Own row: an OUTLINE in --yolk, never a fill (docs/decisions/standings-ux.md
    decision 3) — per-show wins may later tint rows, and an outline can't
    collide with a fill. Inset box-shadows on the cells rather than
