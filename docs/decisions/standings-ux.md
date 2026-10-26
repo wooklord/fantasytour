@@ -170,9 +170,32 @@
    bracket). The tag line is TEXT, not a component: it takes the existing
    `.muted` style, whose light-theme ratio (3.85:1 on the panel) is a
    pre-existing board-wide condition, not introduced here.
-   **Status:** docs only as of 2026-10-26; the read-only survey and the
-   change plan were produced the same day and the plan awaits approval.
-   Nothing in `src/` has changed for this item.
+   **PLAN APPROVED 2026-10-26 (dev), with five decisions on the plan's
+   open points, each LOCKED:**
+   1. A partially resolved group (one member split off, the rest still
+      shared) gets ONE tag naming the FIRST splitting layer; the shared
+      sub-pair shows only by its equal ranks inside the sub-row. Nested
+      tags rejected as noise.
+   2. When the configured stack is empty (Casual, All time), the "+" is
+      omitted and muted text **"no tiebreakers set"** renders in its
+      place; there is no sub-row, since there is nothing to list.
+   3. The all-zero gate (`hasAnyScore`, shared with the placeholder
+      podium) stays: a fresh season shows no brackets and no tags.
+   4. **Bracket color LOCKED: `--mint`.** `--cream-dim` is recorded as the
+      REJECTED quieter option (it passed both themes; it lost on
+      salience, not contrast). The measurements and the ruled-out tokens
+      above stand as the record.
+   5. The glyph flips to "−" (U+2212) while a group is open, with
+      `aria-expanded` tracking it.
+   **Build shape as approved:** `groupTies(order, tiebreakers)` in
+   `src/core/tiebreak.js` (pure, unit-tested) returns one group per run
+   of equal-points rows; the board renders grouped rows with class `tg`,
+   the bracket as `border-left` on `tr.tg td:first-child` (a border, not
+   a box-shadow, so `.me`'s inset box-shadows on those same cells are
+   untouched), a tag row and a sub-row after each group, and
+   `toggleTieGroup(key)` on `window` flipping a module-level `Set` plus
+   the sub-row's `hidden` class in place, no refetch. No SQL in this
+   batch. Seven harness cases, five mutations.
 
 ## Why these and not the alternatives
 
