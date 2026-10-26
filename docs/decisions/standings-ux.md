@@ -115,7 +115,10 @@
    - **CSS ellipsis on every name cell** (standings rows and podium, Who's
      Picked, admin Members, no-league screen, header — every cell the
      survey finds), with the full name in a `title` attribute so it is
-     recoverable on long-press / hover.
+     recoverable on long-press / hover. *(Admin Members list: SUPERSEDED
+     2026-10-26 — member rows went two-line with the name at full width
+     and no truncation; `admin-panel.md` → "Members panel cleanup". Every
+     other cell above keeps the ellipsis.)*
    - **`register_player` rejects names over 20 characters after trim, for
      NEW registrations only**, with a clear error message. Server cap is
      the real gate; the client check is a courtesy.

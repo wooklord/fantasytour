@@ -526,14 +526,28 @@ export async function loadMembers(){
   // registered player regardless of league membership and let Boot fire
   // against people who weren't actually in this league. is_league_admin
   // restores the ★ marker the pre-2.0 build had.
+  //
+  // Row shape (admin-panel.md → "Members panel cleanup", LOCKED 2026-10-26,
+  // ROWS A): two lines. Line one: star or dot, the name at FULL WIDTH
+  // (.mname, deliberately not .nm — admin lists never truncate; the live
+  // 27-character names must read in full), the "admin" marker, and a
+  // "casual only" pill ONLY when official_opt_in is false. The old grey
+  // "Official" label went: once Stage F made opt-in the default it sat on
+  // nearly every row, said nothing, and wrapped the buttons. Line two:
+  // Reset PIN and Boot, right-aligned. The viewer's own row has no
+  // buttons, so it carries "you" on line one and no line two at all.
   const rows = await rpc("admin_list_members", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId });
+  const args = p => "'" + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + "'";
   $("#playerlist").innerHTML = (rows||[]).map(p => `
-    <div class="pickres hit"><span>${p.is_league_admin ? "★" : "·"}</span>
-      <span class="nm" title="${esc(p.name)}">${esc(p.name)}${p.official_opt_in ? ' <small class="muted">Official</small>' : ""}</span>
-      <span class="pt">${p.player_id===state.session.id ? '<small class="muted">you</small>'
-        : (p.is_league_admin ? '<small class="muted">admin</small> ' : '')
-          +'<button class="btn ghost small" onclick="resetMemberPin(\''+p.player_id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')">Reset PIN</button> '
-          +'<button class="btn ghost small" onclick="bootPlayer(\''+p.player_id+'\', \''+esc(p.name).replace(/'/g,"\\'")+'\')" style="border-color:var(--coral);color:var(--coral)">Boot</button>'}</span>
+    <div class="pickres hit member-row">
+      <div class="member-l1"><span class="member-mark">${p.is_league_admin ? "★" : "·"}</span><span class="mname" title="${esc(p.name)}">${esc(p.name)}</span>${
+        p.is_league_admin ? '<small class="muted">admin</small>' : ""}${
+        p.player_id===state.session.id ? '<small class="muted">you</small>' : ""}${
+        p.official_opt_in === false ? '<span class="pill casual-only">casual only</span>' : ""}</div>
+      ${p.player_id===state.session.id ? "" : `<div class="member-l2">
+        <button class="btn ghost small" onclick="resetMemberPin(${args(p)})">Reset PIN</button>
+        <button class="btn ghost small" onclick="bootPlayer(${args(p)})" style="border-color:var(--coral);color:var(--coral)">Boot</button>
+      </div>`}
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
   loadUnaffiliated();
 }

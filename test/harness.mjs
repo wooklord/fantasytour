@@ -2094,7 +2094,9 @@ export async function runLongNameScenario({ html, scripts, mode }){
   clickTab(w, "admin");
   await tick(); await tick(); await tick(); await tick();
   const roster = w.document.querySelector(`#roster .roster-row .nm[title="${LONG}"]`);
-  const member = w.document.querySelector(`#playerlist .nm[title="${LONG}"]`);
+  // Members rows use .mname (full width, never truncated — admin-panel.md
+  // → "Members panel cleanup"), not the ellipsis class .nm.
+  const member = w.document.querySelector(`#playerlist .mname[title="${LONG}"]`);
   return {
     LONG,
     cellText: cell?.textContent ?? null,
@@ -2254,5 +2256,50 @@ export async function runSyncFlagScenario({ html, scripts, mode }){
     tableFlagAfter: a.tables.shows[0].sync_flag,
     clearLog: a.tables.sync_flag_clears ?? [],
     none,
+  };
+}
+
+// Members panel rows (admin-panel.md → "Members panel cleanup", LOCKED
+// 2026-10-26, ROWS A). Boots the league admin (p1) and reads #playerlist
+// structurally: per row the mark, the name (text and title), the small
+// markers on line one, the pill, the line-two buttons and their onclick
+// wiring, and whether the word "Official" appears anywhere in the row.
+// p2 is the fixture's one official_opt_in:false member (since Stage A) —
+// the only row that may carry the pill. A 27-character invented name on
+// p4 proves the name class is the full-width .mname, not the truncating
+// .nm. jsdom cannot measure width; scenario.test.mjs checks the
+// stylesheet statically alongside.
+export async function runMembersPanelScenario({ html, scripts, mode }){
+  const LONG = "Eggbertinawellingtonthe3rdX";
+  const { tables } = makeFixtures();
+  tables.players_public.find(p => p.id === "p4").name = LONG;
+  const calls = [];
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const w = dom.window;
+  installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+  w.localStorage.setItem("ft_session", JSON.stringify({ id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+  for (const src of scripts) w.eval(src);
+  await tick(); await tick();
+  clickTab(w, "admin");
+  await tick(); await tick(); await tick(); await tick();
+  const list = w.document.getElementById("playerlist");
+  const rows = list ? [...list.querySelectorAll(".member-row")] : [];
+  return {
+    LONG,
+    rowCount: rows.length,
+    legacyRows: list ? list.querySelectorAll(".pickres:not(.member-row)").length : -1,
+    rows: rows.map(r => ({
+      mark: r.querySelector(".member-mark")?.textContent ?? null,
+      name: r.querySelector(".mname")?.textContent ?? null,
+      title: r.querySelector(".mname")?.getAttribute("title") ?? null,
+      usesNm: !!r.querySelector(".nm"),
+      markers: [...r.querySelectorAll(".member-l1 small")].map(s => s.textContent),
+      pill: r.querySelector(".pill")?.textContent ?? null,
+      pillClass: r.querySelector(".pill")?.className ?? null,
+      official: /Official/.test(r.textContent),
+      lineTwo: !!r.querySelector(".member-l2"),
+      buttons: [...r.querySelectorAll(".member-l2 button")].map(b => b.textContent.trim()),
+      onclicks: [...r.querySelectorAll(".member-l2 button")].map(b => b.getAttribute("onclick") ?? ""),
+    })),
   };
 }

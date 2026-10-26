@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -174,6 +174,38 @@ async function runMode(mode){
   check("Members panel offers Reset PIN per member (Session 4 step 4)",
     admin && /resetMemberPin/.test(admin.html),
     `admin html: ${admin?.html}`);
+
+  // Members panel cleanup (admin-panel.md → "Members panel cleanup",
+  // LOCKED 2026-10-26, ROWS A). Structural read of #playerlist, own boot.
+  const mp = await runMembersPanelScenario({ html, scripts, mode });
+  const mrow = name => mp.rows.find(r => r.name === name);
+  const S = v => JSON.stringify(v);
+  check("members list renders every member as a two-line .member-row (no legacy single-line rows) and the word 'Official' appears on NONE of them",
+    mp.rowCount === 3 && mp.legacyRows === 0 && mp.rows.every(r => r.official === false),
+    `rows: ${S(mp.rows)} legacy: ${mp.legacyRows}`);
+  check("'casual only' renders as a .pill ONLY on the official_opt_in:false member (the fixture's second member), and on no other row",
+    mrow("EggHead")?.pill === "casual only" && /\bpill\b/.test(mrow("EggHead")?.pillClass || "")
+      && mrow("Wooklord")?.pill === null && mrow(mp.LONG)?.pill === null,
+    `pills: ${S(mp.rows.map(r => [r.name, r.pill]))}`);
+  check("the league admin's row keeps its ★ and the 'admin' marker on line one; non-admin rows get the dot and no 'admin' marker",
+    mrow("Wooklord")?.mark === "★" && mrow("Wooklord")?.markers.includes("admin")
+      && mrow("EggHead")?.mark === "·" && !mrow("EggHead")?.markers.includes("admin")
+      && mrow(mp.LONG)?.mark === "·" && !mrow(mp.LONG)?.markers.includes("admin"),
+    `marks: ${S(mp.rows.map(r => [r.name, r.mark, r.markers]))}`);
+  // Stylesheet read here rather than via the `css` declared further down
+  // this function (a const — referencing it earlier is a TDZ error).
+  const cssText = readFileSync(join(root, "styles.css"), "utf8");
+  check("names are not truncated: a 27-character name renders in full with the full name in title through .mname, no row uses the ellipsis class .nm, and the stylesheet gives .mname no ellipsis/nowrap while .member-row stacks its two lines",
+    mrow(mp.LONG)?.name === mp.LONG && mrow(mp.LONG)?.title === mp.LONG && mp.rows.every(r => r.usesNm === false)
+      && /\.mname\{[^}]*\}/.test(cssText) && !/\.mname\{[^}]*(ellipsis|nowrap)/.test(cssText)
+      && /\.pickres\.member-row\{flex-direction:column/.test(cssText),
+    `long: ${S(mrow(mp.LONG))} usesNm: ${S(mp.rows.map(r => r.usesNm))}`);
+  check("line two holds Reset PIN and Boot wired to resetMemberPin/bootPlayer with the player id for every other member; the viewer's own row shows 'you' on line one and renders no line two",
+    S(mrow("EggHead")?.buttons) === S(["Reset PIN", "Boot"])
+      && /^resetMemberPin\('p2', /.test(mrow("EggHead")?.onclicks[0] || "") && /^bootPlayer\('p2', /.test(mrow("EggHead")?.onclicks[1] || "")
+      && S(mrow(mp.LONG)?.buttons) === S(["Reset PIN", "Boot"])
+      && mrow("Wooklord")?.lineTwo === false && mrow("Wooklord")?.buttons.length === 0 && mrow("Wooklord")?.markers.includes("you"),
+    `buttons: ${S(mp.rows.map(r => [r.name, r.lineTwo, r.buttons, r.onclicks, r.markers]))}`);
 
   check("Seasons panel has a manage-roster control per saved season",
     admin && /manage roster/.test(admin.html),

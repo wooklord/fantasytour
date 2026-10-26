@@ -507,6 +507,20 @@ html[data-theme="light"] .panel.live-halo{
 .pickres .pt{margin-left:auto;font-family:var(--mono)}
 .pickres.hit .pt{color:var(--mint)}
 .pickres.miss{opacity:.55}
+/* Members list rows (docs/decisions/admin-panel.md → "Members panel
+   cleanup", LOCKED 2026-10-26, ROWS A): two lines. The name is .mname,
+   deliberately NOT .nm — admin lists never truncate, the live
+   27-character names must read in full (overflow-wrap only as a safety
+   net for something absurd). Line two holds the two actions, right-
+   aligned. Padding and gap kept tight so two lines cost little more than
+   the one line they replace; the dashed divider makes each two-line row
+   read as one unit. Every other .pickres list stays single-line. */
+.pickres.member-row{flex-direction:column;align-items:stretch;gap:3px;padding:5px 0;border-bottom:1px dashed var(--dash)}
+.member-l1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.member-mark{flex:0 0 auto}
+.mname{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.member-l1 .pill.casual-only{font-size:.66rem;padding:1px 8px}
+.member-l2{display:flex;justify-content:flex-end;gap:6px}
 
 /* ---------- forms / auth / admin ---------- */
 .field{margin:12px 0}

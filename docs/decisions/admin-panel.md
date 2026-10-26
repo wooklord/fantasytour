@@ -153,3 +153,52 @@ genuinely one-shot is the PIN *string*, not the account state.
 - Scale note: the pair renders once per member row, so at Ambassadors' 14
   members that is 13 of each on screen at once; at ~50 it is ~98 destructive
   buttons in a flat list.
+
+**Members panel cleanup — LOCKED 2026-10-26 (dev's call, after Stage F
+and the live look).** Three parts:
+1. **The grey "Official" label on member rows is REMOVED.** Since Stage F
+   (default TRUE, applied 2026-10-26) it appears on nearly every row and
+   carries no information; it was also the main cause of the action
+   buttons wrapping. The exception is now what is shown: a small muted
+   pill **"casual only"** on rows where `official_opt_in` is false.
+   **Reason, recorded:** the label was right when opt-in was the
+   exception and wrong once it became the default — a marker only
+   informs when it is rare.
+2. **Row layout — ROWS A:** member rows become two lines. Line one: the
+   admin star or dot, the name at full width (**no truncation in admin
+   lists** — existing 27-character names must fit), the "admin" marker
+   and the "casual only" pill. Line two: Reset PIN and Boot,
+   right-aligned. Vertical padding tightened so the list does not double
+   in height for nothing. **Rejected alternative (ROWS B):** one line
+   with the name flexing to full width and a single "⋯" actions button
+   toggling a row beneath with Reset PIN and Boot, one open at a time.
+   Build-time call, stated: the viewer's own row has no buttons, so it
+   keeps the "you" marker on line one and renders no line two — a second
+   line holding only "you" is exactly the "for nothing" height this
+   decision forbids.
+3. **Other `.pickres` admin lists** (member search results, the
+   unaffiliated panel, the global console, the season-roster override,
+   the ban list) have a single action and stay single-line; they pick up
+   the Official-label change only if they show it. Survey 2026-10-26:
+   none of them renders the label — only the members list did.
+Scope: the members-list render (`loadMembers`, `admin.js`), its CSS, and
+the harness readers/assertions for the members panel. Asserted: no
+"Official" text on any member row; "casual only" only for a false flag
+(the fixture's second member has carried `official_opt_in: false` since
+Stage A, so no new fixture row was needed); the admin row keeps its
+star; names are not truncated (the Members list uses its own name class,
+not `.nm` — `standings-ux.md` decision 4's "ellipsis on … admin Members"
+is superseded for this list by this entry, and says so). One mutation:
+pill shown for true instead of false. The Reset PIN / Boot signalling
+note above is unchanged by this.
+**BUILT 2026-10-26, bundle `2b1f242-faecd95`.** `loadMembers` renders
+`.pickres.member-row` with `.member-l1` (mark, `.mname`, markers, pill)
+and `.member-l2` (the two buttons), none for the viewer's own row; CSS
+under the `.pickres` block; `runMembersPanelScenario` in the harness
+reads the list structurally, and the long-name scenario's Members
+selector moved from `.nm` to `.mname`. Mutation result: with the pill
+keyed on `true`, it rendered on the two opted-in rows and not on the
+opted-out one, and the pill check failed in both modes. Also fixed
+while building: the new static-CSS check first referenced `runMode`'s
+`css` const before its declaration (a TDZ crash, not a failure) and now
+reads the stylesheet itself.

@@ -1283,7 +1283,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"d86d949-20c0cae"}</p>
+      <p class="colophon buildid">build ${"2b1f242-faecd95"}</p>
     </div>
   </div>`;
   }
@@ -1744,10 +1744,14 @@ Relay this to them now \u2014 it will not be shown again.`);
   }
   async function loadMembers() {
     const rows = await rpc("admin_list_members", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId });
+    const args = (p) => "'" + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + "'";
     $("#playerlist").innerHTML = (rows || []).map((p) => `
-    <div class="pickres hit"><span>${p.is_league_admin ? "\u2605" : "\xB7"}</span>
-      <span class="nm" title="${esc(p.name)}">${esc(p.name)}${p.official_opt_in ? ' <small class="muted">Official</small>' : ""}</span>
-      <span class="pt">${p.player_id === state.session.id ? '<small class="muted">you</small>' : (p.is_league_admin ? '<small class="muted">admin</small> ' : "") + `<button class="btn ghost small" onclick="resetMemberPin('` + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')">Reset PIN</button> <button class="btn ghost small" onclick="bootPlayer('` + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + `')" style="border-color:var(--coral);color:var(--coral)">Boot</button>`}</span>
+    <div class="pickres hit member-row">
+      <div class="member-l1"><span class="member-mark">${p.is_league_admin ? "\u2605" : "\xB7"}</span><span class="mname" title="${esc(p.name)}">${esc(p.name)}</span>${p.is_league_admin ? '<small class="muted">admin</small>' : ""}${p.player_id === state.session.id ? '<small class="muted">you</small>' : ""}${p.official_opt_in === false ? '<span class="pill casual-only">casual only</span>' : ""}</div>
+      ${p.player_id === state.session.id ? "" : `<div class="member-l2">
+        <button class="btn ghost small" onclick="resetMemberPin(${args(p)})">Reset PIN</button>
+        <button class="btn ghost small" onclick="bootPlayer(${args(p)})" style="border-color:var(--coral);color:var(--coral)">Boot</button>
+      </div>`}
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
     loadUnaffiliated();
   }
