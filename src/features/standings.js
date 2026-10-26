@@ -345,19 +345,22 @@ export async function renderBoard(){
   const tieGroups = hasAnyScore ? groupTies(order, tiebreakers) : [];
   const tgInfo = new Map();
   for (const g of tieGroups) g.members.forEach((m, k) => tgInfo.set(m.id, { g, first: k === 0, last: k === g.members.length - 1 }));
-  // Tag row: "Tie for <place> · decided by <every layer that split anyone,
+  // Tag row: "Tie for <place> decided: <every layer that split anyone,
   // & -joined in stack order; 'all N tiebreaks' when the whole stack was
-  // used — amendment A>" or "· shared", then the "+" / "−" expander
-  // (U+2212 while open — decision 5). With no configured
+  // used — amendment A; the terse frame is amendment C, after a two-name
+  // tag wrapped on a phone>" or "Tie for <place> · shared", then the "+"
+  // / "−" expander (U+2212 while open — decision 5). With no configured
   // stack (Casual, All time) the muted "no tiebreakers set" takes the
   // expander's place and there is no sub-row at all (decision 2).
   const tagRow = g => {
     const open = expandedTieGroups.has(g.key);
-    const how = g.shared ? "shared" : `decided by ${esc(decidedByText(g.decidingAll, tiebreakers.length))}`;
+    const tag = g.shared
+      ? `Tie for ${ordinal(g.place)} · shared`
+      : `Tie for ${ordinal(g.place)} decided: ${esc(decidedByText(g.decidingAll, tiebreakers.length))}`;
     const ctl = tiebreakers.length
       ? `<button class="linkbtn tg-plus" onclick="toggleTieGroup('${g.key}')" aria-expanded="${open}" aria-controls="tg-sub-${g.key}" title="${open ? "Hide" : "Show"} tiebreaker values">${open ? "−" : "+"}</button>`
       : `<span class="muted tg-none">no tiebreakers set</span>`;
-    return `<tr class="tg-tag" data-tg="${g.key}"><td colspan="3"><span class="muted tg-text">Tie for ${ordinal(g.place)} · ${how}</span>${ctl}</td></tr>`;
+    return `<tr class="tg-tag" data-tg="${g.key}"><td colspan="3"><span class="muted tg-text">${tag}</span>${ctl}</td></tr>`;
   };
   // Sub-row — LAYOUT B (correction 2026-10-26; the first flex-chip layout
   // did not read on a phone). A GRID: a header row of short layer labels

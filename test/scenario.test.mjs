@@ -980,9 +980,9 @@ async function runMode(mode){
   // 3a facts — no chip, no setBoardView, leftover key inert — ride along.
   const tb = await runStandingsTiebreakScenario({ html, scripts, mode });
   const c = tb.collapsed;
-  check("resolved tie, collapsed by default: both rows carry tg (first/last) under one key, ONE tag 'Tie for 1st · decided by Fewest Zeros' with '+' (aria-expanded=false) wired to toggleTieGroup, the sub-row present but hidden, NO lines in any name cell; the Tiebreakers footer is Title Case; no chip, no setBoardView",
+  check("resolved tie, collapsed by default: both rows carry tg (first/last) under one key, ONE tag 'Tie for 1st decided: Fewest Zeros' (amendment C wording) with '+' (aria-expanded=false) wired to toggleTieGroup, the sub-row present but hidden, NO lines in any name cell; the Tiebreakers footer is Title Case; no chip, no setBoardView",
     c.tgRows.length === 2 && c.tgRows[0].first && !c.tgRows[0].last && c.tgRows[1].last && !c.tgRows[1].first && c.tgRows.every(r => r.key === "5-1")
-      && c.tags.length === 1 && c.tags[0].text === "Tie for 1st · decided by Fewest Zeros" && c.tags[0].plus === "+" && c.tags[0].expanded === "false"
+      && c.tags.length === 1 && c.tags[0].text === "Tie for 1st decided: Fewest Zeros" && c.tags[0].plus === "+" && c.tags[0].expanded === "false"
       && /^Tiebreakers1st: Fewest Zeros$/.test(c.footer)
       && c.tags[0].onclick === "toggleTieGroup('5-1')" && c.tags[0].none === null
       && c.subs.length === 1 && c.subs[0].hidden === true && c.nameCellDivs === 0 && c.names.length === 2
@@ -1032,8 +1032,8 @@ async function runMode(mode){
   // the group first broke); Most Wins (split nobody) gets neither.
   // Footer Title Case (amendment B).
   const tsub = tb.three.subs[0];
-  check("three-way, three-layer stack: ONE tag 'Tie for 1st · decided by High Score & Fewest Zeros'; High Score header tinted AND marked, Fewest Zeros header marked but NOT tinted, Most Wins neither; cells — High Score tinted for all three, Fewest Zeros tinted for the pair only, the split-off player's Fewest Zeros cell plain, Most Wins plain; ranks 1/2/3; footer '1st: High Score · 2nd: Fewest Zeros · 3rd: Most Wins'",
-    tb.three.tags.length === 1 && tb.three.tags[0].text === "Tie for 1st · decided by High Score & Fewest Zeros" && tb.three.tgRows.length === 3
+  check("three-way, three-layer stack: ONE tag 'Tie for 1st decided: High Score & Fewest Zeros' (amendment C wording); High Score header tinted AND marked, Fewest Zeros header marked but NOT tinted, Most Wins neither; cells — High Score tinted for all three, Fewest Zeros tinted for the pair only, the split-off player's Fewest Zeros cell plain, Most Wins plain; ranks 1/2/3; footer '1st: High Score · 2nd: Fewest Zeros · 3rd: Most Wins'",
+    tb.three.tags.length === 1 && tb.three.tags[0].text === "Tie for 1st decided: High Score & Fewest Zeros" && tb.three.tgRows.length === 3
       && J(tb.three.tgRows.map(r => r.rank)) === J(["1", "2", "3"])
       && /^Tiebreakers1st: High Score · 2nd: Fewest Zeros · 3rd: Most Wins$/.test(tb.three.footer)
       && J(tsub?.headers) === J([{ layer: "highest_single_show", label: "High Score", deciding: true, decidedMark: true },

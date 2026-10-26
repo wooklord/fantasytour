@@ -1335,9 +1335,9 @@ Save anyway?`)) return;
     for (const g of tieGroups) g.members.forEach((m, k) => tgInfo.set(m.id, { g, first: k === 0, last: k === g.members.length - 1 }));
     const tagRow = (g) => {
       const open = expandedTieGroups.has(g.key);
-      const how = g.shared ? "shared" : `decided by ${esc(decidedByText(g.decidingAll, tiebreakers.length))}`;
+      const tag = g.shared ? `Tie for ${ordinal(g.place)} \xB7 shared` : `Tie for ${ordinal(g.place)} decided: ${esc(decidedByText(g.decidingAll, tiebreakers.length))}`;
       const ctl = tiebreakers.length ? `<button class="linkbtn tg-plus" onclick="toggleTieGroup('${g.key}')" aria-expanded="${open}" aria-controls="tg-sub-${g.key}" title="${open ? "Hide" : "Show"} tiebreaker values">${open ? "\u2212" : "+"}</button>` : `<span class="muted tg-none">no tiebreakers set</span>`;
-      return `<tr class="tg-tag" data-tg="${g.key}"><td colspan="3"><span class="muted tg-text">Tie for ${ordinal(g.place)} \xB7 ${how}</span>${ctl}</td></tr>`;
+      return `<tr class="tg-tag" data-tg="${g.key}"><td colspan="3"><span class="muted tg-text">${tag}</span>${ctl}</td></tr>`;
     };
     const subRow = (g) => {
       if (!tiebreakers.length) return "";
@@ -1391,7 +1391,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"4a21ea3-4b00b5e"}</p>
+      <p class="colophon buildid">build ${"49c5461-d08e486"}</p>
     </div>
   </div>`;
   }

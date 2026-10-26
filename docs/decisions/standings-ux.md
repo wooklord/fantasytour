@@ -349,6 +349,24 @@
    the Fewest Zeros header came back tinted and the three-way check
    failed in both modes; revert byte-identical, bundle matched the index
    after the rebuild. Scope held to `subRow` and the tests.
+   **AMENDMENT C 2026-10-26 (dev's call after a two-name tag wrapped on
+   the phone) — tag wording.** The decided form drops the dot and "by":
+   **"Tie for 5th decided: High Score & Fewest Zeros"**, and the collapse
+   reads **"Tie for 5th decided: all 3 tiebreaks"**. The shared form is
+   unchanged: **"Tie for 5th · shared"**. `decidedByText` is unchanged
+   (it returns the list or the collapse); `tagRow` carries the new frame.
+   Scope: `tagRow` and the assertions that match the old text. One
+   mutation: old wording restored.
+   **AMENDMENT C BUILT 2026-10-26, bundle `49c5461-d08e486`** (its own
+   commit, after the Stats batch). `tagRow` builds the whole tag — "Tie
+   for <place> · shared" or "Tie for <place> decided: <text>";
+   `decidedByText` untouched. The resolved-pair and three-way checks
+   assert the new text. Mutation result: with the old frame restored the
+   tags read "Tie for 1st · decided by …" and both checks failed in both
+   modes; revert byte-identical, bundle matched the index after the
+   rebuild. **Phone seam, stated:** whether a two-name tag plus the "+"
+   now fits one line at 360px is the point of this amendment and is
+   unmeasured here.
 
 6. **LOCKED 2026-10-26 — Stats section rework (the standings tab's
    "Nerd stats").**
