@@ -154,6 +154,27 @@ same day, before any code; sibling record for the same batch:
   on the `.roster-row.miss .nm` rule failed the static stylesheet check
   in both modes; revert verified byte-identical, bundle matched the
   index after the rebuild.
+- **Refinement 2026-10-26, PILL (dev's call): the no-picks status pill
+  reads "Waiting on"** (was "No picks" — redundant with line two's "no
+  picks yet") **and is styled coral**, border and text, the same
+  construction as the other pills, completing a three-rung ladder: Done
+  mint, Partial yolk, Waiting coral. **Rejected:** yolk (Partial owns it)
+  and plain white (no signal). **The pill is EXEMPT from the status-parts
+  dim** added earlier today: the mark and line two stay at 55%, the pill
+  renders full strength. Line two's "no picks yet" is unchanged, and so
+  is the row's `data-status="none"` (the status key; only the pill's
+  class and text changed — `.pill.none` → `.pill.waiting`). Scope: CSS,
+  the one pill template in `admin.js`, the harness. One mutation: the
+  waiting pill left inside the dim list.
+  **BUILT 2026-10-26, bundle `df9753e-0507543`.** The dim rule now lists
+  exactly the first span and `.roster-l2`; `.pill.none{opacity:.8}` is
+  gone and `.pill.waiting` is coral border+text. Harness: the Who's
+  Picked check asserts "Waiting on" with class `.pill.waiting` and no
+  `.none`, line two unchanged; the static check asserts the narrowed dim
+  list, no roster-row rule dimming `.pill`, the coral rule present and
+  `.pill.none` absent. Mutation result: the pill re-added to the dim
+  list failed the static check in both modes; revert byte-identical,
+  bundle matched the index after the rebuild.
 
 ---
 

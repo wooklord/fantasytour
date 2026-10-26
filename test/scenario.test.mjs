@@ -1080,11 +1080,13 @@ async function runMode(mode){
   // Who's Picked
   const wp = await runWhosPickedScenario({ html, scripts, mode });
   const rowOf = (r, name) => r.rows.find(x => x.name === name);
-  check("Who's Picked opens on Needs picks and lists Partial (2 of 5), the 1-pick Partial, and No picks rows with pills",
+  check("Who's Picked opens on Needs picks and lists Partial (2 of 5), the 1-pick Partial, and the no-picks row with its 'Waiting on' pill (class .pill.waiting, not .none), line two still 'no picks yet'",
     wp.show1Needs.on.length === 1 && wp.show1Needs.on[0] === "Needs picks" && wp.show1Needs.rows.length === 3
       && rowOf(wp.show1Needs, "Wooklord")?.status === "partial" && rowOf(wp.show1Needs, "Wooklord")?.pill === "Partial"
+      && /\bpartial\b/.test(rowOf(wp.show1Needs, "Wooklord")?.pillClass || "")
       && rowOf(wp.show1Needs, "EggHead")?.status === "partial"
-      && rowOf(wp.show1Needs, "GlobalAdmin")?.status === "none" && rowOf(wp.show1Needs, "GlobalAdmin")?.pill === "No picks"
+      && rowOf(wp.show1Needs, "GlobalAdmin")?.status === "none" && rowOf(wp.show1Needs, "GlobalAdmin")?.pill === "Waiting on"
+      && /\bwaiting\b/.test(rowOf(wp.show1Needs, "GlobalAdmin")?.pillClass || "") && !/\bnone\b/.test(rowOf(wp.show1Needs, "GlobalAdmin")?.pillClass || "")
       && rowOf(wp.show1Needs, "GlobalAdmin")?.l2 === "no picks yet",
     `on: ${JSON.stringify(wp.show1Needs.on)} rows: ${JSON.stringify(wp.show1Needs.rows)}`);
   check("line two keeps the verbatim 'n picks · saved <when>' text, singular for exactly one pick",
@@ -1111,13 +1113,16 @@ async function runMode(mode){
       && rowOf(wp.show1Needs, "GlobalAdmin")?.nameIsFirstSpan === false
       && rowOf(wp.show1Needs, "Wooklord")?.miss === false && rowOf(wp.show2All, "Wooklord")?.miss === false,
     `rows: ${JSON.stringify(wp.show1Needs.rows.map(r => [r.name, r.status, r.miss, r.nameInDimmed, r.nameIsFirstSpan]))}`);
-  check("stylesheet, statically: no bare .pickres.miss opacity rule on the row; the row dim survives only as .pickres.miss:not(.roster-row) for the other lists; .roster-row.miss dims exactly its first span, .pill and .roster-l2; .roster-row.miss .nm is pinned to opacity:1 at full color; and no roster-row rule dims .nm",
+  check("stylesheet, statically: no bare .pickres.miss opacity rule on the row; the row dim survives only as .pickres.miss:not(.roster-row) for the other lists; .roster-row.miss dims EXACTLY its first span and .roster-l2 (the pill is exempt); .roster-row.miss .nm is pinned to opacity:1 at full color; no roster-row rule dims .nm or .pill; .pill.waiting is coral border+text and .pill.none is gone",
     !/\.pickres\.miss\{[^}]*opacity/.test(css)
       && /\.pickres\.miss:not\(\.roster-row\)\{opacity:\.55\}/.test(css)
-      && /\.pickres\.roster-row\.miss > span:first-child,\.pickres\.roster-row\.miss \.pill,\.pickres\.roster-row\.miss \.roster-l2\{opacity:\.55\}/.test(css)
+      && /\.pickres\.roster-row\.miss > span:first-child,\.pickres\.roster-row\.miss \.roster-l2\{opacity:\.55\}/.test(css)
       && /\.pickres\.roster-row\.miss \.nm\{opacity:1;color:var\(--cream\)\}/.test(css)
-      && !/roster-row[^{]*\.nm[^{]*\{[^}]*opacity:(0?\.\d+|0)\b/.test(css),
-    "styles.css: .pickres.miss / .pickres.roster-row.miss rules");
+      && !/roster-row[^{]*\.nm[^{]*\{[^}]*opacity:(0?\.\d+|0)\b/.test(css)
+      && !/roster-row[^{]*\.pill[^{]*\{[^}]*opacity:(0?\.\d+|0)\b/.test(css)
+      && /\.pill\.waiting\{border-color:var\(--coral\);color:var\(--coral\)\}/.test(css)
+      && !/\.pill\.none\{/.test(css),
+    "styles.css: .pickres.miss / .pickres.roster-row.miss / .pill.waiting rules");
 
   // (4) registration cap
   const reg = await runRegisterLengthScenario({ html, scripts, mode });

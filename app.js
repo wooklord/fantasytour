@@ -1283,7 +1283,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"cb905bf-b660a59"}</p>
+      <p class="colophon buildid">build ${"df9753e-0507543"}</p>
     </div>
   </div>`;
   }
@@ -2077,7 +2077,7 @@ Switch anyway?`
       ]);
       const target = slotDefs(show == null ? void 0 : show.format).length;
       const statusOf = (r) => target > 0 && r.picks_count >= target ? "done" : r.picks_count > 0 ? "partial" : "none";
-      const PILL = { done: ["done", "Done"], partial: ["partial", "Partial"], none: ["none", "No picks"] };
+      const PILL = { done: ["done", "Done"], partial: ["partial", "Partial"], none: ["waiting", "Waiting on"] };
       const MARK = { done: "\u2714", partial: "\u2713", none: "\u2014" };
       const total = rows.length, done = rows.filter((r) => r.picks_count > 0).length;
       const shown = rosterFilter === "all" ? rows : rows.filter((r) => statusOf(r) !== "done");

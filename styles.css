@@ -490,7 +490,10 @@ html[data-theme="light"] .panel.live-halo{
 .roster-l2{font-size:.78rem;margin-top:2px}
 .pill.done{border-color:var(--mint);color:var(--mint)}
 .pill.partial{border-color:var(--yolk);color:var(--yolk)}
-.pill.none{opacity:.8}
+/* Third rung of the Who's Picked ladder (admin-panel.md → Who's Picked,
+   PILL refinement 2026-10-26): Done mint, Partial yolk, Waiting coral —
+   same border+text construction as the pills above. */
+.pill.waiting{border-color:var(--coral);color:var(--coral)}
 
 /* ---------- setlist + results ---------- */
 .songrow{display:flex;gap:10px;padding:7px 2px;border-bottom:1px dashed var(--dash);align-items:baseline}
@@ -512,10 +515,11 @@ html[data-theme="light"] .panel.live-halo{
    refinement 2026-10-26). */
 .pickres.miss:not(.roster-row){opacity:.55}
 /* Who's Picked (.roster-row): the NAME stays at full color on every row;
-   only the status parts dim — the leading mark (the row's first span),
-   the status pill and the line-two text. The Show chip already says why
-   a row is listed, so a dimmed name only cost legibility. */
-.pickres.roster-row.miss > span:first-child,.pickres.roster-row.miss .pill,.pickres.roster-row.miss .roster-l2{opacity:.55}
+   only the leading mark (the row's first span) and the line-two text dim.
+   The status pill is EXEMPT (PILL refinement, same day): it is the
+   signal, and renders full strength. The Show chip already says why a
+   row is listed, so a dimmed name only cost legibility. */
+.pickres.roster-row.miss > span:first-child,.pickres.roster-row.miss .roster-l2{opacity:.55}
 .pickres.roster-row.miss .nm{opacity:1;color:var(--cream)}
 /* Members list rows (docs/decisions/admin-panel.md → "Members panel
    cleanup", LOCKED 2026-10-26, ROWS A): two lines. The name is .mname,

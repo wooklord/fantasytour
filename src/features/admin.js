@@ -943,7 +943,11 @@ export async function loadRoster(){
     ]);
     const target = slotDefs(show?.format).length;
     const statusOf = r => (target > 0 && r.picks_count >= target) ? "done" : (r.picks_count > 0 ? "partial" : "none");
-    const PILL = { done: ["done", "Done"], partial: ["partial", "Partial"], none: ["none", "No picks"] };
+    // Pill ladder (admin-panel.md → Who's Picked, PILL refinement
+    // 2026-10-26): Done mint, Partial yolk, Waiting coral. The status key
+    // stays "none" (data-status, statusOf); only the pill reads "Waiting
+    // on" — "No picks" repeated line two's "no picks yet".
+    const PILL = { done: ["done", "Done"], partial: ["partial", "Partial"], none: ["waiting", "Waiting on"] };
     const MARK = { done: "✔", partial: "✓", none: "—" };
     const total = rows.length, done = rows.filter(r => r.picks_count > 0).length;
     const shown = rosterFilter === "all" ? rows : rows.filter(r => statusOf(r) !== "done");
