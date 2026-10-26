@@ -317,6 +317,25 @@
    headers, and the Tiebreakers footer under the board. The admin
    select's full labels are unchanged; they never appear beside the
    short ones.
+   **ADDENDUM to B, same day (dev's call, following item 6's "Most
+   laurels"): "wins" → "laurels" in EVERY player-facing label, not only
+   the Stats leader row.** `TIEBREAK_SHORT_LABELS.most_wins` becomes
+   **"Most Laurels"** (Title Case per B), which covers the tie tag line,
+   the expanded grid header and the Tiebreakers footer;
+   `TIEBREAK_LABELS.most_wins` becomes **"Most laurels"** in the admin
+   tiebreaker select. The stored key `most_wins` is unchanged — it is in
+   every bracket's config. Scope: the two maps in `tiebreak.js` and the
+   tests. One mutation: the old label restored in the short-label map.
+   **ADDENDUM BUILT 2026-10-26, bundle `e9aa6c6-4a35a3a`.** Both maps
+   changed; the unit map check, the three `decidedByText` cases, the
+   shared and three-way harness checks (grid header, footer) now read
+   "Most Laurels". Mutation result: the old short label restored failed
+   4 unit checks and 2 board checks per mode; revert byte-identical,
+   bundle matched the index. **Observed, outside this scope, not
+   changed:** the admin tiebreaker help paragraph (`admin.js`, the
+   muted text under the three selects) still says "Most wins — per-show
+   ties still share the crown" in prose beside a select that now reads
+   "Most laurels". A one-word prose edit for a later batch.
    Build shape for both: `TIEBREAK_SHORT_LABELS` title-cased;
    `groupTies` gains `decidingAll` (layers present in any member's path,
    stack order; `deciding` stays as the first for anything still using
@@ -452,7 +471,9 @@
       row's full width.
    3. **"Most wins" is renamed "Most laurels"** everywhere it renders;
       the column header stays the laurel icon; the legend says
-      "laurels = shows won".
+      "laurels = shows won". *(Extended the same day to the tiebreak
+      labels — tag line, grid header, footer, admin select — by the
+      addendum under item 5 amendment B.)*
    4. **New row Most shows:** the highest shows-played count and
       everyone at it — the participation nudge.
    5. **The Player header sorts alphabetically:** first tap A–Z, second

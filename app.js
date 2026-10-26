@@ -972,12 +972,13 @@ Save anyway?`)) return;
   // src/core/tiebreak.js
   var TIEBREAK_LABELS = {
     fewest_zeros: "Fewest zeros",
-    most_wins: "Most wins",
+    most_wins: "Most laurels",
+    // "laurels" everywhere player-facing (standings-ux.md item 5, addendum to amendment B); the key stays most_wins
     highest_single_show: "Highest single-show score"
   };
   var TIEBREAK_SHORT_LABELS = {
     fewest_zeros: "Fewest Zeros",
-    most_wins: "Most Wins",
+    most_wins: "Most Laurels",
     highest_single_show: "High Score"
   };
   function decidedByText(layerKeys, stackLength) {
@@ -1417,7 +1418,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"9a5094f-c8fc6ec"}</p>
+      <p class="colophon buildid">build ${"e9aa6c6-4a35a3a"}</p>
     </div>
   </div>`;
   }

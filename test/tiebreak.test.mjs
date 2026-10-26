@@ -235,12 +235,14 @@ function check(label, actual, expected) {
     [multi[0]?.decidingAll, multi[0]?.deciding], [["fewest_zeros", "highest_single_show"], "fewest_zeros"]);
   // Short labels are Title Case throughout (amendment B).
   check("TIEBREAK_SHORT_LABELS are Title Case for all three layers",
-    TIEBREAK_SHORT_LABELS, { fewest_zeros: "Fewest Zeros", most_wins: "Most Wins", highest_single_show: "High Score" });
+    TIEBREAK_SHORT_LABELS, { fewest_zeros: "Fewest Zeros", most_wins: "Most Laurels", highest_single_show: "High Score" });
+  check("TIEBREAK_LABELS.most_wins reads 'Most laurels' in the admin select (addendum to amendment B); the key is unchanged",
+    [TIEBREAK_LABELS.most_wins, "most_wins" in TIEBREAK_LABELS], ["Most laurels", true]);
   // decidedByText: one, two and three names, the collapse, two-of-two.
   check("decidedByText: one name", decidedByText(["fewest_zeros"], 1), "Fewest Zeros");
-  check("decidedByText: two names of a three-layer stack, & -joined in the order given", decidedByText(["highest_single_show", "most_wins"], 3), "High Score & Most Wins");
-  check("decidedByText: two of two — both names, NO collapse (the collapse needs at least three)", decidedByText(["fewest_zeros", "most_wins"], 2), "Fewest Zeros & Most Wins");
-  check("decidedByText: three names when the stack is larger than the keys — joined, not collapsed", decidedByText(["highest_single_show", "fewest_zeros", "most_wins"], 4), "High Score & Fewest Zeros & Most Wins");
+  check("decidedByText: two names of a three-layer stack, & -joined in the order given", decidedByText(["highest_single_show", "most_wins"], 3), "High Score & Most Laurels");
+  check("decidedByText: two of two — both names, NO collapse (the collapse needs at least three)", decidedByText(["fewest_zeros", "most_wins"], 2), "Fewest Zeros & Most Laurels");
+  check("decidedByText: three names when the stack is larger than the keys — joined, not collapsed", decidedByText(["highest_single_show", "fewest_zeros", "most_wins"], 4), "High Score & Fewest Zeros & Most Laurels");
   check("decidedByText: all three of three → the collapse", decidedByText(["highest_single_show", "fewest_zeros", "most_wins"], 3), "all 3 tiebreaks");
   check("decidedByText: empty → empty string (caller renders 'shared')", decidedByText([], 3), "");
   // Amendment 2026-10-26: each member carries ITS OWN path, not the

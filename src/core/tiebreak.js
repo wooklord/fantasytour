@@ -6,7 +6,7 @@
 // and fights the zeros layer.
 export const TIEBREAK_LABELS = {
   fewest_zeros: "Fewest zeros",
-  most_wins: "Most wins",
+  most_wins: "Most laurels", // "laurels" everywhere player-facing (standings-ux.md item 5, addendum to amendment B); the key stays most_wins
   highest_single_show: "Highest single-show score",
 };
 
@@ -19,7 +19,7 @@ export const TIEBREAK_LABELS = {
 // are the admin select's and never appear beside these.
 export const TIEBREAK_SHORT_LABELS = {
   fewest_zeros: "Fewest Zeros",
-  most_wins: "Most Wins",
+  most_wins: "Most Laurels",
   highest_single_show: "High Score",
 };
 

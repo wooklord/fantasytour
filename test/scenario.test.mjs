@@ -1004,10 +1004,10 @@ async function runMode(mode){
       && JSON.stringify(tb.afterRerender.storageKeys) === JSON.stringify(c.storageKeys),
     `after: ${JSON.stringify(tb.afterRerender.subs)} keys before/after: ${JSON.stringify(c.storageKeys)} / ${JSON.stringify(tb.afterRerender.storageKeys)}`);
   const ssub = tb.shared.subs[0];
-  check("shared tie (most_wins 1–1): 'Tie for 1st · shared', both rows rank 1, '+' present; the grid lists Most Wins with equal values, equal ranks down the rank column, and NO deciding tint or mark anywhere",
+  check("shared tie (most_wins 1–1): 'Tie for 1st · shared', both rows rank 1, '+' present; the grid lists Most Laurels with equal values, equal ranks down the rank column, and NO deciding tint or mark anywhere",
     tb.shared.tags.length === 1 && tb.shared.tags[0].text === "Tie for 1st · shared" && tb.shared.tags[0].plus === "+"
       && tb.shared.tgRows.length === 2 && tb.shared.tgRows.every(r => r.rank === "1")
-      && tb.shared.subs.length === 1 && J(ssub?.headers) === J([{ layer: "most_wins", label: "Most Wins", deciding: false, decidedMark: false }])
+      && tb.shared.subs.length === 1 && J(ssub?.headers) === J([{ layer: "most_wins", label: "Most Laurels", deciding: false, decidedMark: false }])
       && J(ssub?.rows.map(r => [r.rank, r.name, r.vals.map(v => v.value)])) === J([["1", "EggHead", ["1"]], ["1", "Wooklord", ["1"]]])
       && ssub?.stray === 0 && ssub?.rows.every(r => r.vals.every(v => v.deciding === false)),
     `shared: ${J(tb.shared.tags)} rows: ${J(tb.shared.tgRows)} subs: ${J(tb.shared.subs)}`);
@@ -1029,16 +1029,16 @@ async function runMode(mode){
   // Wins (1–1) plain — and, per amendment A + its addendum, the tag names
   // BOTH layers that worked; the "decided" mark sits on both headers
   // (this column did work) while the TINT sits on High Score only (where
-  // the group first broke); Most Wins (split nobody) gets neither.
-  // Footer Title Case (amendment B).
+  // the group first broke); Most Laurels (split nobody) gets neither.
+  // Footer Title Case (amendment B); "laurels" per its addendum.
   const tsub = tb.three.subs[0];
-  check("three-way, three-layer stack: ONE tag 'Tie for 1st decided: High Score & Fewest Zeros' (amendment C wording); High Score header tinted AND marked, Fewest Zeros header marked but NOT tinted, Most Wins neither; cells — High Score tinted for all three, Fewest Zeros tinted for the pair only, the split-off player's Fewest Zeros cell plain, Most Wins plain; ranks 1/2/3; footer '1st: High Score · 2nd: Fewest Zeros · 3rd: Most Wins'",
+  check("three-way, three-layer stack: ONE tag 'Tie for 1st decided: High Score & Fewest Zeros' (amendment C wording); High Score header tinted AND marked, Fewest Zeros header marked but NOT tinted, Most Laurels neither; cells — High Score tinted for all three, Fewest Zeros tinted for the pair only, the split-off player's Fewest Zeros cell plain, Most Laurels plain; ranks 1/2/3; footer '1st: High Score · 2nd: Fewest Zeros · 3rd: Most Laurels'",
     tb.three.tags.length === 1 && tb.three.tags[0].text === "Tie for 1st decided: High Score & Fewest Zeros" && tb.three.tgRows.length === 3
       && J(tb.three.tgRows.map(r => r.rank)) === J(["1", "2", "3"])
-      && /^Tiebreakers1st: High Score · 2nd: Fewest Zeros · 3rd: Most Wins$/.test(tb.three.footer)
+      && /^Tiebreakers1st: High Score · 2nd: Fewest Zeros · 3rd: Most Laurels$/.test(tb.three.footer)
       && J(tsub?.headers) === J([{ layer: "highest_single_show", label: "High Score", deciding: true, decidedMark: true },
                                  { layer: "fewest_zeros", label: "Fewest Zeros", deciding: false, decidedMark: true },
-                                 { layer: "most_wins", label: "Most Wins", deciding: false, decidedMark: false }])
+                                 { layer: "most_wins", label: "Most Laurels", deciding: false, decidedMark: false }])
       && /repeat\(3,/.test(tsub?.cols ?? "") && tsub?.stray === 0
       && J(tsub?.rows.map(r => [r.rank, r.name, r.vals.map(v => `${v.value}:${v.deciding}`)]))
          === J([["1", "Wooklord", ["6:true", "2:false", "1:false"]], ["2", "GlobalAdmin", ["3:true", "0:true", "1:false"]], ["3", "EggHead", ["3:true", "1:true", "1:false"]]]),
