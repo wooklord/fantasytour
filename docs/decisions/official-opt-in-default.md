@@ -21,6 +21,11 @@
   proves it applied). The "revisit before the semi-public league" question
   below is therefore answered, not reopened: the default is a conscious
   choice now, where before 2026-10-11 the live `false` was an accident.
+  **✅ APPLIED 2026-10-26 (dev, whole file):** post-apply count of
+  `official_opt_in = false` rows is 0; `column_default` on
+  `league_members.official_opt_in` reads `true`. The CORRECTION above is
+  history from here on; the paragraph below now describes the live state.
+  Item (e) of the post-first-show batch is therefore done.
   **Reversed for beta, Stage F (`sql/stage_f_official_default_optin.sql`):**
   `league_members.official_opt_in` now defaults to `true` (was `false`), and
   every existing row was backfilled to `true`, so `admin_add_league_member`
@@ -40,11 +45,14 @@
   lack of self-service PIN management (both noted below), plus the missing
   self-service opt-out UI this note just surfaced.
 
-## Stage F apply decision — LOCKED 2026-10-24
+## Stage F apply decision — LOCKED 2026-10-24, ✅ APPLIED 2026-10-26
 
 **Apply BOTH statements of `sql/stage_f_official_default_optin.sql` (the
 ALTER of the default and the UPDATE backfill), gated on one read-only
-check.** The dev runs it; it is not applied from a session.
+check.** The dev runs it; it is not applied from a session. **Done
+2026-10-26:** applied whole; count after = 0; default = `true`. The
+preflight before-count was not reported to the session, so it is not on
+record here.
 
 Reasoning:
 - `set_official_opt_in` has no caller anywhere in `src/` and there is no

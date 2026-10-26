@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-25 — Batch 1 LIVE)
+## RESUME HERE (updated 2026-10-26 — Batch 1 LIVE, Stage F APPLIED)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -13,17 +13,16 @@ guard with real values. Pushed as `9bce051..2157779` (bundle
 `c3b67c3-4711dfc`). The link values live in the admin UI only — never in
 any tracked file.
 
-**Remaining — one item:**
-1. Stage F as its own step: run the preflight count (below), apply
-   `sql/stage_f_official_default_optin.sql` WHOLE (both statements —
-   decision and gate in `official-opt-in-default.md` → "Stage F apply
-   decision"), re-run the count expecting 0, confirm the column default is
-   `true` via `information_schema.columns`.
+**✅ Stage F (Batch 2) APPLIED 2026-10-26 by the dev**, whole file, both
+statements: the post-apply count of `official_opt_in = false` rows is 0
+and the column default reads `true` (`information_schema.columns`). The
+default is now the reaffirmed decision in the live catalog, not the
+2026-10-11 accident. Record: `official-opt-in-default.md` → "Stage F apply
+decision". (`CLAUDE.md`'s official-opt-in bullet still says the live
+default is `false` because Stage F was never applied — stale as of this
+date, left for a byte-neutral edit; that file is at its size limit.)
 
-Preflight count for step 1:
-`select l.name, count(*) from league_members lm join leagues l on l.id = lm.league_id where lm.official_opt_in = false group by l.name order by l.name;`
-
-Then Batch 3 (welcome card + first-save toast) per decision 6 below.
+**Remaining:** Batch 3 (welcome card + first-save toast) per decision 6 below.
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
