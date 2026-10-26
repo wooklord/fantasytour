@@ -12,10 +12,28 @@ export const TIEBREAK_LABELS = {
 
 // Standings-row display only, where space is tight — the admin config
 // picker keeps the fuller wording above.
+// Title Case throughout (standings-ux.md item 5, amendment B 2026-10-26):
+// these render beside each other on the board — tag line, grid headers,
+// the Tiebreakers footer — and a hand-set "High Score" next to the
+// sentence-case full labels read as inconsistent. The full labels above
+// are the admin select's and never appear beside these.
 export const TIEBREAK_SHORT_LABELS = {
-  ...TIEBREAK_LABELS,
+  fewest_zeros: "Fewest Zeros",
+  most_wins: "Most Wins",
   highest_single_show: "High Score",
 };
+
+// The tag line's "decided by …" text (amendment A, 2026-10-26): EVERY
+// layer that split anyone in the group, in configured stack order, short
+// labels joined with " & " — or, when every configured layer was used and
+// there are at least three, "all N tiebreaks" to save width. An empty
+// list returns "" (the caller renders "shared" instead).
+export function decidedByText(layerKeys, stackLength){
+  const keys = layerKeys || [];
+  if (!keys.length) return "";
+  if (keys.length >= 3 && keys.length === stackLength) return `all ${keys.length} tiebreaks`;
+  return keys.map(k => TIEBREAK_SHORT_LABELS[k] ?? k).join(" & ");
+}
 
 // scoreRows: [{player_id, show_id, points}] — every score row for the
 // bracket, unfiltered (rows for a non-final show are skipped entirely
@@ -204,9 +222,13 @@ export function ordinal(n){
 //              layer 1 never shows a layer-2 tint they were never
 //              measured on.
 //   place    — the group's best rank, for "Tie for <place>".
-//   deciding — the FIRST layer in configured order that appears in any
-//              member's `layers`, i.e. the layer that first split the
-//              block; null when nothing split.
+//   decidingAll — every layer, in configured stack order, that appears in
+//              ANY member's `layers` — i.e. every layer that split someone
+//              in the block. The tag line names all of them (amendment A,
+//              2026-10-26) and the grid marks each one's header.
+//   deciding — decidingAll[0]: the layer that first split the block, or
+//              null when nothing split. Kept for anything still reading
+//              a single layer.
 //   shared   — true iff deciding is null ("Tie for <place> · shared").
 //   key      — "<points>-<place>", stable across re-renders of the same
 //              data; the board's in-memory expand state is keyed on it.
@@ -219,12 +241,14 @@ export function groupTies(order, tiebreakers = []){
     if (j - i > 1){
       const rows = order.slice(i, j);
       const present = new Set(rows.flatMap(o => (o.layers || []).map(l => l.layer)));
-      const deciding = tiebreakers.find(l => present.has(l)) ?? null;
+      const decidingAll = tiebreakers.filter(l => present.has(l));
+      const deciding = decidingAll[0] ?? null;
       groups.push({
         key: `${rows[0].points}-${rows[0].rank}`,
         members: rows.map(o => ({ id: o.id, rank: o.rank, layers: o.layers || [] })),
         place: rows[0].rank,
         deciding,
+        decidingAll,
         shared: deciding === null,
       });
     }

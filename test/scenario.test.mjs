@@ -980,18 +980,19 @@ async function runMode(mode){
   // 3a facts — no chip, no setBoardView, leftover key inert — ride along.
   const tb = await runStandingsTiebreakScenario({ html, scripts, mode });
   const c = tb.collapsed;
-  check("resolved tie, collapsed by default: both rows carry tg (first/last) under one key, ONE tag 'Tie for 1st · decided by Fewest zeros' with '+' (aria-expanded=false) wired to toggleTieGroup, the sub-row present but hidden, NO lines in any name cell; no chip, no setBoardView",
+  check("resolved tie, collapsed by default: both rows carry tg (first/last) under one key, ONE tag 'Tie for 1st · decided by Fewest Zeros' with '+' (aria-expanded=false) wired to toggleTieGroup, the sub-row present but hidden, NO lines in any name cell; the Tiebreakers footer is Title Case; no chip, no setBoardView",
     c.tgRows.length === 2 && c.tgRows[0].first && !c.tgRows[0].last && c.tgRows[1].last && !c.tgRows[1].first && c.tgRows.every(r => r.key === "5-1")
-      && c.tags.length === 1 && c.tags[0].text === "Tie for 1st · decided by Fewest zeros" && c.tags[0].plus === "+" && c.tags[0].expanded === "false"
+      && c.tags.length === 1 && c.tags[0].text === "Tie for 1st · decided by Fewest Zeros" && c.tags[0].plus === "+" && c.tags[0].expanded === "false"
+      && /^Tiebreakers1st: Fewest Zeros$/.test(c.footer)
       && c.tags[0].onclick === "toggleTieGroup('5-1')" && c.tags[0].none === null
       && c.subs.length === 1 && c.subs[0].hidden === true && c.nameCellDivs === 0 && c.names.length === 2
       && !c.chipPresent && c.setterOnWindow === "undefined" && c.toggleOnWindow === "function",
     `collapsed: ${JSON.stringify(c)}`);
   const J = v => JSON.stringify(v);
   const esub = tb.expanded.subs[0];
-  check("expand: sub-row visible, glyph '−', aria-expanded true; the grid has ONE header column 'Fewest zeros' (deciding tint + decided mark) and one row per member — '1 Wooklord 0' then '2 EggHead 1' with titles — every deciding-column cell tinted, no stray cells, no refetch; collapse hides it and restores '+'",
+  check("expand: sub-row visible, glyph '−', aria-expanded true; the grid has ONE header column 'Fewest Zeros' (deciding tint + decided mark) and one row per member — '1 Wooklord 0' then '2 EggHead 1' with titles — every deciding-column cell tinted, no stray cells, no refetch; collapse hides it and restores '+'",
     esub?.hidden === false && tb.expanded.tags[0]?.plus === "−" && tb.expanded.tags[0]?.expanded === "true"
-      && J(esub?.headers) === J([{ layer: "fewest_zeros", label: "Fewest zeros", deciding: true, decidedMark: true }])
+      && J(esub?.headers) === J([{ layer: "fewest_zeros", label: "Fewest Zeros", deciding: true, decidedMark: true }])
       && /repeat\(1,/.test(esub?.cols ?? "") && esub?.stray === 0
       && J(esub?.rows.map(r => [r.rank, r.name, r.title, r.vals.map(v => `${v.layer}=${v.value}:${v.deciding}`)]))
          === J([["1", "Wooklord", "Wooklord", ["fewest_zeros=0:true"]], ["2", "EggHead", "EggHead", ["fewest_zeros=1:true"]]])
@@ -1003,10 +1004,10 @@ async function runMode(mode){
       && JSON.stringify(tb.afterRerender.storageKeys) === JSON.stringify(c.storageKeys),
     `after: ${JSON.stringify(tb.afterRerender.subs)} keys before/after: ${JSON.stringify(c.storageKeys)} / ${JSON.stringify(tb.afterRerender.storageKeys)}`);
   const ssub = tb.shared.subs[0];
-  check("shared tie (most_wins 1–1): 'Tie for 1st · shared', both rows rank 1, '+' present; the grid lists Most wins with equal values, equal ranks down the rank column, and NO deciding tint or mark anywhere",
+  check("shared tie (most_wins 1–1): 'Tie for 1st · shared', both rows rank 1, '+' present; the grid lists Most Wins with equal values, equal ranks down the rank column, and NO deciding tint or mark anywhere",
     tb.shared.tags.length === 1 && tb.shared.tags[0].text === "Tie for 1st · shared" && tb.shared.tags[0].plus === "+"
       && tb.shared.tgRows.length === 2 && tb.shared.tgRows.every(r => r.rank === "1")
-      && tb.shared.subs.length === 1 && J(ssub?.headers) === J([{ layer: "most_wins", label: "Most wins", deciding: false, decidedMark: false }])
+      && tb.shared.subs.length === 1 && J(ssub?.headers) === J([{ layer: "most_wins", label: "Most Wins", deciding: false, decidedMark: false }])
       && J(ssub?.rows.map(r => [r.rank, r.name, r.vals.map(v => v.value)])) === J([["1", "EggHead", ["1"]], ["1", "Wooklord", ["1"]]])
       && ssub?.stray === 0 && ssub?.rows.every(r => r.vals.every(v => v.deciding === false)),
     `shared: ${J(tb.shared.tags)} rows: ${J(tb.shared.tgRows)} subs: ${J(tb.shared.subs)}`);
@@ -1022,17 +1023,20 @@ async function runMode(mode){
       && /\.lb tr\.me td:first-child\{box-shadow:inset 2px 0 0 var\(--yolk\)/.test(css)
       && !/tr\.tg[^-\w][^{]*\{[^}]*box-shadow/.test(css),
     "styles.css: .lb tr.tg td:first-child / .lb tr.me td:first-child rules");
-  // Amendment 2026-10-26's recorded example, all four facts: (1) High
-  // Score cells tinted for all three, (2) Fewest zeros tinted for the
-  // pair only, (3) the first player's Fewest zeros cell PLAIN, (4) Most
-  // wins (1–1) plain — and the header tint + mark on High Score only.
+  // The cell-tint amendment's recorded example, all four facts: (1) High
+  // Score cells tinted for all three, (2) Fewest Zeros tinted for the
+  // pair only, (3) the first player's Fewest Zeros cell PLAIN, (4) Most
+  // Wins (1–1) plain — and, per amendment A, the tag names BOTH layers
+  // that worked and both headers carry the tint + mark; Most Wins (which
+  // split nobody) stays unmarked. Footer Title Case (amendment B).
   const tsub = tb.three.subs[0];
-  check("three-way, three-layer stack: ONE tag naming High Score; header tint + decided mark on High Score ONLY; cells — High Score tinted for all three, Fewest zeros tinted for the pair only, the split-off player's Fewest zeros cell plain, Most wins plain; ranks 1/2/3",
-    tb.three.tags.length === 1 && tb.three.tags[0].text === "Tie for 1st · decided by High Score" && tb.three.tgRows.length === 3
+  check("three-way, three-layer stack: ONE tag 'Tie for 1st · decided by High Score & Fewest Zeros'; header tint + decided mark on BOTH named layers, Most Wins unmarked; cells — High Score tinted for all three, Fewest Zeros tinted for the pair only, the split-off player's Fewest Zeros cell plain, Most Wins plain; ranks 1/2/3; footer '1st: High Score · 2nd: Fewest Zeros · 3rd: Most Wins'",
+    tb.three.tags.length === 1 && tb.three.tags[0].text === "Tie for 1st · decided by High Score & Fewest Zeros" && tb.three.tgRows.length === 3
       && J(tb.three.tgRows.map(r => r.rank)) === J(["1", "2", "3"])
+      && /^Tiebreakers1st: High Score · 2nd: Fewest Zeros · 3rd: Most Wins$/.test(tb.three.footer)
       && J(tsub?.headers) === J([{ layer: "highest_single_show", label: "High Score", deciding: true, decidedMark: true },
-                                 { layer: "fewest_zeros", label: "Fewest zeros", deciding: false, decidedMark: false },
-                                 { layer: "most_wins", label: "Most wins", deciding: false, decidedMark: false }])
+                                 { layer: "fewest_zeros", label: "Fewest Zeros", deciding: true, decidedMark: true },
+                                 { layer: "most_wins", label: "Most Wins", deciding: false, decidedMark: false }])
       && /repeat\(3,/.test(tsub?.cols ?? "") && tsub?.stray === 0
       && J(tsub?.rows.map(r => [r.rank, r.name, r.vals.map(v => `${v.value}:${v.deciding}`)]))
          === J([["1", "Wooklord", ["6:true", "2:false", "1:false"]], ["2", "GlobalAdmin", ["3:true", "0:true", "1:false"]], ["3", "EggHead", ["3:true", "1:true", "1:false"]]]),

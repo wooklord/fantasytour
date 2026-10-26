@@ -291,6 +291,48 @@
    tinted (value 2, `deciding: true`) and only the three-way check
    failed, both modes — the shared and resolved-pair cases were
    unaffected, as they should be.
+   **AMENDMENT A 2026-10-26 (dev's call after live use) — the tag line
+   names EVERY layer that worked.** Supersedes decision 1's "names the
+   FIRST splitting layer" wording (original kept above, marked by this
+   note; the one-tag-per-group rule itself stands). The tag names every
+   layer that split anyone in the group, in configured stack order,
+   short labels joined with " & " — e.g. "Tie for 11th · decided by High
+   Score & Most Wins". When all three configured layers were used it
+   collapses to "Tie for 11th · decided by all 3 tiebreaks" to save
+   width. "· shared" is unchanged. In the expanded grid the header tint
+   and "decided" mark go on every layer named in the tag; per-member
+   cell tints stay as built. **Recorded: marking every named header was
+   Chat's consistency call, and first-only is the fallback if three
+   marked headers read busy on the phone.**
+   **AMENDMENT B 2026-10-26 — label case.** The short labels were
+   inconsistent: "High Score" (a hand-set override) beside "Most wins"
+   and "Fewest zeros". All three become Title Case — "High Score", "Most
+   Wins", "Fewest Zeros" — everywhere they render: the tag line, the grid
+   headers, and the Tiebreakers footer under the board. The admin
+   select's full labels are unchanged; they never appear beside the
+   short ones.
+   Build shape for both: `TIEBREAK_SHORT_LABELS` title-cased;
+   `groupTies` gains `decidingAll` (layers present in any member's path,
+   stack order; `deciding` stays as the first for anything still using
+   it); a pure `decidedByText(layerKeys, stackLength)` in `tiebreak.js`
+   returns the joined short labels, or the "all N tiebreaks" collapse
+   when every configured layer was used and N ≥ 3; `tagRow` uses it,
+   `subRow` marks headers from `decidingAll`. One mutation: the tag
+   falls back to the first layer only.
+   **AMENDMENTS A + B BUILT 2026-10-26, bundle `5bbc563-9639f2a`.** Unit
+   tests: `decidingAll` in stack order skipping a layer that split
+   nobody; the Title Case map; `decidedByText` for one name, two names,
+   two-of-two (no collapse), three names joined (stack larger than the
+   keys), the "all 3 tiebreaks" collapse, and empty → "". Harness: the
+   resolved pair reads "decided by Fewest Zeros"; the three-way case
+   reads "decided by High Score & Fewest Zeros" with both headers tinted
+   and marked and Most Wins unmarked, cell tints unchanged; shared
+   unchanged; the Tiebreakers footer asserted Title Case in both cases.
+   Mutation result: with the tag cut to the first layer it read
+   "decided by High Score" alone and the three-way check failed in both
+   modes; revert byte-identical, bundle matched the index after the
+   rebuild. Nothing outside `tiebreak.js`, `tagRow`/`subRow` and the
+   tests changed; `admin.js`'s full labels are untouched.
 
 ## Why these and not the alternatives
 

@@ -960,9 +960,19 @@ Save anyway?`)) return;
     highest_single_show: "Highest single-show score"
   };
   var TIEBREAK_SHORT_LABELS = {
-    ...TIEBREAK_LABELS,
+    fewest_zeros: "Fewest Zeros",
+    most_wins: "Most Wins",
     highest_single_show: "High Score"
   };
+  function decidedByText(layerKeys, stackLength) {
+    const keys = layerKeys || [];
+    if (!keys.length) return "";
+    if (keys.length >= 3 && keys.length === stackLength) return `all ${keys.length} tiebreaks`;
+    return keys.map((k) => {
+      var _a;
+      return (_a = TIEBREAK_SHORT_LABELS[k]) != null ? _a : k;
+    }).join(" & ");
+  }
   function computeStandings({ scoreRows, showsById, season, rosterJoinDates = {}, rosterIds = [] }) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     const inScope = (row) => {
@@ -1080,12 +1090,14 @@ Save anyway?`)) return;
       if (j - i > 1) {
         const rows = order.slice(i, j);
         const present = new Set(rows.flatMap((o) => (o.layers || []).map((l) => l.layer)));
-        const deciding = (_a = tiebreakers.find((l) => present.has(l))) != null ? _a : null;
+        const decidingAll = tiebreakers.filter((l) => present.has(l));
+        const deciding = (_a = decidingAll[0]) != null ? _a : null;
         groups.push({
           key: `${rows[0].points}-${rows[0].rank}`,
           members: rows.map((o) => ({ id: o.id, rank: o.rank, layers: o.layers || [] })),
           place: rows[0].rank,
           deciding,
+          decidingAll,
           shared: deciding === null
         });
       }
@@ -1216,14 +1228,14 @@ Save anyway?`)) return;
     for (const g of tieGroups) g.members.forEach((m, k) => tgInfo.set(m.id, { g, first: k === 0, last: k === g.members.length - 1 }));
     const tagRow = (g) => {
       const open = expandedTieGroups.has(g.key);
-      const how = g.deciding ? `decided by ${esc(TIEBREAK_SHORT_LABELS[g.deciding])}` : "shared";
+      const how = g.shared ? "shared" : `decided by ${esc(decidedByText(g.decidingAll, tiebreakers.length))}`;
       const ctl = tiebreakers.length ? `<button class="linkbtn tg-plus" onclick="toggleTieGroup('${g.key}')" aria-expanded="${open}" aria-controls="tg-sub-${g.key}" title="${open ? "Hide" : "Show"} tiebreaker values">${open ? "\u2212" : "+"}</button>` : `<span class="muted tg-none">no tiebreakers set</span>`;
       return `<tr class="tg-tag" data-tg="${g.key}"><td colspan="3"><span class="muted tg-text">Tie for ${ordinal(g.place)} \xB7 ${how}</span>${ctl}</td></tr>`;
     };
     const subRow = (g) => {
       if (!tiebreakers.length) return "";
       const open = expandedTieGroups.has(g.key);
-      const dec = (l) => l === g.deciding ? " deciding" : "";
+      const dec = (l) => g.decidingAll.includes(l) ? " deciding" : "";
       const cellDec = (m, l) => m.layers.some((x) => x.layer === l) ? " deciding" : "";
       const cols = `grid-template-columns:auto minmax(0,1fr) repeat(${tiebreakers.length},fit-content(5em))`;
       const head = `<div class="tg-h" aria-hidden="true"></div><div class="tg-h" aria-hidden="true"></div>` + tiebreakers.map((l) => `<div class="tg-h tg-col${dec(l)}" data-layer="${l}">${esc(TIEBREAK_SHORT_LABELS[l])}${dec(l) ? '<span class="tg-decided">decided</span>' : ""}</div>`).join("");
@@ -1283,7 +1295,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"df9753e-0507543"}</p>
+      <p class="colophon buildid">build ${"5bbc563-9639f2a"}</p>
     </div>
   </div>`;
   }

@@ -1952,6 +1952,9 @@ export async function runStandingsTiebreakScenario({ html, scripts, mode }){
         rpcCount: calls.filter(c => c.type === "rpc").length,
         storageKeys: Object.keys(dumpLocalStorage(w)).sort(),
         placeholderPodium: !!w.document.querySelector(".podium") && w.document.querySelectorAll(".podium .nm").length === 0,
+        // The "Tiebreakers" footer under the board (amendment B: Title
+        // Case short labels there too). textContent flattens the <br>.
+        footer: [...w.document.querySelectorAll(".panel p.muted")].find(p => /^Tiebreakers/.test(p.textContent))?.textContent ?? "",
       };
     };
     return { w, read };

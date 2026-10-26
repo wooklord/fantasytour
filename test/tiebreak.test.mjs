@@ -4,7 +4,7 @@
 //
 //   node test/tiebreak.test.mjs
 
-import { computeStandings, rankStandings, groupTies, ordinal, layerDisplayValue, TIEBREAK_LABELS } from "../src/core/tiebreak.js";
+import { computeStandings, rankStandings, groupTies, ordinal, layerDisplayValue, decidedByText, TIEBREAK_LABELS, TIEBREAK_SHORT_LABELS } from "../src/core/tiebreak.js";
 
 const failures = [];
 function check(label, actual, expected) {
@@ -223,10 +223,26 @@ function check(label, actual, expected) {
   // and is still one tie. The singleton at 4 points is left out.
   check("groupTies: a layer-resolved pair is ONE group keyed on points, carrying both ranks, decided by the splitting layer",
     groupTies([row("a", 1, 5, [fz(0)]), row("b", 2, 5, [fz(1)]), row("c", 3, 4)], ["fewest_zeros"]),
-    [{ key: "5-1", members: [{ id: "a", rank: 1, layers: [fz(0)] }, { id: "b", rank: 2, layers: [fz(1)] }], place: 1, deciding: "fewest_zeros", shared: false }]);
-  check("groupTies: an empty stack gives a shared group (Casual / All time), members with empty layers",
+    [{ key: "5-1", members: [{ id: "a", rank: 1, layers: [fz(0)] }, { id: "b", rank: 2, layers: [fz(1)] }], place: 1, deciding: "fewest_zeros", decidingAll: ["fewest_zeros"], shared: false }]);
+  check("groupTies: an empty stack gives a shared group (Casual / All time), members with empty layers, decidingAll empty",
     groupTies([row("a", 1, 5), row("b", 1, 5)], []),
-    [{ key: "5-1", members: [{ id: "a", rank: 1, layers: [] }, { id: "b", rank: 1, layers: [] }], place: 1, deciding: null, shared: true }]);
+    [{ key: "5-1", members: [{ id: "a", rank: 1, layers: [] }, { id: "b", rank: 1, layers: [] }], place: 1, deciding: null, decidingAll: [], shared: true }]);
+  // Amendment A 2026-10-26: decidingAll is every layer that split anyone,
+  // in STACK order (not member order), skipping layers that split nobody.
+  const hss = v => ({ layer: "highest_single_show", value: v });
+  const multi = groupTies([row("a", 1, 5, [fz(0)]), row("b", 2, 5, [fz(1), hss(5)]), row("c", 3, 5, [fz(1), hss(3)])], ["fewest_zeros", "most_wins", "highest_single_show"]);
+  check("groupTies: decidingAll lists every layer that split someone, in stack order, skipping most_wins which split nobody; deciding is still the first",
+    [multi[0]?.decidingAll, multi[0]?.deciding], [["fewest_zeros", "highest_single_show"], "fewest_zeros"]);
+  // Short labels are Title Case throughout (amendment B).
+  check("TIEBREAK_SHORT_LABELS are Title Case for all three layers",
+    TIEBREAK_SHORT_LABELS, { fewest_zeros: "Fewest Zeros", most_wins: "Most Wins", highest_single_show: "High Score" });
+  // decidedByText: one, two and three names, the collapse, two-of-two.
+  check("decidedByText: one name", decidedByText(["fewest_zeros"], 1), "Fewest Zeros");
+  check("decidedByText: two names of a three-layer stack, & -joined in the order given", decidedByText(["highest_single_show", "most_wins"], 3), "High Score & Most Wins");
+  check("decidedByText: two of two — both names, NO collapse (the collapse needs at least three)", decidedByText(["fewest_zeros", "most_wins"], 2), "Fewest Zeros & Most Wins");
+  check("decidedByText: three names when the stack is larger than the keys — joined, not collapsed", decidedByText(["highest_single_show", "fewest_zeros", "most_wins"], 4), "High Score & Fewest Zeros & Most Wins");
+  check("decidedByText: all three of three → the collapse", decidedByText(["highest_single_show", "fewest_zeros", "most_wins"], 3), "all 3 tiebreaks");
+  check("decidedByText: empty → empty string (caller renders 'shared')", decidedByText([], 3), "");
   // Amendment 2026-10-26: each member carries ITS OWN path, not the
   // group's union — the player split off at layer 1 has no layer-2 entry.
   check("groupTies: members carry their own rankStandings layers, passed through unchanged (the layer-1 escapee has no layer-2 entry)",

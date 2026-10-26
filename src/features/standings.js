@@ -6,7 +6,7 @@ import { clearTimersFor } from "../core/format.js";
 import { trophy, rankNumeral, winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
 import { currentBracket } from "../core/switcher.js";
-import { computeStandings, rankStandings, groupTies, ordinal, layerDisplayValue, TIEBREAK_SHORT_LABELS } from "../core/tiebreak.js";
+import { computeStandings, rankStandings, groupTies, ordinal, layerDisplayValue, decidedByText, TIEBREAK_SHORT_LABELS } from "../core/tiebreak.js";
 
 // Bound to the standings-select onchange (see renderBoard below) — replaces the
 // original inline `boardSeason=this.value; renderBoard();` now that boardSeason
@@ -281,13 +281,15 @@ export async function renderBoard(){
   const tieGroups = hasAnyScore ? groupTies(order, tiebreakers) : [];
   const tgInfo = new Map();
   for (const g of tieGroups) g.members.forEach((m, k) => tgInfo.set(m.id, { g, first: k === 0, last: k === g.members.length - 1 }));
-  // Tag row: "Tie for <place> · decided by <layer>" or "· shared", then the
-  // "+" / "−" expander (U+2212 while open — decision 5). With no configured
+  // Tag row: "Tie for <place> · decided by <every layer that split anyone,
+  // & -joined in stack order; 'all N tiebreaks' when the whole stack was
+  // used — amendment A>" or "· shared", then the "+" / "−" expander
+  // (U+2212 while open — decision 5). With no configured
   // stack (Casual, All time) the muted "no tiebreakers set" takes the
   // expander's place and there is no sub-row at all (decision 2).
   const tagRow = g => {
     const open = expandedTieGroups.has(g.key);
-    const how = g.deciding ? `decided by ${esc(TIEBREAK_SHORT_LABELS[g.deciding])}` : "shared";
+    const how = g.shared ? "shared" : `decided by ${esc(decidedByText(g.decidingAll, tiebreakers.length))}`;
     const ctl = tiebreakers.length
       ? `<button class="linkbtn tg-plus" onclick="toggleTieGroup('${g.key}')" aria-expanded="${open}" aria-controls="tg-sub-${g.key}" title="${open ? "Hide" : "Show"} tiebreaker values">${open ? "−" : "+"}</button>`
       : `<span class="muted tg-none">no tiebreakers set</span>`;
@@ -305,8 +307,9 @@ export async function renderBoard(){
   // member's OWN `layers` (the layers that split their group at each
   // depth) — so a sub-split inside the group shows as tint, not only as
   // equal ranks, and the player who broke free at layer 1 shows no
-  // layer-2 tint they were never measured on. The header keeps the
-  // group's FIRST splitting layer, matching the tag line. Equal ranks
+  // layer-2 tint they were never measured on. The headers mark EVERY
+  // layer the tag names (decidingAll — amendment A; first-only is the
+  // recorded fallback if that reads busy on a phone). Equal ranks
   // down the rank column still show a still-shared sub-pair (decision
   // 1). Columns: auto (rank) · minmax(0,1fr) (name, min 0 so it
   // truncates instead of pushing values off-screen) · fit-content(5em)
@@ -315,7 +318,7 @@ export async function renderBoard(){
   const subRow = g => {
     if (!tiebreakers.length) return "";
     const open = expandedTieGroups.has(g.key);
-    const dec = l => l === g.deciding ? " deciding" : "";
+    const dec = l => g.decidingAll.includes(l) ? " deciding" : "";
     const cellDec = (m, l) => m.layers.some(x => x.layer === l) ? " deciding" : "";
     const cols = `grid-template-columns:auto minmax(0,1fr) repeat(${tiebreakers.length},fit-content(5em))`;
     const head = `<div class="tg-h" aria-hidden="true"></div><div class="tg-h" aria-hidden="true"></div>`
