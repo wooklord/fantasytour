@@ -2334,6 +2334,16 @@ export async function runStatsScenario({ html, scripts, mode }){
         leaders: p ? [...p.querySelectorAll(".leader")].map(l => ({ key: l.dataset.key, label: l.querySelector(".lbl")?.textContent,
           names: [...l.querySelectorAll(".nm")].map(e => e.textContent), more: l.querySelector("small")?.textContent ?? null,
           plus: /\+\d/.test(l.textContent), value: l.querySelector("b")?.textContent })) : [],
+        // Truncation fix (item 6): the names cell's class (must never be the
+        // header's global .who), the entry count, and whether "and N more"
+        // sits inside the last entry (null when there is none).
+        leaderCells: p ? [...p.querySelectorAll(".leader")].map(l => {
+          const cell = l.children[1];
+          const entries = cell ? [...cell.querySelectorAll(":scope > .ldr-name")] : [];
+          const small = l.querySelector("small");
+          return { cls: cell?.className ?? null, entries: entries.length,
+            moreInLastEntry: small ? (entries.length > 0 && small.parentElement === entries[entries.length - 1]) : null };
+        }) : [],
         legend: p?.querySelector("p.muted")?.textContent ?? "",
         stored: w.localStorage.getItem("ft_stats_sort"),
         rpcCount: calls.filter(c => c.type === "rpc").length,

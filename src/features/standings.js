@@ -84,12 +84,24 @@ function statsPanelHtml(s){
   const td = (col, v, extra = "") => `<td class="pts${sort.col === col ? " active" : ""}"${extra}>${v}</td>`;
   // Leaders strip, STACKED ROWS (amendment 2026-10-26): label · every
   // tied name in name order, capped at five with "and N more" · value.
+  // The names cell is .ldr-names, NOT .who: .who is the header's global
+  // class (styles.css, the whoami block) and its margin-left:auto turned
+  // this grid item into a shrink-to-fit box pushed to the right — single
+  // names sat flush right, and a long unbreakable name made the box as
+  // wide as itself, so the name's max-width:100% never truncated and it
+  // ran under the value (standings-ux.md item 6, truncation fix). Each
+  // name is its own .ldr-name entry carrying its comma, so a comma never
+  // starts a line; "and N more" sits INSIDE the last entry, so it always
+  // shares the last name's line (the name truncates to make room).
   const leaders = rows.length ? statLeaders(rows, nameOf, { withZeros: !!season }) : [];
   const leadersHtml = leaders.length ? `<div class="leaders">${leaders.map(l => {
     const { shown, more } = capNames(l.ids);
-    return `<div class="leader" data-key="${l.key}"><span class="lbl">${esc(l.label)}</span><span class="who">${
-      shown.map(id => `<span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span>`).join(", ")}${
-      more > 0 ? `<small>and ${more} more</small>` : ""}</span><b>${fmtStat(l.col, l.value)}</b></div>`;
+    const entries = shown.map((id, i) => {
+      const last = i === shown.length - 1;
+      return `<span class="ldr-name"><span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span>${
+        last ? (more > 0 ? `<small>and ${more} more</small>` : "") : ","}</span>`;
+    }).join("");
+    return `<div class="leader" data-key="${l.key}"><span class="lbl">${esc(l.label)}</span><span class="ldr-names">${entries}</span><b>${fmtStat(l.col, l.value)}</b></div>`;
   }).join("")}</div>` : "";
   return `<div class="panel" id="statspanel"><h2>Stats <span class="muted" style="font-size:.78rem">· ${scopeName}</span></h2>
       ${leadersHtml}

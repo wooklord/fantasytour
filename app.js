@@ -1239,7 +1239,11 @@ Save anyway?`)) return;
     const leaders = rows.length ? statLeaders(rows, nameOf, { withZeros: !!season }) : [];
     const leadersHtml = leaders.length ? `<div class="leaders">${leaders.map((l) => {
       const { shown, more } = capNames(l.ids);
-      return `<div class="leader" data-key="${l.key}"><span class="lbl">${esc(l.label)}</span><span class="who">${shown.map((id) => `<span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span>`).join(", ")}${more > 0 ? `<small>and ${more} more</small>` : ""}</span><b>${fmtStat(l.col, l.value)}</b></div>`;
+      const entries = shown.map((id, i) => {
+        const last = i === shown.length - 1;
+        return `<span class="ldr-name"><span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span>${last ? more > 0 ? `<small>and ${more} more</small>` : "" : ","}</span>`;
+      }).join("");
+      return `<div class="leader" data-key="${l.key}"><span class="lbl">${esc(l.label)}</span><span class="ldr-names">${entries}</span><b>${fmtStat(l.col, l.value)}</b></div>`;
     }).join("")}</div>` : "";
     return `<div class="panel" id="statspanel"><h2>Stats <span class="muted" style="font-size:.78rem">\xB7 ${scopeName}</span></h2>
       ${leadersHtml}
@@ -1418,7 +1422,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"a88fb44-1080130"}</p>
+      <p class="colophon buildid">build ${"eb4017a-859418e"}</p>
     </div>
   </div>`;
   }

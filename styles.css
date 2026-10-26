@@ -430,7 +430,17 @@ html[data-theme="light"] .panel.live-halo{
    wraps (.nm inline so a comma list wraps; "and N more" rides the last
    line) · the mono value in ITS OWN right-aligned column, at least 3ch
    wide, with a 14px gap so no name ever touches the number even when
-   the list wraps (spacing fix, same day, item 6 build note). */
+   the list wraps (spacing fix, same day, item 6 build note).
+   TRUNCATION FIX, same day: the names cell is .ldr-names, never .who —
+   .who is the header's global class above and its margin-left:auto made
+   the grid item shrink-to-fit and pushed it right, so a single short
+   name sat flush right and a long unbreakable name sized the box to
+   itself (max-width:100% of a box as wide as the name constrains
+   nothing) and ran under the value. Now: the cell is a wrapping flex row
+   that clips (overflow:hidden), each .ldr-name entry is a flex item
+   capped at the cell's width that may shrink to zero, and the .nm inside
+   it shrinks with the ellipsis. The comma lives inside its entry, and
+   "and N more" inside the last entry, so neither is ever orphaned. */
 .lb th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
 .lb th .arrow{font-size:.6rem;margin-left:2px;vertical-align:middle}
 .lb th.active{color:var(--cream)}
@@ -439,9 +449,10 @@ html[data-theme="light"] .panel.live-halo{
 .leader{display:grid;grid-template-columns:7.2em minmax(0,1fr) minmax(3ch,max-content);column-gap:14px;align-items:baseline;min-width:0;padding:6px 10px}
 .leader+.leader{border-top:1px dashed var(--dash)}
 .leader .lbl{font-size:.72rem;font-variant:small-caps;letter-spacing:.5px;color:var(--cream-dim)}
-.leader .who{min-width:0;font-size:.85rem;line-height:1.4;text-align:left}
-.leader .who .nm{display:inline-block;max-width:100%;vertical-align:bottom}
-.leader .who small{color:var(--cream-dim);font-size:.72rem;margin-left:4px;white-space:nowrap}
+.leader .ldr-names{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:flex-start;column-gap:.35em;min-width:0;overflow:hidden;font-size:.85rem;line-height:1.4;text-align:left}
+.leader .ldr-name{display:flex;align-items:baseline;flex:0 1 auto;min-width:0;max-width:100%}
+.leader .ldr-name .nm{flex:0 1 auto;min-width:0}
+.leader .ldr-name small{flex:0 0 auto;margin-left:.35em;color:var(--cream-dim);font-size:.72rem;white-space:nowrap}
 .leader b{font-family:var(--mono);font-size:.95rem;text-align:right;white-space:nowrap}
 /* Own row: an OUTLINE in --yolk, never a fill (docs/decisions/standings-ux.md
    decision 3) — per-show wins may later tint rows, and an outline can't

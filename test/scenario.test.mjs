@@ -1127,17 +1127,35 @@ async function runMode(mode){
       && J(activeHeaders(st.allTimeZerosPreset)) === J([2]) && st.allTimeZerosPreset.stored === "zeros:asc"
       && J(activeHeaders(st.allTimeZerosTap)) === J([2]) && st.allTimeZerosTap.stored === "zeros:asc" && st.allTimeZerosTap.rpcCount === st.allTimeZerosPreset.rpcCount,
     `allTime: ${J(st.allTime.headers)} leaders ${J(st.allTime.leaders.map(l => l.key))} preset: ${J(activeHeaders(st.allTimeZerosPreset))}/${st.allTimeZerosPreset.stored} tap: ${J(activeHeaders(st.allTimeZerosTap))}/${st.allTimeZerosTap.stored}`);
-  check("Stats stylesheet, statically: the arrow lives only in .lb th .arrow with no reserved width, .lb td.active is bold, .leaders is a stacked column and each .leader is a three-column grid — fixed 7.2em small-caps label, left-aligned shrinkable names, a right-aligned value column at least 3ch wide — with 14px column gaps; inline .nm names; the strip itself is not a grid",
+  check("Stats stylesheet, statically: the arrow lives only in .lb th .arrow with no reserved width, .lb td.active is bold, .leaders is a stacked column and each .leader is a three-column grid — fixed 7.2em small-caps label, left-aligned names, a right-aligned value column at least 3ch wide — with 14px column gaps; the strip itself is not a grid",
     /\.lb th \.arrow\{font-size:\.6rem;margin-left:2px;vertical-align:middle\}/.test(css)
       && /\.lb td\.active\{font-weight:700;color:var\(--cream\)\}/.test(css)
       && /\.leaders\{display:flex;flex-direction:column/.test(css)
       && /\.leader\{display:grid;grid-template-columns:7\.2em minmax\(0,1fr\) minmax\(3ch,max-content\);column-gap:14px/.test(css)
       && /\.leader \.lbl\{[^}]*font-variant:small-caps/.test(css)
-      && /\.leader \.who\{[^}]*text-align:left/.test(css)
-      && /\.leader \.who \.nm\{display:inline-block;max-width:100%/.test(css)
       && /\.leader b\{[^}]*text-align:right/.test(css)
       && !/\.leaders\{display:grid/.test(css),
     "styles.css: .lb th .arrow / .lb td.active / .leaders / .leader rules");
+  // Truncation fix (item 6, same day). The cause was a CLASS COLLISION: the
+  // names cell was .who, which also matches the header's global .who rule
+  // and its margin-left:auto. So the check pins the class (DOM) as well as
+  // the rules (stylesheet): the overflow clip on the names cell, the
+  // per-name cap that resolves (max-width:100% on a flex item of a
+  // stretched cell, min-width:0 so it can shrink), and the .nm that
+  // shrinks inside it. Geometry itself is unmeasurable in jsdom; it was
+  // measured in headless Chrome at 320/360/412px (record in the decision).
+  check("Stats leaders names cell is .ldr-names on every row, never the header's global .who; every listed name is its own .ldr-name entry; 'and N more' sits inside the LAST entry beside the last name",
+    st.sixWay.leaderCells.length === 5 && st.sixWay.leaderCells.every(c => c.cls === "ldr-names" && c.entries === 5 && c.moreInLastEntry === true)
+      && st.dflt.leaderCells.every(c => c.cls === "ldr-names" && c.moreInLastEntry === null),
+    `sixWay cells: ${J(st.sixWay.leaderCells)} dflt cells: ${J(st.dflt.leaderCells)}`);
+  check("Stats leaders stylesheet, statically: the names cell clips (overflow:hidden, min-width:0) and wraps; each entry is capped at the cell (max-width:100%) and may shrink (min-width:0); the .nm inside shrinks; and NO .leader .who rule remains",
+    /\.leader \.ldr-names\{display:flex;flex-wrap:wrap;[^}]*min-width:0;overflow:hidden/.test(css)
+      && /\.leader \.ldr-names\{[^}]*text-align:left/.test(css)
+      && /\.leader \.ldr-name\{display:flex;[^}]*flex:0 1 auto;min-width:0;max-width:100%\}/.test(css)
+      && /\.leader \.ldr-name \.nm\{flex:0 1 auto;min-width:0\}/.test(css)
+      && /\.leader \.ldr-name small\{flex:0 0 auto;/.test(css)
+      && !/\.leader \.who\b/.test(css),
+    "styles.css: .leader .ldr-names / .ldr-name / .ldr-name .nm / .ldr-name small rules");
 
   // Empty ranked ladder (admin-panel.md → "EMPTY RANKED LADDER", LOCKED
   // 2026-10-26). The empty-set case the ranked scenario skipped.

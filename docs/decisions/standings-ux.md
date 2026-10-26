@@ -508,6 +508,50 @@
    more" stays in the names column by construction. The static
    stylesheet check asserts the grid, the gap, the left/right alignments
    and that the strip itself is not a grid. No markup or script change.
+   **Truncation fix, same day, bundle `eb4017a-859418e`** (dev's live
+   look: a long unbreakable name overflowed into the value with no
+   ellipsis; one single-name row sat right-aligned). **ONE cause for
+   both — a class collision.** The names cell was `.who`, which also
+   matches the header's GLOBAL `.who` rule (`styles.css`, the whoami
+   block): `margin-left:auto; text-align:right; color:var(--cream-dim)`.
+   The leaders rules overrode `text-align` but never the margin. In a
+   grid, an auto inline margin disables stretch: the cell became a
+   fit-content box pushed to the end of its track. (a) A short single
+   name: box narrower than the track → pushed flush right. (b) A long
+   unbreakable name: fit-content = the name's own width → the box was as
+   wide as the name, so the `.nm`'s `max-width:100%` resolved against a
+   box that was already the name's size and constrained nothing; the box
+   overflowed past its track into the value. Why only single-name rows
+   looked wrong: a comma list has break opportunities, so its
+   fit-content reaches the full track and it filled the cell; a single
+   name has none. (A list containing a long name overflowed too.) Why it
+   surfaced only now: in the earlier flex version, `flex:1 1 auto`
+   growth consumed the free space before auto margins applied, so the
+   collision was latent from the Stats build (`d08e486`) and became
+   visible when the spacing fix switched the row to grid. **Measured,
+   not inferred:** headless Chrome at emulated 320/360/412px, with the
+   real stylesheet — current markup: cells pushed right and names past
+   the value; same CSS with only `margin-left:0` added: alignment and
+   truncation fixed (isolating the cause); the shipped fix: every row
+   clean at all three widths. Two further defects the measurement
+   showed and the fix also removes: a comma could start a line (", 
+   Wooklord", the break fell after the name box and before its comma),
+   and "and N more" wrapped onto its own line at 320/360px. **Fix:**
+   the cell is `.ldr-names` (no global rule matches it), a wrapping flex
+   row with `overflow:hidden`; each name is an `.ldr-name` flex entry
+   carrying its own comma, capped at `max-width:100%` with `min-width:0`
+   so it can shrink, and its `.nm` shrinks with the ellipsis; "and N
+   more" sits inside the last entry, so the last name truncates to keep
+   it on the same line. The DOM check pins the class (never `.who`) and
+   the structure; the static check pins the clip and the per-name rules
+   and that no `.leader .who` rule remains; removing the clip fails it.
+   **Visible side effect, stated:** leader names now render at full
+   cream; the collision had been greying them with the header's
+   `--cream-dim` since `d08e486`. **Observed, not changed:** the label
+   column's `7.2em` now resolves against the row's 16px font (115px),
+   not the label's .72rem as the old `flex:0 0 7.2em` did (83px) — the
+   spacing fix widened it by 32px, leaving the names track 103px at
+   360px. A one-value change if the device look wants the room back.
 
 ## Why these and not the alternatives
 
