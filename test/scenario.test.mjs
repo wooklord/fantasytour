@@ -955,23 +955,29 @@ async function runMode(mode){
       && c.subs.length === 1 && c.subs[0].hidden === true && c.nameCellDivs === 0 && c.names.length === 2
       && !c.chipPresent && c.setterOnWindow === "undefined" && c.toggleOnWindow === "function",
     `collapsed: ${JSON.stringify(c)}`);
-  check("expand: sub-row visible, glyph '−', aria-expanded true, one layer 'Fewest zeros' marked deciding listing rank·name·value '1 Wooklord 0' then '2 EggHead 1', no refetch; collapse hides it and restores '+'",
-    tb.expanded.subs[0]?.hidden === false && tb.expanded.tags[0]?.plus === "−" && tb.expanded.tags[0]?.expanded === "true"
-      && tb.expanded.subs[0]?.layers.length === 1 && tb.expanded.subs[0].layers[0].label === "Fewest zeros" && tb.expanded.subs[0].layers[0].deciding === true
-      && JSON.stringify(tb.expanded.subs[0].layers[0].vals) === JSON.stringify(["1 Wooklord 0", "2 EggHead 1"])
+  const J = v => JSON.stringify(v);
+  const esub = tb.expanded.subs[0];
+  check("expand: sub-row visible, glyph '−', aria-expanded true; the grid has ONE header column 'Fewest zeros' (deciding tint + decided mark) and one row per member — '1 Wooklord 0' then '2 EggHead 1' with titles — every deciding-column cell tinted, no stray cells, no refetch; collapse hides it and restores '+'",
+    esub?.hidden === false && tb.expanded.tags[0]?.plus === "−" && tb.expanded.tags[0]?.expanded === "true"
+      && J(esub?.headers) === J([{ layer: "fewest_zeros", label: "Fewest zeros", deciding: true, decidedMark: true }])
+      && /repeat\(1,/.test(esub?.cols ?? "") && esub?.stray === 0
+      && J(esub?.rows.map(r => [r.rank, r.name, r.title, r.vals.map(v => `${v.layer}=${v.value}:${v.deciding}`)]))
+         === J([["1", "Wooklord", "Wooklord", ["fewest_zeros=0:true"]], ["2", "EggHead", "EggHead", ["fewest_zeros=1:true"]]])
       && tb.expanded.rpcCount === c.rpcCount
       && tb.collapsedAgain.subs[0]?.hidden === true && tb.collapsedAgain.tags[0]?.plus === "+" && tb.collapsedAgain.tags[0]?.expanded === "false",
-    `expanded: ${JSON.stringify(tb.expanded.subs)} tags: ${JSON.stringify(tb.expanded.tags)} rpc: ${c.rpcCount}/${tb.expanded.rpcCount} again: ${JSON.stringify(tb.collapsedAgain.tags)}`);
+    `expanded: ${J(tb.expanded.subs)} tags: ${J(tb.expanded.tags)} rpc: ${c.rpcCount}/${tb.expanded.rpcCount} again: ${J(tb.collapsedAgain.tags)}`);
   check("expand state is in memory only: a re-render redraws the open group OPEN, and localStorage gains no key",
     tb.afterRerender.subs[0]?.hidden === false && tb.afterRerender.tags[0]?.plus === "−" && tb.afterRerender.tags[0]?.expanded === "true"
       && JSON.stringify(tb.afterRerender.storageKeys) === JSON.stringify(c.storageKeys),
     `after: ${JSON.stringify(tb.afterRerender.subs)} keys before/after: ${JSON.stringify(c.storageKeys)} / ${JSON.stringify(tb.afterRerender.storageKeys)}`);
-  check("shared tie (most_wins 1–1): 'Tie for 1st · shared', both rows rank 1, '+' present, the sub-row lists Most wins with equal values and NO deciding mark",
+  const ssub = tb.shared.subs[0];
+  check("shared tie (most_wins 1–1): 'Tie for 1st · shared', both rows rank 1, '+' present; the grid lists Most wins with equal values, equal ranks down the rank column, and NO deciding tint or mark anywhere",
     tb.shared.tags.length === 1 && tb.shared.tags[0].text === "Tie for 1st · shared" && tb.shared.tags[0].plus === "+"
       && tb.shared.tgRows.length === 2 && tb.shared.tgRows.every(r => r.rank === "1")
-      && tb.shared.subs.length === 1 && tb.shared.subs[0].layers.length === 1 && tb.shared.subs[0].layers[0].label === "Most wins" && tb.shared.subs[0].layers[0].deciding === false
-      && JSON.stringify(tb.shared.subs[0].layers[0].vals) === JSON.stringify(["1 EggHead 1", "1 Wooklord 1"]),
-    `shared: ${JSON.stringify(tb.shared.tags)} rows: ${JSON.stringify(tb.shared.tgRows)} subs: ${JSON.stringify(tb.shared.subs)}`);
+      && tb.shared.subs.length === 1 && J(ssub?.headers) === J([{ layer: "most_wins", label: "Most wins", deciding: false, decidedMark: false }])
+      && J(ssub?.rows.map(r => [r.rank, r.name, r.vals.map(v => v.value)])) === J([["1", "EggHead", ["1"]], ["1", "Wooklord", ["1"]]])
+      && ssub?.stray === 0 && ssub?.rows.every(r => r.vals.every(v => v.deciding === false)),
+    `shared: ${J(tb.shared.tags)} rows: ${J(tb.shared.tgRows)} subs: ${J(tb.shared.subs)}`);
   check("no tie: two plain rows, no tg class, no tag, no '+', no sub-row (groupTies' empty-set case on the board)",
     tb.none.names.length === 2 && tb.none.tgRows.length === 0 && tb.none.tags.length === 0 && tb.none.subs.length === 0,
     `none: rows ${JSON.stringify(tb.none.tgRows)} tags ${JSON.stringify(tb.none.tags)}`);
@@ -984,11 +990,15 @@ async function runMode(mode){
       && /\.lb tr\.me td:first-child\{box-shadow:inset 2px 0 0 var\(--yolk\)/.test(css)
       && !/tr\.tg[^-\w][^{]*\{[^}]*box-shadow/.test(css),
     "styles.css: .lb tr.tg td:first-child / .lb tr.me td:first-child rules");
-  check("three-way partial split: ONE tag naming the first splitting layer, ranks 1/2/2, and the still-shared pair visible only by its equal ranks in the sub-row",
+  const tsub = tb.three.subs[0];
+  check("three-way partial split on a TWO-layer stack: ONE tag naming the first splitting layer; the grid has both header columns in stack order with ONLY the first tinted and marked, one value per layer per member, ranks 1/2/2 down the rank column (the still-shared pair visible only by those equal ranks)",
     tb.three.tags.length === 1 && tb.three.tags[0].text === "Tie for 1st · decided by Fewest zeros" && tb.three.tgRows.length === 3
-      && JSON.stringify(tb.three.tgRows.map(r => r.rank)) === JSON.stringify(["1", "2", "2"])
-      && JSON.stringify(tb.three.subs[0]?.layers[0]?.vals) === JSON.stringify(["1 Wooklord 0", "2 EggHead 1", "2 GlobalAdmin 1"]),
-    `three: ${JSON.stringify(tb.three.tags)} rows ${JSON.stringify(tb.three.tgRows)} subs ${JSON.stringify(tb.three.subs)}`);
+      && J(tb.three.tgRows.map(r => r.rank)) === J(["1", "2", "2"])
+      && J(tsub?.headers) === J([{ layer: "fewest_zeros", label: "Fewest zeros", deciding: true, decidedMark: true }, { layer: "most_wins", label: "Most wins", deciding: false, decidedMark: false }])
+      && /repeat\(2,/.test(tsub?.cols ?? "") && tsub?.stray === 0
+      && J(tsub?.rows.map(r => [r.rank, r.name, r.vals.map(v => `${v.value}:${v.deciding}`)]))
+         === J([["1", "Wooklord", ["0:true", "0:false"]], ["2", "EggHead", ["1:true", "1:false"]], ["2", "GlobalAdmin", ["1:true", "1:false"]]]),
+    `three: ${J(tb.three.tags)} rows ${J(tb.three.tgRows)} subs ${J(tb.three.subs)}`);
   check("all-zero board (fresh season): no groups, no tags, no sub-rows — the hasAnyScore gate — while the placeholder podium renders (empty-set case)",
     tb.zero.names.length === 2 && tb.zero.tgRows.length === 0 && tb.zero.tags.length === 0 && tb.zero.subs.length === 0 && tb.zero.placeholderPodium,
     `zero: rows ${JSON.stringify(tb.zero.tgRows)} tags ${JSON.stringify(tb.zero.tags)} placeholder: ${tb.zero.placeholderPodium}`);

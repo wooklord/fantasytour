@@ -432,24 +432,30 @@ html[data-theme="light"] .panel.live-halo{
    inset shadow inside), so an own row inside a group keeps its yolk
    outline. The tag row and sub-row are not members: no bracket, no .me.
    --mint is LOCKED (clears the 3:1 non-text AA floor in both themes;
-   cream-dim rejected as too quiet). The sub-row is a wrapping flex list
-   per layer: at phone width the layer label takes its own line and the
-   rank·name·value chips wrap beneath it inside the table's existing
-   horizontal-scroll wrapper. */
+   cream-dim rejected as too quiet). The sub-row is a GRID (LAYOUT B,
+   correction 2026-10-26 — the first flex-chip layout did not read on a
+   phone): a header row of short layer labels, then rank · name · one
+   value per layer for each member. The name column is minmax(0,1fr) so
+   it truncates (.nm) rather than pushing values off-screen; value
+   columns are fit-content(5em) so a label wraps to two lines when width
+   is short. The deciding column is tinted with color-mix on --mint; the
+   rgba line before it is the fallback for a browser without color-mix
+   (dark-theme mint, acceptable as a faint tint on either panel). */
 .lb tr.tg td:first-child{border-left:3px solid var(--mint)}
 .lb tr.tg-tag td{padding:4px 8px 10px 8px}
 .tg-text{font-size:.78rem}
 .tg-plus{font-family:var(--mono);font-size:1rem;line-height:1;padding:0 8px;margin-left:6px;text-decoration:none;vertical-align:baseline}
 .tg-none{font-size:.72rem;margin-left:8px}
 .lb tr.tg-sub td{padding:0 8px 12px 8px}
-.tg-layer{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;padding:5px 0;font-size:.8rem;border-top:1px dotted var(--line2)}
-.tg-layer-label{color:var(--cream-dim);flex:0 0 110px}
-@media (max-width:520px){ .tg-layer-label{flex:0 0 100%} }
-.tg-layer.deciding .tg-layer-label{color:var(--cream);font-weight:700}
-.tg-decided{color:var(--mint);font-size:.66rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-left:6px}
-.tg-val{display:inline-flex;align-items:baseline;gap:5px;font-family:var(--mono);white-space:nowrap}
-.tg-val .tg-rank{color:var(--yolk);font-size:.72rem}
-.tg-val .nm{display:inline-block;max-width:min(120px,30vw);font-family:inherit}
+.tg-grid{display:grid;column-gap:8px;row-gap:2px;align-items:baseline;font-size:.8rem;margin-top:2px}
+.tg-h{font-size:.66rem;text-transform:uppercase;letter-spacing:.5px;color:var(--cream-dim);line-height:1.2;padding:4px 4px 6px;text-align:center;border-bottom:1px dotted var(--line2);align-self:end}
+.tg-h.deciding,.tg-v.deciding{background:rgba(127,232,195,.14);background:color-mix(in srgb,var(--mint) 14%,transparent)}
+.tg-h.deciding{color:var(--cream);font-weight:700;border-radius:6px 6px 0 0}
+.tg-decided{display:block;color:var(--mint);font-size:.58rem;font-weight:700;letter-spacing:1px;margin-top:2px}
+.tg-r{padding:3px 0}
+.tg-rank{font-family:var(--mono);color:var(--yolk);font-size:.72rem}
+.tg-name{min-width:0}
+.tg-v{font-family:var(--mono);text-align:center;padding:3px 6px}
 /* Name cells (decision 4): ellipsis, never a wrap or a sideways scroll.
    .nm is the one truncation rule for every nickname cell — standings
    table, podium, Who's Picked and the other .pickres admin lists — with

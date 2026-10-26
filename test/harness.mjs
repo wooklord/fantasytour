@@ -1921,11 +1921,26 @@ export async function runStandingsTiebreakScenario({ html, scripts, mode }){
           plus: tr.querySelector(".tg-plus")?.textContent ?? null, expanded: tr.querySelector(".tg-plus")?.getAttribute("aria-expanded") ?? null,
           onclick: tr.querySelector(".tg-plus")?.getAttribute("onclick") ?? "", none: tr.querySelector(".tg-none")?.textContent ?? null,
           me: tr.classList.contains("me"), tg: tr.classList.contains("tg") })),
-        subs: q("tr.tg-sub").map(tr => ({ key: tr.dataset.tg, hidden: tr.classList.contains("hidden"), tg: tr.classList.contains("tg"),
-          layers: [...tr.querySelectorAll(".tg-layer")].map(l => ({
-            label: l.querySelector(".tg-layer-label")?.firstChild?.textContent ?? "",
-            deciding: l.classList.contains("deciding"),
-            vals: [...l.querySelectorAll(".tg-val")].map(v => `${v.querySelector(".tg-rank")?.textContent} ${v.querySelector(".nm")?.textContent} ${v.querySelector("b")?.textContent}`) })) })),
+        // LAYOUT B grid (standings-ux.md item 5 correction): header cells
+        // (.tg-h.tg-col, one per configured layer) then member rows of
+        // rank · name · one value per layer, flat in the grid — chunked
+        // here by the header count. `stray` must be 0 (no partial row).
+        subs: q("tr.tg-sub").map(tr => {
+          const grid = tr.querySelector(".tg-grid");
+          const headers = grid ? [...grid.querySelectorAll(".tg-h.tg-col")] : [];
+          const w = 2 + headers.length;
+          const cells = grid ? [...grid.children].slice(w) : [];
+          const rows = [];
+          for (let i = 0; i + w <= cells.length; i += w) rows.push(cells.slice(i, i + w));
+          return {
+            key: tr.dataset.tg, hidden: tr.classList.contains("hidden"), tg: tr.classList.contains("tg"),
+            cols: grid?.getAttribute("style") ?? "",
+            headers: headers.map(h => ({ layer: h.dataset.layer, label: h.firstChild?.textContent ?? "", deciding: h.classList.contains("deciding"), decidedMark: !!h.querySelector(".tg-decided") })),
+            rows: rows.map(r => ({ rank: r[0].textContent, name: r[1].querySelector(".nm")?.textContent, title: r[1].querySelector(".nm")?.getAttribute("title"),
+              vals: r.slice(2).map(cell => ({ layer: cell.dataset.layer, value: cell.textContent, deciding: cell.classList.contains("deciding") })) })),
+            stray: cells.length % w,
+          };
+        }),
         rpcCount: calls.filter(c => c.type === "rpc").length,
         storageKeys: Object.keys(dumpLocalStorage(w)).sort(),
         placeholderPodium: !!w.document.querySelector(".podium") && w.document.querySelectorAll(".podium .nm").length === 0,
@@ -1969,7 +1984,10 @@ export async function runStandingsTiebreakScenario({ html, scripts, mode }){
 
   const shared = (await load({ scores: sharedWins, stack: ["most_wins"] })).read();
   const none = (await load({ scores: noTie })).read();
-  const three = (await load({ scores: threeWay, roster: ["p1", "p2", "p4"] })).read();
+  // Two-layer stack on purpose: most_wins also ties the shared pair 1–1,
+  // so only the FIRST column may carry the deciding tint — a one-layer
+  // stack cannot tell "tint the deciding column" from "tint every column".
+  const three = (await load({ scores: threeWay, roster: ["p1", "p2", "p4"], stack: ["fewest_zeros", "most_wins"] })).read();
   const zero = (await load({ scores: allZero })).read();
   const casual = (await load({ scores: casualTie, bracket: "casual" })).read();
   const leftoverKey = (await load({ scores: resolved, preset: "compact" })).read();

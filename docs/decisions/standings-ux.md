@@ -222,6 +222,41 @@
    bracket beside the own-row outline at a real viewport need a look on
    the device (private tab, `npm run dev` or the live site once Pages
    serves `26aef8a`).
+   **⚠️ CORRECTION 2026-10-26, same day, recorded at full weight: the
+   sub-row layout above did NOT read on a phone.** The stated seam
+   materialized on the first live look: the inline-wrapping rank · name ·
+   value chips wrapped two-then-one, rank and value ran together, and the
+   name truncated at 120px. The per-layer-block sub-row (the "values come
+   from computeStandings totals … each member as rank · name · value"
+   wording above) is **SUPERSEDED**, original kept and marked by this
+   note, by **LAYOUT B, dev's call:** the sub-row is a GRID — one row per
+   tied player (rank, full-width name with `.nm` ellipsis, then one value
+   column per configured layer in stack order), a header row of layer
+   labels (short labels, allowed to wrap to two lines), the deciding
+   column's header and cells highlighted with a mint tint and the
+   "decided" mark in its header. No per-layer blocks. **Rejected
+   alternative (LAYOUT A):** keep the per-layer blocks but stack players
+   one per line inside each as a rank / name / right-aligned value grid,
+   deciding block bold, the others muted. Scope: `subRow()` in
+   `standings.js`, its CSS, and the harness sub-row readers and
+   assertions — the same facts asserted (every configured layer present,
+   each member's value, the deciding one marked, equal ranks visible).
+   One mutation: deciding highlight on the wrong layer. The three-way
+   harness case moves to a two-layer stack, since a one-layer stack
+   cannot tell "tint the deciding column" from "tint every column".
+   **LAYOUT B BUILT 2026-10-26, bundle `79618b2-502ca9b`.** `subRow()`
+   emits a flat CSS grid (`auto minmax(0,1fr) repeat(N,fit-content(5em))`):
+   two empty header cells, one `.tg-h.tg-col` per layer, then per member
+   `.tg-rank` · `.tg-name` (`.nm`) · one `.tg-v` per layer; `.deciding`
+   on the deciding column's header and cells, the "decided" mark in its
+   header only. The harness chunks the grid by header count and asserts
+   `stray === 0`. Mutation — deciding tint inverted onto the wrong
+   column(s): caught by the expand, shared and two-layer three-way
+   checks, both modes. **Phone seam again, stated:** jsdom proves the
+   grid's DOM and the stylesheet text only; the header labels wrapping to
+   two lines, the name column truncating before the value columns do, the
+   tint reading in both themes, and the sub-row's width at 360px with a
+   two- or three-layer stack need a look on the device.
 
 ## Why these and not the alternatives
 
