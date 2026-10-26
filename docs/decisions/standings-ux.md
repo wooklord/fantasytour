@@ -350,6 +350,40 @@
    failed in both modes; revert byte-identical, bundle matched the index
    after the rebuild. Scope held to `subRow` and the tests.
 
+6. **LOCKED 2026-10-26 — Stats section rework (the standings tab's
+   "Nerd stats").**
+   1. The section is renamed **"Stats"**; the "· <scope>" suffix stays.
+   2. Columns: **Player, Shows, Avg, High, Zeros, Wins** (laurel icon
+      header as today). Zeros is new, read from the same
+      `computeStandings` totals the tiebreaks use. **Header text: "0s" —
+      the survey's call, 2026-10-26, by estimate; device check pending.**
+      At 360px the table gets ~294px (`.wrap` 16px sides, `.panel` 16px
+      padding + 1px border). `.lb.compact th` (two classes) outranks
+      `.lb th`, so compact headers render at .85rem uppercase with 1px
+      tracking, not .72rem; SHOWS / AVG / HIGH / ZEROS / laurel plus the
+      mono value cells come to ~243px and leave the Player column ~50px,
+      which truncates an 8-character name. "0s" gives it ~80px. The
+      legend line gains "0s = scoring zeros". If the device shows room to
+      spare, "Zeros" is a one-string change.
+   3. **Every numeric column sorts on header tap.** First tap sorts BEST
+      FIRST — descending for Shows / Avg / High / Wins, ascending for
+      Zeros; second tap flips; the active column shows a direction arrow
+      and its values render bold. Ties within the sort fall back to name
+      A–Z. The choice persists per device in `localStorage`
+      `ft_stats_sort`, same posture as `ft_scores_view`; default Avg
+      best-first (today's order). `aria-sort` on the active header.
+   4. **A leaders strip above the table:** Best avg, High score, Most
+      wins, Fewest zeros — name plus value, "+N" when tied, drawn from
+      the same rows. Hidden when the table is hidden (the no-scores
+      case).
+   5. Own-row outline (`.me`) unchanged. Rows still require `shows > 0`.
+   6. **Recorded as a CANDIDATE, not a decision:** a per-show matrix
+      (players × shows, points per cell, heat tint) as a later component
+      and the home for any consistency stat.
+   **Status:** docs only as of 2026-10-26; the read-only survey and the
+   change plan were produced the same day and the plan awaits approval.
+   Nothing in `src/` has changed for this item.
+
 ## Why these and not the alternatives
 
 - Compact-by-default because the board is read far more often than it is
