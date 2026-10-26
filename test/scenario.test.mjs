@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -1053,6 +1053,66 @@ async function runMode(mode){
   check("a leftover ft_board_view=compact key from 1a74cee changes nothing: the group still renders, no chip",
     tb.leftoverKey.tags.length === 1 && tb.leftoverKey.tgRows.length === 2 && !tb.leftoverKey.chipPresent,
     `leftover: tags ${tb.leftoverKey.tags.length} rows ${tb.leftoverKey.tgRows.length} chip ${tb.leftoverKey.chipPresent}`);
+
+  // (6) Stats panel (standings-ux.md item 6). Column indexes: headers
+  // 0 Player, 1 Shows, 2 Avg, 3 High, 4 0s, 5 wins (laurel, no text);
+  // cells 0 Shows, 1 Avg, 2 High, 3 0s, 4 wins.
+  const st = await runStatsScenario({ html, scripts, mode });
+  const names = r => r.rows.map(x => x.name);
+  const activeHeaders = r => r.headers.map((h, i) => h.active ? i : -1).filter(i => i >= 0);
+  const arrowHeaders = r => r.headers.map((h, i) => h.arrow ? i : -1).filter(i => i >= 0);
+  const activeCells = r => [...new Set(r.rows.flatMap(x => x.cells.map((c, i) => c.active ? i : -1).filter(i => i >= 0)))];
+  check("Stats: heading reads 'Stats · Live Season'; headers are Player, Shows, Avg, High, 0s, laurel; the five numeric headers are sortable, Player is not; setStatsSort is on window",
+    st.dflt.heading === "Stats · Live Season" && st.dflt.setterOnWindow === "function"
+      && J(st.dflt.headers.map(h => h.text)) === J(["Player", "Shows", "Avg", "High", "0s", ""])
+      && J(st.dflt.headers.map(h => h.sortable)) === J([false, true, true, true, true, true])
+      && st.dflt.headers[4].onclick === "setStatsSort('zeros')",
+    `headers: ${J(st.dflt.headers)} heading: ${st.dflt.heading}`);
+  check("Stats default: today's order (Avg best-first) — Wooklord 7.0, EggHead 3.0, GlobalAdmin 2.3 — Avg header active with ▼ and aria-sort=descending, every other header aria-sort=none and arrow-less, bold cells in the Avg column only, nothing written to localStorage before a tap, own row carries .me",
+    J(names(st.dflt)) === J(["Wooklord", "EggHead", "GlobalAdmin"])
+      && J(st.dflt.rows.map(x => x.cells.map(c => c.v))) === J([["1", "7.0", "7", "2", "1"], ["2", "3.0", "3", "1", "1"], ["3", "2.3", "4", "0", "1"]])
+      && J(activeHeaders(st.dflt)) === J([2]) && J(arrowHeaders(st.dflt)) === J([2]) && st.dflt.headers[2].arrow === "▼" && st.dflt.headers[2].ariaSort === "descending"
+      && st.dflt.headers.filter((h, i) => i !== 2 && h.sortable).every(h => h.ariaSort === "none")
+      && J(activeCells(st.dflt)) === J([1]) && st.dflt.stored === null
+      && st.dflt.rows.find(x => x.name === "Wooklord")?.me === true && st.dflt.rows.filter(x => x.me).length === 1,
+    `rows: ${J(st.dflt.rows)} headers: ${J(st.dflt.headers)} stored: ${st.dflt.stored}`);
+  check("Stats: tapping 0s sorts ASCENDING (GlobalAdmin 0, EggHead 1, Wooklord 2) with ▲ and aria-sort=ascending on the 0s header only, bold cells in the 0s column only, ft_stats_sort=zeros:asc written, and NO refetch (rpc count unchanged)",
+    J(names(st.zerosAsc)) === J(["GlobalAdmin", "EggHead", "Wooklord"])
+      && J(activeHeaders(st.zerosAsc)) === J([4]) && J(arrowHeaders(st.zerosAsc)) === J([4]) && st.zerosAsc.headers[4].arrow === "▲" && st.zerosAsc.headers[4].ariaSort === "ascending"
+      && J(activeCells(st.zerosAsc)) === J([3]) && st.zerosAsc.stored === "zeros:asc" && st.zerosAsc.rpcCount === st.dflt.rpcCount,
+    `rows: ${J(names(st.zerosAsc))} headers: ${J(st.zerosAsc.headers)} stored: ${st.zerosAsc.stored} rpc ${st.dflt.rpcCount}/${st.zerosAsc.rpcCount}`);
+  check("Stats: a second tap on 0s flips to descending (Wooklord, EggHead, GlobalAdmin) with ▼ and zeros:desc stored",
+    J(names(st.zerosDesc)) === J(["Wooklord", "EggHead", "GlobalAdmin"]) && st.zerosDesc.headers[4].arrow === "▼"
+      && st.zerosDesc.headers[4].ariaSort === "descending" && st.zerosDesc.stored === "zeros:desc",
+    `rows: ${J(names(st.zerosDesc))} stored: ${st.zerosDesc.stored}`);
+  check("Stats: a stored wins:desc is honoured on a fresh boot — wins header active, and the three-way tie at 1 win falls to name A–Z (EggHead, GlobalAdmin, Wooklord) although the panel received them as GlobalAdmin, Wooklord, EggHead",
+    J(activeHeaders(st.presetWins)) === J([5]) && st.presetWins.headers[5].ariaSort === "descending"
+      && J(names(st.presetWins)) === J(["EggHead", "GlobalAdmin", "Wooklord"]) && J(activeCells(st.presetWins)) === J([4]),
+    `rows: ${J(names(st.presetWins))} headers: ${J(st.presetWins.headers)}`);
+  check("Stats: a bogus stored value falls back to the default (Avg active) and is left untouched until a tap",
+    J(activeHeaders(st.presetBogus)) === J([2]) && J(names(st.presetBogus)) === J(["Wooklord", "EggHead", "GlobalAdmin"]) && st.presetBogus.stored === "bogus",
+    `headers: ${J(st.presetBogus.headers)} stored: ${st.presetBogus.stored}`);
+  check("Stats leaders: Best avg Wooklord 7.0, High score Wooklord 7, Most wins EggHead +2 (three-way tie, name order) 1, Fewest zeros GlobalAdmin 0",
+    J(st.dflt.leaders.map(l => [l.key, l.label, l.name, l.extra, l.value])) === J([
+      ["avg", "Best avg", "Wooklord", null, "7.0"], ["high", "High score", "Wooklord", null, "7"],
+      ["wins", "Most wins", "EggHead", "+2", "1"], ["zeros", "Fewest zeros", "GlobalAdmin", null, "0"]]),
+    `leaders: ${J(st.dflt.leaders)}`);
+  check("Stats no-scores board: the empty row renders, no leaders strip, no player rows (empty-set case)",
+    st.empty.emptyRow === "Stats appear once shows score." && st.empty.leadersPresent === false && st.empty.rows.length === 0,
+    `empty: ${J(st.empty)}`);
+  check("Stats on All time (no season): 0s cells read '—', the 0s header is NOT sortable (no onclick, no aria-sort), the Fewest zeros leader is omitted, the legend says season views only; a stored zeros:asc falls back to Avg for the render without being rewritten, and a tap on 0s there is ignored",
+    st.allTime.heading === "Stats · All time" && st.allTime.rows.every(x => x.cells[3].v === "—")
+      && st.allTime.headers[4].sortable === false && st.allTime.headers[4].onclick === "" && st.allTime.headers[4].ariaSort === null
+      && J(st.allTime.leaders.map(l => l.key)) === J(["avg", "high", "wins"]) && /season views only/.test(st.allTime.legend)
+      && J(activeHeaders(st.allTimeZerosPreset)) === J([2]) && st.allTimeZerosPreset.stored === "zeros:asc"
+      && J(activeHeaders(st.allTimeZerosTap)) === J([2]) && st.allTimeZerosTap.stored === "zeros:asc" && st.allTimeZerosTap.rpcCount === st.allTimeZerosPreset.rpcCount,
+    `allTime: ${J(st.allTime.headers)} leaders ${J(st.allTime.leaders.map(l => l.key))} preset: ${J(activeHeaders(st.allTimeZerosPreset))}/${st.allTimeZerosPreset.stored} tap: ${J(activeHeaders(st.allTimeZerosTap))}/${st.allTimeZerosTap.stored}`);
+  check("Stats stylesheet, statically: the arrow lives only in .lb th .arrow with no reserved width, .lb td.active is bold, .leaders is a 2-column grid going to 4 at 520px",
+    /\.lb th \.arrow\{font-size:\.6rem;margin-left:2px;vertical-align:middle\}/.test(css)
+      && /\.lb td\.active\{font-weight:700;color:var\(--cream\)\}/.test(css)
+      && /\.leaders\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(css)
+      && /@media \(min-width:520px\)\{ \.leaders\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)\} \}/.test(css),
+    "styles.css: .lb th .arrow / .lb td.active / .leaders rules");
 
   // (2a/3a) Scores page: View chip, own-entry outline, ellipsis names
   const sv = await runScoresViewScenario({ html, scripts, mode });

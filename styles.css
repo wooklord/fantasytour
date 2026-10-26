@@ -416,6 +416,23 @@ html[data-theme="light"] .panel.live-halo{
 .lb .pts{font-family:var(--mono);text-align:right;font-size:1.05rem}
 .lb.compact td,.lb.compact th{padding:8px 5px;font-size:.85rem}
 .lb.compact .pts{font-size:.9rem}
+/* Stats panel (docs/decisions/standings-ux.md item 6): numeric headers
+   sort on tap; the arrow is rendered only inside the active header (an
+   empty span elsewhere, so inactive columns reserve no width at 360px);
+   the active column's values go bold at full color. The leaders strip
+   is 2×2 at phone width and 4 across from 520px; names use .nm. */
+.lb th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+.lb th .arrow{font-size:.6rem;margin-left:2px;vertical-align:middle}
+.lb th.active{color:var(--cream)}
+.lb td.active{font-weight:700;color:var(--cream)}
+.leaders{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;margin:4px 0 10px}
+@media (min-width:520px){ .leaders{grid-template-columns:repeat(4,minmax(0,1fr))} }
+.leader{display:flex;flex-direction:column;gap:1px;min-width:0;padding:6px 8px;background:var(--pit);border:1px solid var(--line);border-radius:10px}
+.leader .lbl{font-size:.62rem;text-transform:uppercase;letter-spacing:1px;color:var(--cream-dim)}
+.leader .who{display:flex;align-items:baseline;gap:4px;min-width:0;font-size:.85rem}
+.leader .who .nm{flex:0 1 auto}
+.leader .who small{color:var(--cream-dim);font-size:.7rem;flex:0 0 auto}
+.leader b{font-family:var(--mono);font-size:.95rem}
 /* Own row: an OUTLINE in --yolk, never a fill (docs/decisions/standings-ux.md
    decision 3) — per-show wins may later tint rows, and an outline can't
    collide with a fill. Inset box-shadows on the cells rather than

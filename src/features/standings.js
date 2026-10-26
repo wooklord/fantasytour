@@ -7,6 +7,7 @@ import { trophy, rankNumeral, winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
 import { currentBracket } from "../core/switcher.js";
 import { computeStandings, rankStandings, groupTies, ordinal, layerDisplayValue, decidedByText, TIEBREAK_SHORT_LABELS } from "../core/tiebreak.js";
+import { STAT_COLS, DEFAULT_STATS_SORT, statValue, fmtStat, bestDir, flipDir, sortStats, parseStatsSort, formatStatsSort, statLeaders } from "../core/stats.js";
 
 // Bound to the standings-select onchange (see renderBoard below) — replaces the
 // original inline `boardSeason=this.value; renderBoard();` now that boardSeason
@@ -36,6 +37,67 @@ export function toggleTieGroup(key){
   const btn = document.querySelector(`tr.tg-tag[data-tg="${key}"] .tg-plus`);
   if (sub) sub.classList.toggle("hidden", !open);
   if (btn){ btn.textContent = open ? "−" : "+"; btn.setAttribute("aria-expanded", String(open)); }
+}
+
+// ---------- Stats panel (standings-ux.md item 6) ----------
+// Sort choice persists per device in ft_stats_sort, same posture as
+// ft_scores_view: read once at load through a whitelist (parseStatsSort),
+// written on every tap, never sent to the server. Default avg best-first.
+let statsSort = parseStatsSort(localStorage.getItem("ft_stats_sort"));
+// The last rows renderBoard computed, so a header tap re-renders the stats
+// panel alone from this cache — no refetch (decision 2; the harness
+// asserts the RPC count unchanged across a tap).
+let lastStats = null;
+// On window via main.js. Same column flips; a new column takes its
+// best-first direction. Zeros is unsortable without a season (decision 1).
+export function setStatsSort(col){
+  if (!STAT_COLS[col]) return;
+  if (lastStats && !lastStats.season && col === "zeros") return;
+  statsSort = statsSort.col === col ? { col, dir: flipDir(statsSort.dir) } : { col, dir: bestDir(col) };
+  localStorage.setItem("ft_stats_sort", formatStatsSort(statsSort));
+  const el = document.getElementById("statspanel");
+  if (el && lastStats) el.outerHTML = statsPanelHtml(lastStats);
+}
+const LEADER_LABELS = { avg: "Best avg", high: "High score", wins: "Most wins", zeros: "Fewest zeros" };
+function statsPanelHtml(s){
+  const { pname, season, scopeName } = s;
+  const nameOf = id => pname[id] || "?";
+  // A stored zeros sort on a no-season view falls back to the default
+  // for this render only — nothing is written, so the preference survives
+  // a switch back to a season.
+  const sort = (!season && statsSort.col === "zeros") ? DEFAULT_STATS_SORT : statsSort;
+  const rows = sortStats(s.statRows, sort.col, sort.dir, nameOf);
+  // Header: sortable numeric columns carry the tap, aria-sort on the
+  // active one ("none" elsewhere) and the arrow ▼/▲ on the active one
+  // only (decision 3). Player is not sortable; Zeros is not without a
+  // season.
+  const th = (col, label) => {
+    const sortable = !!STAT_COLS[col] && (season || col !== "zeros");
+    const active = sortable && sort.col === col;
+    const aria = active ? (sort.dir === "asc" ? "ascending" : "descending") : "none";
+    const arrow = active ? (sort.dir === "asc" ? "▲" : "▼") : "";
+    return `<th style="text-align:right" class="${sortable ? "sortable" : ""}${active ? " active" : ""}"${
+      sortable ? ` onclick="setStatsSort('${col}')" aria-sort="${aria}" title="Sort by ${col === "zeros" ? "zeros" : col}"` : ""}>${label}<span class="arrow">${arrow}</span></th>`;
+  };
+  // The active column's values render bold (item 6.3) via .active.
+  const td = (col, v, extra = "") => `<td class="pts${sort.col === col ? " active" : ""}"${extra}>${v}</td>`;
+  const leaders = rows.length ? statLeaders(rows, nameOf, { withZeros: !!season }) : [];
+  const leadersHtml = leaders.length ? `<div class="leaders">${leaders.map(l =>
+    `<div class="leader" data-key="${l.key}"><span class="lbl">${LEADER_LABELS[l.key]}</span><span class="who"><span class="nm" title="${esc(nameOf(l.ids[0]))}">${esc(nameOf(l.ids[0]))}</span>${
+      l.ids.length > 1 ? `<small>+${l.ids.length - 1}</small>` : ""}</span><b>${fmtStat(l.col, l.value)}</b></div>`).join("")}</div>` : "";
+  return `<div class="panel" id="statspanel"><h2>Stats <span class="muted" style="font-size:.78rem">· ${scopeName}</span></h2>
+      ${leadersHtml}
+      <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th>${th("shows", "Shows")}${th("avg", "Avg")}${th("high", "High")}${th("zeros", "0s")}${th("wins", winBadge(18))}</tr>
+      ${rows.map(([id, r]) => `<tr class="${id===state.session.id?"me":""}">
+        <td class="pname"><span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span></td>${td("shows", r.shows)}
+        ${td("avg", fmtStat("avg", statValue(r, "avg")))}
+        ${td("high", r.high, ` title="${esc(r.highShow?.venue||"")}"`)}
+        ${td("zeros", season ? r.zeros : "—")}
+        ${td("wins", r.wins||0)}</tr>`).join("")
+        || '<tr><td colspan="6" class="muted">Stats appear once shows score.</td></tr>'}
+      </table></div>
+      <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played · High = best single show (venue on hover) · 0s = scoring zeros${season ? "" : " (season views only)"} · wreath = shows won · tap a column to sort</p>
+    </div>`;
 }
 
 // ---------- podium arrangement ----------
@@ -269,8 +331,10 @@ export async function renderBoard(){
     : !hasAnyScore
     ? `<div class="podium">${placeholderBox("silver",2,false)}${placeholderBox("gold",1,true)}${placeholderBox("bronze",3,false)}</div>`
     : `<div class="podium-wrap">${boxedHtml}${compactHtml}</div>`;
-  const statRows = rows.filter(([,r]) => r.shows > 0)
-    .sort((a,b) => b[1].scoped/b[1].shows - a[1].scoped/a[1].shows);
+  // Rows still require shows > 0 (item 6.5); the ORDER is the stats
+  // panel's business now (sortStats, persisted choice), not fixed here.
+  const statRows = rows.filter(([,r]) => r.shows > 0);
+  lastStats = { statRows, pname, season: season || null, scopeName: season ? esc(season.name) : "All time" };
 
   // ---- tie groups (standings-ux.md item 5) ----
   // One group per run of equal-points rows (groupTies), gated on the SAME
@@ -362,16 +426,6 @@ export async function renderBoard(){
         tiebreakers.map((l, i) => `${ordinal(i + 1)}: ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" · ")
       }</p>` : ""}
     </div>
-    <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">· ${scopeName}</span></h2>
-      <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th><th style="text-align:right">Shows</th><th style="text-align:right">Avg</th><th style="text-align:right">High</th><th style="text-align:right">${winBadge(18)}</th></tr>
-      ${statRows.map(([id,r]) => `<tr class="${id===state.session.id?"me":""}">
-        <td class="pname"><span class="nm" title="${esc(pname[id]||"?")}">${esc(pname[id]||"?")}</span></td><td class="pts">${r.shows}</td>
-        <td class="pts">${(r.scoped/r.shows).toFixed(1)}</td>
-        <td class="pts" title="${esc(r.highShow?.venue||"")}">${r.high}</td>
-        <td class="pts">${r.wins||0}</td></tr>`).join("")
-        || '<tr><td colspan="5" class="muted">Stats appear once shows score.</td></tr>'}
-      </table></div>
-      <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played · High = best single show (venue on hover) · wreath = shows won</p>
-    </div>
+    ${statsPanelHtml(lastStats)}
     ${footerHtml()}`;
 }

@@ -782,9 +782,9 @@ Save anyway?`)) return;
     if (!(scores || []).length && (picks || []).length) {
       const slotOrder = slotDefs(show.format).map((sl) => sl.key);
       const slotLabel = Object.fromEntries(slotDefs(show.format).map((sl) => [sl.key, sl.label]));
-      const byName = {};
-      for (const p of picks) ((_b = byName[_a = p.player_name]) != null ? _b : byName[_a] = []).push(p);
-      pickBoard = `<h2 style="margin:18px 4px 4px">The picks are in</h2>` + Object.entries(byName).sort((a, b) => a[0].localeCompare(b[0])).map(([name, pp]) => `
+      const byName2 = {};
+      for (const p of picks) ((_b = byName2[_a = p.player_name]) != null ? _b : byName2[_a] = []).push(p);
+      pickBoard = `<h2 style="margin:18px 4px 4px">The picks are in</h2>` + Object.entries(byName2).sort((a, b) => a[0].localeCompare(b[0])).map(([name, pp]) => `
         <div class="panel pickboard" style="padding:12px"><div class="row"><b class="nm" title="${esc(name)}">${esc(name)}</b></div>
           ${pp.sort((a, b) => slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot)).map((p) => `
             <div class="pickres"><span class="sl">${esc(slotLabel[p.slot] || p.slot)}</span>
@@ -1106,6 +1106,70 @@ Save anyway?`)) return;
     return groups;
   }
 
+  // src/core/stats.js
+  var STAT_COLS = {
+    shows: { best: "desc" },
+    avg: { best: "desc" },
+    high: { best: "desc" },
+    zeros: { best: "asc" },
+    wins: { best: "desc" }
+  };
+  var DEFAULT_STATS_SORT = { col: "avg", dir: "desc" };
+  function statValue(t, col) {
+    if (col === "shows") return t.shows;
+    if (col === "avg") return t.shows ? t.scoped / t.shows : 0;
+    if (col === "high") return t.high;
+    if (col === "zeros") return t.zeros;
+    if (col === "wins") return t.wins || 0;
+    throw new Error("Unknown stat column: " + col);
+  }
+  function fmtStat(col, v) {
+    return col === "avg" ? Number(v).toFixed(1) : String(v);
+  }
+  function bestDir(col) {
+    var _a, _b;
+    return (_b = (_a = STAT_COLS[col]) == null ? void 0 : _a.best) != null ? _b : "desc";
+  }
+  function flipDir(dir) {
+    return dir === "asc" ? "desc" : "asc";
+  }
+  var byName = (nameOf) => (a, b) => String(nameOf(a) || "").localeCompare(String(nameOf(b) || ""), void 0, { sensitivity: "accent" });
+  function sortStats(rows, col, dir, nameOf = () => "") {
+    const sign = dir === "asc" ? 1 : -1;
+    const nm = byName(nameOf);
+    return rows.slice().sort((a, b) => {
+      const d = statValue(a[1], col) - statValue(b[1], col);
+      if (d !== 0) return sign * d;
+      return nm(a[0], b[0]);
+    });
+  }
+  function parseStatsSort(raw) {
+    if (typeof raw !== "string") return { ...DEFAULT_STATS_SORT };
+    const [col, dir] = raw.split(":");
+    if (!STAT_COLS[col] || dir !== "asc" && dir !== "desc") return { ...DEFAULT_STATS_SORT };
+    return { col, dir };
+  }
+  function formatStatsSort({ col, dir }) {
+    return `${col}:${dir}`;
+  }
+  function statLeaders(rows, nameOf = () => "", { withZeros = true } = {}) {
+    if (!rows.length) return [];
+    const nm = byName(nameOf);
+    const pick = (key, col, label, best) => {
+      const vals = rows.map(([id, t]) => [id, statValue(t, col)]);
+      const top = vals.reduce((m, [, v]) => m === null ? v : best === "max" ? Math.max(m, v) : Math.min(m, v), null);
+      const ids = vals.filter(([, v]) => v === top).map(([id]) => id).sort(nm);
+      return { key, col, label, value: top, ids };
+    };
+    const out = [
+      pick("avg", "avg", "Best avg", "max"),
+      pick("high", "high", "High score", "max"),
+      pick("wins", "wins", "Most wins", "max")
+    ];
+    if (withZeros) out.push(pick("zeros", "zeros", "Fewest zeros", "min"));
+    return out;
+  }
+
   // src/features/standings.js
   function setBoardSeason(v) {
     state.boardSeason = v;
@@ -1123,6 +1187,48 @@ Save anyway?`)) return;
       btn.textContent = open ? "\u2212" : "+";
       btn.setAttribute("aria-expanded", String(open));
     }
+  }
+  var statsSort = parseStatsSort(localStorage.getItem("ft_stats_sort"));
+  var lastStats = null;
+  function setStatsSort(col) {
+    if (!STAT_COLS[col]) return;
+    if (lastStats && !lastStats.season && col === "zeros") return;
+    statsSort = statsSort.col === col ? { col, dir: flipDir(statsSort.dir) } : { col, dir: bestDir(col) };
+    localStorage.setItem("ft_stats_sort", formatStatsSort(statsSort));
+    const el = document.getElementById("statspanel");
+    if (el && lastStats) el.outerHTML = statsPanelHtml(lastStats);
+  }
+  var LEADER_LABELS = { avg: "Best avg", high: "High score", wins: "Most wins", zeros: "Fewest zeros" };
+  function statsPanelHtml(s) {
+    const { pname, season, scopeName } = s;
+    const nameOf = (id) => pname[id] || "?";
+    const sort = !season && statsSort.col === "zeros" ? DEFAULT_STATS_SORT : statsSort;
+    const rows = sortStats(s.statRows, sort.col, sort.dir, nameOf);
+    const th = (col, label) => {
+      const sortable = !!STAT_COLS[col] && (season || col !== "zeros");
+      const active = sortable && sort.col === col;
+      const aria = active ? sort.dir === "asc" ? "ascending" : "descending" : "none";
+      const arrow = active ? sort.dir === "asc" ? "\u25B2" : "\u25BC" : "";
+      return `<th style="text-align:right" class="${sortable ? "sortable" : ""}${active ? " active" : ""}"${sortable ? ` onclick="setStatsSort('${col}')" aria-sort="${aria}" title="Sort by ${col === "zeros" ? "zeros" : col}"` : ""}>${label}<span class="arrow">${arrow}</span></th>`;
+    };
+    const td = (col, v, extra = "") => `<td class="pts${sort.col === col ? " active" : ""}"${extra}>${v}</td>`;
+    const leaders = rows.length ? statLeaders(rows, nameOf, { withZeros: !!season }) : [];
+    const leadersHtml = leaders.length ? `<div class="leaders">${leaders.map((l) => `<div class="leader" data-key="${l.key}"><span class="lbl">${LEADER_LABELS[l.key]}</span><span class="who"><span class="nm" title="${esc(nameOf(l.ids[0]))}">${esc(nameOf(l.ids[0]))}</span>${l.ids.length > 1 ? `<small>+${l.ids.length - 1}</small>` : ""}</span><b>${fmtStat(l.col, l.value)}</b></div>`).join("")}</div>` : "";
+    return `<div class="panel" id="statspanel"><h2>Stats <span class="muted" style="font-size:.78rem">\xB7 ${scopeName}</span></h2>
+      ${leadersHtml}
+      <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th>${th("shows", "Shows")}${th("avg", "Avg")}${th("high", "High")}${th("zeros", "0s")}${th("wins", winBadge(18))}</tr>
+      ${rows.map(([id, r]) => {
+      var _a;
+      return `<tr class="${id === state.session.id ? "me" : ""}">
+        <td class="pname"><span class="nm" title="${esc(nameOf(id))}">${esc(nameOf(id))}</span></td>${td("shows", r.shows)}
+        ${td("avg", fmtStat("avg", statValue(r, "avg")))}
+        ${td("high", r.high, ` title="${esc(((_a = r.highShow) == null ? void 0 : _a.venue) || "")}"`)}
+        ${td("zeros", season ? r.zeros : "\u2014")}
+        ${td("wins", r.wins || 0)}</tr>`;
+    }).join("") || '<tr><td colspan="6" class="muted">Stats appear once shows score.</td></tr>'}
+      </table></div>
+      <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played \xB7 High = best single show (venue on hover) \xB7 0s = scoring zeros${season ? "" : " (season views only)"} \xB7 wreath = shows won \xB7 tap a column to sort</p>
+    </div>`;
   }
   function arrangePodium(tiers) {
     var _a;
@@ -1222,7 +1328,8 @@ Save anyway?`)) return;
     const boxedHtml = boxedTiers.length ? `<div class="podium">${arrangePodium(boxedTiers).map(({ o, elevated }) => podBox(o, elevated)).join("")}</div>` : "";
     const compactHtml = compactTiers.length ? `<div class="podium-compact">${compactTiers.map((t) => `<div class="pod-col">${isOfficial ? trophy(44, tierFor(t.items[0])) : rankNumeral(44, tierFor(t.items[0]), t.rank)}<div class="pod-names">${t.items.map((o) => `<div class="nm" title="${esc(pname[o.id] || "?")}">${esc(pname[o.id] || "?")}</div>`).join("")}</div></div>`).join("")}</div>` : "";
     const podium = !order.length ? "" : !hasAnyScore ? `<div class="podium">${placeholderBox("silver", 2, false)}${placeholderBox("gold", 1, true)}${placeholderBox("bronze", 3, false)}</div>` : `<div class="podium-wrap">${boxedHtml}${compactHtml}</div>`;
-    const statRows = rows.filter(([, r]) => r.shows > 0).sort((a, b) => b[1].scoped / b[1].shows - a[1].scoped / a[1].shows);
+    const statRows = rows.filter(([, r]) => r.shows > 0);
+    lastStats = { statRows, pname, season: season || null, scopeName: season ? esc(season.name) : "All time" };
     const tieGroups = hasAnyScore ? groupTies(order, tiebreakers) : [];
     const tgInfo = /* @__PURE__ */ new Map();
     for (const g of tieGroups) g.members.forEach((m, k) => tgInfo.set(m.id, { g, first: k === 0, last: k === g.members.length - 1 }));
@@ -1262,19 +1369,7 @@ Save anyway?`)) return;
       </table></div>
       ${tiebreakers.length ? `<p class="muted" style="margin-top:8px;font-size:.75rem;text-align:center">Tiebreakers<br>${tiebreakers.map((l, i) => `${ordinal(i + 1)}: ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" \xB7 ")}</p>` : ""}
     </div>
-    <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">\xB7 ${scopeName}</span></h2>
-      <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th><th style="text-align:right">Shows</th><th style="text-align:right">Avg</th><th style="text-align:right">High</th><th style="text-align:right">${winBadge(18)}</th></tr>
-      ${statRows.map(([id, r]) => {
-      var _a2;
-      return `<tr class="${id === state.session.id ? "me" : ""}">
-        <td class="pname"><span class="nm" title="${esc(pname[id] || "?")}">${esc(pname[id] || "?")}</span></td><td class="pts">${r.shows}</td>
-        <td class="pts">${(r.scoped / r.shows).toFixed(1)}</td>
-        <td class="pts" title="${esc(((_a2 = r.highShow) == null ? void 0 : _a2.venue) || "")}">${r.high}</td>
-        <td class="pts">${r.wins || 0}</td></tr>`;
-    }).join("") || '<tr><td colspan="5" class="muted">Stats appear once shows score.</td></tr>'}
-      </table></div>
-      <p class="muted" style="margin-top:8px;font-size:.75rem">Avg = points per show played \xB7 High = best single show (venue on hover) \xB7 wreath = shows won</p>
-    </div>
+    ${statsPanelHtml(lastStats)}
     ${footerHtml()}`;
   }
 
@@ -1296,7 +1391,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"cb5400f-3a10695"}</p>
+      <p class="colophon buildid">build ${"4a21ea3-4b00b5e"}</p>
     </div>
   </div>`;
   }
@@ -2621,6 +2716,7 @@ Switch anyway?`
     renderShows,
     setBoardSeason,
     toggleTieGroup,
+    setStatsSort,
     loadRoster,
     addSeasonRow,
     saveSeason,

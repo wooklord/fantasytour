@@ -380,9 +380,46 @@
    6. **Recorded as a CANDIDATE, not a decision:** a per-show matrix
       (players × shows, points per cell, heat tint) as a later component
       and the home for any consistency stat.
-   **Status:** docs only as of 2026-10-26; the read-only survey and the
-   change plan were produced the same day and the plan awaits approval.
-   Nothing in `src/` has changed for this item.
+   **PLAN APPROVED 2026-10-26 (dev), with the five open points decided:**
+   1. **Zeros without a season (All time, Casual): "—" in the column, the
+      header unsortable, the Fewest zeros leader omitted.** The totals
+      hold 0 for everyone there because `computeStandings` only counts
+      zeros against a season's roster join dates; a column of zeros
+      would read as a fact. **CANDIDATE, not a decision:** a definition
+      of All-time / Casual zeros for later.
+   2. A tap re-renders the stats panel only, from cached rows; the
+      harness asserts the RPC count unchanged across a tap.
+   3. Arrow glyphs ▼ / ▲ on the active header only; no hint elsewhere.
+   4. Leaders values: avg to one decimal, the rest integers, as the table.
+   5. Ship "0s" with the legend; the device decides whether it reads.
+   **Build shape as approved:** pure `src/core/stats.js` (`sortStats`
+   with best-first defaults, `parseStatsSort` / `formatStatsSort`,
+   `statLeaders`, `fmtStat`), unit-tested and wired into `npm test`;
+   `statsPanelHtml` renders into `#statspanel` from a module-level cache
+   and `setStatsSort(col)` on `window` flips or switches, writes
+   `ft_stats_sort`, and re-renders that panel alone; CSS for the active
+   column and the leaders grid (2×2 at phone width, 4 across from
+   520px). Five mutations: zeros best-first flipped, name tiebreak
+   dropped, arrow on every header, bold in every column, "+N" omitted.
+   **BUILT 2026-10-26, bundle `4a21ea3-4b00b5e`.** `src/core/stats.js`
+   with `test/stats.test.mjs` in `npm test`; `statsPanelHtml` and
+   `setStatsSort` in `standings.js`; CSS; `runStatsScenario` with ten
+   checks (heading, default order, tap ascending, flip, stored preset
+   honoured, bogus preset, leaders, no-scores, All time, static CSS).
+   Mutations, all caught: zeros best-first flipped (3 unit + 2 board
+   checks), name tiebreak dropped (5 unit + 1 board), arrow on every
+   header (2 board), bold in every column (3 board), "+N" omitted (1
+   board). **Lesson recorded:** the name-tiebreak mutation first PASSED
+   on the board. The fixture's three players sat on equal points, the
+   board's own tie sort handed the panel an alphabetical list, and a
+   stable sort with the tiebreak removed reproduced it — only the unit
+   test saw it. The fixture now gives the panel a non-alphabetical order
+   (totals 7 / 7 / 6) and the board check fails under that mutation too.
+   A correlate (the input was already sorted) stood in for the condition
+   (the sort sorts) — discipline item 5, inside a test. **Phone seams,
+   stated:** the "0s" header row at 360px, the active column widening
+   when its values go bold, the arrow's width on the active header, and
+   the leaders strip's 2×2 wrap are all unmeasured here.
 
 ## Why these and not the alternatives
 

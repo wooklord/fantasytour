@@ -2270,6 +2270,91 @@ export async function runSyncFlagScenario({ html, scripts, mode }){
   };
 }
 
+// Stats panel (standings-ux.md item 6, LOCKED 2026-10-26). Same fixture
+// shape as the tiebreak scenario — a live Official season, three final
+// shows, p1/p2/p4 rostered — with scores chosen so avg, zeros and shows
+// all differ while wins tie three ways:
+//   p1 (7,–,–): shows 1, avg 7.0, high 7, zeros 2, wins 1 (show 2)
+//   p2 (3,3,–): shows 2, avg 3.0, high 3, zeros 1, wins 1 (show 3)
+//   p4 (1,2,4): shows 3, avg 2.3, high 4, zeros 0, wins 1 (show 4)
+// Totals are p1 7, p4 7, p2 6, so the standings order the panel receives
+// is GlobalAdmin, Wooklord, EggHead — NOT alphabetical. That is
+// deliberate: the first fixture had all three on equal points, the board's
+// own tie sort handed the panel an alphabetical list, and a stable sort
+// with the name tiebreak REMOVED reproduced it — the mutation passed on
+// the board and only the unit test caught it. With this order the
+// all-tied wins column must visibly re-sort to EggHead, GlobalAdmin,
+// Wooklord. The tap handler is INVOKED (setStatsSort on window). Reads
+// are DOM facts only; the bold/arrow CSS is asserted statically.
+export async function runStatsScenario({ html, scripts, mode }){
+  const day = o => new Date(Date.now() + o*864e5).toISOString().slice(0,10);
+  async function load({ scores, preset, allTime = false }){
+    const { tables, ids } = makeFixtures();
+    tables.shows.push({ id: 3, showdate: day(-3), venue: "Side Room", city: "Kingston", state: "NY", sync_flag: null });
+    tables.shows.push({ id: 4, showdate: day(-2), venue: "Back Room", city: "Kingston", state: "NY", sync_flag: null });
+    for (const [sid, off] of [[3, -3], [4, -2]]) tables.league_shows.push({ league_id: ids.LEAGUE_ID, show_id: sid, cutoff_at: new Date(Date.now()+off*864e5).toISOString(), format: "standard", status: "final", remind_sent: null, lock_sent: null, winner_sent: null });
+    tables.seasons.push({ id: 502, bracket_id: ids.OFFICIAL_ID, name: "Live Season", start_date: day(-30), end_date: day(30), roster_locked_at: null });
+    for (const id of ["p1", "p2", "p4"]) tables.season_rosters.push({ season_id: 502, player_id: id, added_at: day(-30) + "T00:00:00Z" });
+    tables.scores = scores(ids);
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+    w.localStorage.setItem("ft_session", JSON.stringify({ id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+    w.localStorage.setItem("ft_bracket_id", String(ids.OFFICIAL_ID));
+    if (preset != null) w.localStorage.setItem("ft_stats_sort", preset);
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    clickTab(w, "board");
+    await tick(); await tick(); await tick();
+    if (allTime){ w.setBoardSeason("all"); await tick(); await tick(); await tick(); }
+    const read = () => {
+      const p = w.document.getElementById("statspanel");
+      const tbl = p?.querySelector("table.lb.compact");
+      return {
+        heading: p?.querySelector("h2")?.textContent.replace(/\s+/g, " ").trim() ?? "",
+        headers: tbl ? [...tbl.querySelectorAll("th")].map(t => ({
+          text: (t.textContent || "").replace(/[▲▼]/g, "").trim(), sortable: t.classList.contains("sortable"),
+          active: t.classList.contains("active"), arrow: t.querySelector(".arrow")?.textContent ?? "",
+          ariaSort: t.getAttribute("aria-sort"), onclick: t.getAttribute("onclick") ?? "" })) : [],
+        rows: tbl ? [...tbl.querySelectorAll("tr")].filter(tr => tr.querySelector("td.pname")).map(tr => ({
+          name: tr.querySelector(".nm")?.textContent, me: tr.classList.contains("me"),
+          cells: [...tr.querySelectorAll("td.pts")].map(td => ({ v: td.textContent, active: td.classList.contains("active") })) })) : [],
+        emptyRow: tbl?.querySelector("td[colspan]")?.textContent ?? null,
+        leadersPresent: !!p?.querySelector(".leaders"),
+        leaders: p ? [...p.querySelectorAll(".leader")].map(l => ({ key: l.dataset.key, label: l.querySelector(".lbl")?.textContent,
+          name: l.querySelector(".nm")?.textContent, extra: l.querySelector("small")?.textContent ?? null, value: l.querySelector("b")?.textContent })) : [],
+        legend: p?.querySelector("p.muted")?.textContent ?? "",
+        stored: w.localStorage.getItem("ft_stats_sort"),
+        rpcCount: calls.filter(c => c.type === "rpc").length,
+        setterOnWindow: typeof w.setStatsSort,
+      };
+    };
+    return { w, read };
+  }
+  const O = (ids, pid, show, points) => ({ player_id: pid, bracket_id: ids.OFFICIAL_ID, show_id: show, points, breakdown: [] });
+  const three = ids => [O(ids, "p1", 2, 7), O(ids, "p2", 2, 3), O(ids, "p2", 3, 3), O(ids, "p4", 2, 1), O(ids, "p4", 3, 2), O(ids, "p4", 4, 4)];
+
+  const a = await load({ scores: three });
+  const dflt = a.read();
+  if (dflt.setterOnWindow === "function") a.w.setStatsSort("zeros");
+  await tick();
+  const zerosAsc = a.read();
+  if (dflt.setterOnWindow === "function") a.w.setStatsSort("zeros");
+  await tick();
+  const zerosDesc = a.read();
+  const presetWins = (await load({ scores: three, preset: "wins:desc" })).read();
+  const presetBogus = (await load({ scores: three, preset: "bogus" })).read();
+  const empty = (await load({ scores: () => [] })).read();
+  const allTime = (await load({ scores: three, allTime: true })).read();
+  const b = await load({ scores: three, preset: "zeros:asc", allTime: true });
+  const allTimeZerosPreset = b.read();
+  if (allTimeZerosPreset.setterOnWindow === "function") b.w.setStatsSort("zeros");
+  await tick();
+  const allTimeZerosTap = b.read();
+  return { dflt, zerosAsc, zerosDesc, presetWins, presetBogus, empty, allTime, allTimeZerosPreset, allTimeZerosTap };
+}
+
 // Members panel rows (admin-panel.md → "Members panel cleanup", LOCKED
 // 2026-10-26, ROWS A). Boots the league admin (p1) and reads #playerlist
 // structurally: per row the mark, the name (text and title), the small
