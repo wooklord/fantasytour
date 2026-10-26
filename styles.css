@@ -425,6 +425,31 @@ html[data-theme="light"] .panel.live-halo{
 .lb tr.me td{box-shadow:inset 0 2px 0 var(--yolk),inset 0 -2px 0 var(--yolk)}
 .lb tr.me td:first-child{box-shadow:inset 2px 0 0 var(--yolk),inset 0 2px 0 var(--yolk),inset 0 -2px 0 var(--yolk)}
 .lb tr.me td:last-child{box-shadow:inset -2px 0 0 var(--yolk),inset 0 2px 0 var(--yolk),inset 0 -2px 0 var(--yolk)}
+/* Tie groups (docs/decisions/standings-ux.md item 5, LOCKED 2026-10-26).
+   The bracket is a BORDER on the first cell of each tied row — never a
+   box-shadow — because .me above owns box-shadow on those same cells and
+   the two properties paint independently (border outside the padding box,
+   inset shadow inside), so an own row inside a group keeps its yolk
+   outline. The tag row and sub-row are not members: no bracket, no .me.
+   --mint is LOCKED (clears the 3:1 non-text AA floor in both themes;
+   cream-dim rejected as too quiet). The sub-row is a wrapping flex list
+   per layer: at phone width the layer label takes its own line and the
+   rank·name·value chips wrap beneath it inside the table's existing
+   horizontal-scroll wrapper. */
+.lb tr.tg td:first-child{border-left:3px solid var(--mint)}
+.lb tr.tg-tag td{padding:4px 8px 10px 8px}
+.tg-text{font-size:.78rem}
+.tg-plus{font-family:var(--mono);font-size:1rem;line-height:1;padding:0 8px;margin-left:6px;text-decoration:none;vertical-align:baseline}
+.tg-none{font-size:.72rem;margin-left:8px}
+.lb tr.tg-sub td{padding:0 8px 12px 8px}
+.tg-layer{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;padding:5px 0;font-size:.8rem;border-top:1px dotted var(--line2)}
+.tg-layer-label{color:var(--cream-dim);flex:0 0 110px}
+@media (max-width:520px){ .tg-layer-label{flex:0 0 100%} }
+.tg-layer.deciding .tg-layer-label{color:var(--cream);font-weight:700}
+.tg-decided{color:var(--mint);font-size:.66rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-left:6px}
+.tg-val{display:inline-flex;align-items:baseline;gap:5px;font-family:var(--mono);white-space:nowrap}
+.tg-val .tg-rank{color:var(--yolk);font-size:.72rem}
+.tg-val .nm{display:inline-block;max-width:min(120px,30vw);font-family:inherit}
 /* Name cells (decision 4): ellipsis, never a wrap or a sideways scroll.
    .nm is the one truncation rule for every nickname cell — standings
    table, podium, Who's Picked and the other .pickres admin lists — with

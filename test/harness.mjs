@@ -1874,25 +1874,25 @@ export async function runSettingsLinksScenario({ html, scripts, mode }){
   };
 }
 
-// Standings tiebreak lines are ALWAYS visible (the board View chip from
-// 1a74cee was reverted the same day — standings-ux.md 3a). Tiebreak lines
-// only exist for an Official season view with a configured stack AND a
-// tie that a layer actually splits (tiebreak.js records a layer only when
-// it separates the group), so the fixture is: a live season on Official,
-// tiebreakers = [fewest_zeros], p1 and p2 tied at 5 with p1 on 4+1 and p2
-// on 5+0 — one zero apart.
+// Tie groups on the standings board (standings-ux.md item 5, approved
+// 2026-10-26). The per-row tiebreak lines are gone; a tie renders as a
+// bracketed group with a tag row and an expandable sub-row. Fixture base:
+// a live season on Official, show 3 final three days ago, a roster; each
+// case supplies its own stack and scores. The toggle is INVOKED, not just
+// asserted present. `read()` returns DOM facts only — jsdom is blind to
+// CSS, so the bracket/outline coexistence is checked statically against
+// styles.css in scenario.test.mjs, and phone-width LAYOUT is not proven
+// here at all (a stated seam: check it on a device).
 export async function runStandingsTiebreakScenario({ html, scripts, mode }){
   const day = o => new Date(Date.now() + o*864e5).toISOString().slice(0,10);
-  async function load({ scores, preset, bracket = "official" }){
+  async function load({ scores, stack = ["fewest_zeros"], preset, bracket = "official", roster = ["p1", "p2"] }){
     const { tables, ids } = makeFixtures();
-    tables.shows.push({ id: 3, showdate: day(-3), venue: "Side Room", city: "Kingston", state: "NY" });
+    tables.shows.push({ id: 3, showdate: day(-3), venue: "Side Room", city: "Kingston", state: "NY", sync_flag: null });
     tables.league_shows.push({ league_id: ids.LEAGUE_ID, show_id: 3, cutoff_at: new Date(Date.now()-3*864e5).toISOString(), format: "standard", status: "final", remind_sent: null, lock_sent: null, winner_sent: null });
     tables.seasons.push({ id: 502, bracket_id: ids.OFFICIAL_ID, name: "Live Season", start_date: day(-30), end_date: day(30), roster_locked_at: null });
-    tables.season_rosters.push(
-      { season_id: 502, player_id: "p1", added_at: day(-30) + "T00:00:00Z" },
-      { season_id: 502, player_id: "p2", added_at: day(-30) + "T00:00:00Z" });
+    for (const id of roster) tables.season_rosters.push({ season_id: 502, player_id: id, added_at: day(-30) + "T00:00:00Z" });
     const off = tables.brackets.find(b => b.id === ids.OFFICIAL_ID);
-    off.config = { ...off.config, tiebreakers: ["fewest_zeros"] };
+    off.config = { ...off.config, tiebreakers: stack };
     tables.scores = scores(ids);
     const calls = [];
     const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
@@ -1905,26 +1905,75 @@ export async function runStandingsTiebreakScenario({ html, scripts, mode }){
     await tick(); await tick();
     clickTab(w, "board");
     await tick(); await tick(); await tick();
-    const read = () => ({
-      chipPresent: !!w.document.getElementById("boardview"),
-      tiebreakLines: [...w.document.querySelectorAll("table.lb:not(.compact) td.pname div")].map(d => d.textContent),
-      names: [...w.document.querySelectorAll("table.lb:not(.compact) td.pname .nm")].map(e => e.textContent),
-      setterOnWindow: typeof w.setBoardView,
-      html: mainHTML(w, mode),
-    });
+    const read = () => {
+      const tbl = w.document.querySelector("table.lb:not(.compact)");
+      const q = sel => tbl ? [...tbl.querySelectorAll(sel)] : [];
+      return {
+        chipPresent: !!w.document.getElementById("boardview"),
+        setterOnWindow: typeof w.setBoardView,
+        toggleOnWindow: typeof w.toggleTieGroup,
+        names: q("td.pname .nm").map(e => e.textContent),
+        nameCellDivs: q("td.pname div").length,
+        tgRows: q("tr.tg").map(tr => ({ name: tr.querySelector(".nm")?.textContent, rank: tr.querySelector(".rank")?.textContent,
+          me: tr.classList.contains("me"), first: tr.classList.contains("tg-first"), last: tr.classList.contains("tg-last"), key: tr.dataset.tg })),
+        meRows: q("tr.me").map(tr => tr.querySelector(".nm")?.textContent),
+        tags: q("tr.tg-tag").map(tr => ({ key: tr.dataset.tg, text: tr.querySelector(".tg-text")?.textContent,
+          plus: tr.querySelector(".tg-plus")?.textContent ?? null, expanded: tr.querySelector(".tg-plus")?.getAttribute("aria-expanded") ?? null,
+          onclick: tr.querySelector(".tg-plus")?.getAttribute("onclick") ?? "", none: tr.querySelector(".tg-none")?.textContent ?? null,
+          me: tr.classList.contains("me"), tg: tr.classList.contains("tg") })),
+        subs: q("tr.tg-sub").map(tr => ({ key: tr.dataset.tg, hidden: tr.classList.contains("hidden"), tg: tr.classList.contains("tg"),
+          layers: [...tr.querySelectorAll(".tg-layer")].map(l => ({
+            label: l.querySelector(".tg-layer-label")?.firstChild?.textContent ?? "",
+            deciding: l.classList.contains("deciding"),
+            vals: [...l.querySelectorAll(".tg-val")].map(v => `${v.querySelector(".tg-rank")?.textContent} ${v.querySelector(".nm")?.textContent} ${v.querySelector("b")?.textContent}`) })) })),
+        rpcCount: calls.filter(c => c.type === "rpc").length,
+        storageKeys: Object.keys(dumpLocalStorage(w)).sort(),
+        placeholderPodium: !!w.document.querySelector(".podium") && w.document.querySelectorAll(".podium .nm").length === 0,
+      };
+    };
     return { w, read };
   }
-  const tied = ids => [
-    { player_id: "p1", bracket_id: ids.OFFICIAL_ID, show_id: 2, points: 4, breakdown: [] },
-    { player_id: "p1", bracket_id: ids.OFFICIAL_ID, show_id: 3, points: 1, breakdown: [] },
-    { player_id: "p2", bracket_id: ids.OFFICIAL_ID, show_id: 2, points: 5, breakdown: [] },
-    { player_id: "p2", bracket_id: ids.OFFICIAL_ID, show_id: 3, points: 0, breakdown: [] },
-  ];
-  const a = await load({ scores: tied });
-  const tiedView = a.read();
-  const b = await load({ scores: tied, preset: "compact" });
-  const leftoverKey = b.read();
-  return { tiedView, leftoverKey };
+  const O = (ids, pid, show, points) => ({ player_id: pid, bracket_id: ids.OFFICIAL_ID, show_id: show, points, breakdown: [] });
+  // p1 4+1 = 5 with no zeros; p2 5+0 = 5 with one zero → fewest_zeros splits them.
+  const resolved = ids => [O(ids, "p1", 2, 4), O(ids, "p1", 3, 1), O(ids, "p2", 2, 5), O(ids, "p2", 3, 0)];
+  // Each wins one show; most_wins ties 1–1 and nothing else is configured → shared.
+  const sharedWins = ids => [O(ids, "p1", 2, 5), O(ids, "p1", 3, 0), O(ids, "p2", 2, 0), O(ids, "p2", 3, 5)];
+  // p2 one point behind → no tie at all.
+  const noTie = ids => [O(ids, "p1", 2, 4), O(ids, "p1", 3, 1), O(ids, "p2", 2, 4), O(ids, "p2", 3, 0)];
+  // Three-way at 5: p1 (no zeros) splits off; p2 and p4 (one zero each) stay shared.
+  const threeWay = ids => [O(ids, "p1", 2, 4), O(ids, "p1", 3, 1), O(ids, "p2", 2, 5), O(ids, "p2", 3, 0), O(ids, "p4", 2, 0), O(ids, "p4", 3, 5)];
+  // Fresh season: everyone at 0 → hasAnyScore false → the gate.
+  const allZero = ids => [O(ids, "p1", 2, 0), O(ids, "p1", 3, 0), O(ids, "p2", 2, 0), O(ids, "p2", 3, 0)];
+  // Casual: no seasons → All time → empty stack; equal career points.
+  const casualTie = ids => [{ ...O(ids, "p1", 2, 3), bracket_id: ids.CASUAL_ID }, { ...O(ids, "p2", 2, 3), bracket_id: ids.CASUAL_ID }];
+
+  const a = await load({ scores: resolved });
+  const collapsed = a.read();
+  const key = collapsed.tags[0]?.key;
+  if (collapsed.toggleOnWindow === "function") a.w.toggleTieGroup(key);
+  await tick();
+  const expanded = a.read();
+  if (collapsed.toggleOnWindow === "function") a.w.toggleTieGroup(key);
+  await tick();
+  const collapsedAgain = a.read();
+  if (collapsed.toggleOnWindow === "function") a.w.toggleTieGroup(key);
+  await tick();
+  // A re-render (tab away and back) rebuilds the table from scratch; the
+  // open group must come back open — the state lives in memory, not in
+  // the DOM that was just thrown away — and localStorage must gain nothing.
+  clickTab(a.w, "shows");
+  await tick(); await tick();
+  clickTab(a.w, "board");
+  await tick(); await tick(); await tick();
+  const afterRerender = a.read();
+
+  const shared = (await load({ scores: sharedWins, stack: ["most_wins"] })).read();
+  const none = (await load({ scores: noTie })).read();
+  const three = (await load({ scores: threeWay, roster: ["p1", "p2", "p4"] })).read();
+  const zero = (await load({ scores: allZero })).read();
+  const casual = (await load({ scores: casualTie, bracket: "casual" })).read();
+  const leftoverKey = (await load({ scores: resolved, preset: "compact" })).read();
+  return { collapsed, expanded, collapsedAgain, afterRerender, shared, none, three, zero, casual, leftoverKey };
 }
 
 // Scores page View chip + own-entry outline (standings-ux.md 2a/3a).

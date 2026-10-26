@@ -944,16 +944,61 @@ async function runMode(mode){
       `present: ${r.present} slotAfterSelector: ${r.slotAfterSelector} leagueReads: ${r.leagueReads} anchors: ${JSON.stringify(r.anchors)}`);
   }
 
-  // (3a) standings chip REVERTED: tiebreak lines always visible, no chip,
-  // no setter, and a leftover ft_board_view key changes nothing.
+  // (5) tie groups on the standings board (standings-ux.md item 5); the
+  // 3a facts — no chip, no setBoardView, leftover key inert — ride along.
   const tb = await runStandingsTiebreakScenario({ html, scripts, mode });
-  check("standings shows one tiebreak line per tied row unconditionally, with no View chip and no setBoardView on window",
-    !tb.tiedView.chipPresent && tb.tiedView.setterOnWindow === "undefined" && tb.tiedView.names.length === 2
-      && tb.tiedView.tiebreakLines.length === 2 && tb.tiedView.tiebreakLines.every(t => /1st tiebreak: Fewest zeros \(\d\)/.test(t)),
-    `chip: ${tb.tiedView.chipPresent} setter: ${tb.tiedView.setterOnWindow} lines: ${JSON.stringify(tb.tiedView.tiebreakLines)}`);
-  check("a leftover ft_board_view=compact key from 1a74cee does not hide the tiebreak lines",
-    tb.leftoverKey.tiebreakLines.length === 2 && !tb.leftoverKey.chipPresent,
-    `lines: ${tb.leftoverKey.tiebreakLines.length}`);
+  const c = tb.collapsed;
+  check("resolved tie, collapsed by default: both rows carry tg (first/last) under one key, ONE tag 'Tie for 1st · decided by Fewest zeros' with '+' (aria-expanded=false) wired to toggleTieGroup, the sub-row present but hidden, NO lines in any name cell; no chip, no setBoardView",
+    c.tgRows.length === 2 && c.tgRows[0].first && !c.tgRows[0].last && c.tgRows[1].last && !c.tgRows[1].first && c.tgRows.every(r => r.key === "5-1")
+      && c.tags.length === 1 && c.tags[0].text === "Tie for 1st · decided by Fewest zeros" && c.tags[0].plus === "+" && c.tags[0].expanded === "false"
+      && c.tags[0].onclick === "toggleTieGroup('5-1')" && c.tags[0].none === null
+      && c.subs.length === 1 && c.subs[0].hidden === true && c.nameCellDivs === 0 && c.names.length === 2
+      && !c.chipPresent && c.setterOnWindow === "undefined" && c.toggleOnWindow === "function",
+    `collapsed: ${JSON.stringify(c)}`);
+  check("expand: sub-row visible, glyph '−', aria-expanded true, one layer 'Fewest zeros' marked deciding listing rank·name·value '1 Wooklord 0' then '2 EggHead 1', no refetch; collapse hides it and restores '+'",
+    tb.expanded.subs[0]?.hidden === false && tb.expanded.tags[0]?.plus === "−" && tb.expanded.tags[0]?.expanded === "true"
+      && tb.expanded.subs[0]?.layers.length === 1 && tb.expanded.subs[0].layers[0].label === "Fewest zeros" && tb.expanded.subs[0].layers[0].deciding === true
+      && JSON.stringify(tb.expanded.subs[0].layers[0].vals) === JSON.stringify(["1 Wooklord 0", "2 EggHead 1"])
+      && tb.expanded.rpcCount === c.rpcCount
+      && tb.collapsedAgain.subs[0]?.hidden === true && tb.collapsedAgain.tags[0]?.plus === "+" && tb.collapsedAgain.tags[0]?.expanded === "false",
+    `expanded: ${JSON.stringify(tb.expanded.subs)} tags: ${JSON.stringify(tb.expanded.tags)} rpc: ${c.rpcCount}/${tb.expanded.rpcCount} again: ${JSON.stringify(tb.collapsedAgain.tags)}`);
+  check("expand state is in memory only: a re-render redraws the open group OPEN, and localStorage gains no key",
+    tb.afterRerender.subs[0]?.hidden === false && tb.afterRerender.tags[0]?.plus === "−" && tb.afterRerender.tags[0]?.expanded === "true"
+      && JSON.stringify(tb.afterRerender.storageKeys) === JSON.stringify(c.storageKeys),
+    `after: ${JSON.stringify(tb.afterRerender.subs)} keys before/after: ${JSON.stringify(c.storageKeys)} / ${JSON.stringify(tb.afterRerender.storageKeys)}`);
+  check("shared tie (most_wins 1–1): 'Tie for 1st · shared', both rows rank 1, '+' present, the sub-row lists Most wins with equal values and NO deciding mark",
+    tb.shared.tags.length === 1 && tb.shared.tags[0].text === "Tie for 1st · shared" && tb.shared.tags[0].plus === "+"
+      && tb.shared.tgRows.length === 2 && tb.shared.tgRows.every(r => r.rank === "1")
+      && tb.shared.subs.length === 1 && tb.shared.subs[0].layers.length === 1 && tb.shared.subs[0].layers[0].label === "Most wins" && tb.shared.subs[0].layers[0].deciding === false
+      && JSON.stringify(tb.shared.subs[0].layers[0].vals) === JSON.stringify(["1 EggHead 1", "1 Wooklord 1"]),
+    `shared: ${JSON.stringify(tb.shared.tags)} rows: ${JSON.stringify(tb.shared.tgRows)} subs: ${JSON.stringify(tb.shared.subs)}`);
+  check("no tie: two plain rows, no tg class, no tag, no '+', no sub-row (groupTies' empty-set case on the board)",
+    tb.none.names.length === 2 && tb.none.tgRows.length === 0 && tb.none.tags.length === 0 && tb.none.subs.length === 0,
+    `none: rows ${JSON.stringify(tb.none.tgRows)} tags ${JSON.stringify(tb.none.tags)}`);
+  check("own row inside a group keeps .me, and only the viewer's row has it; the tag row and sub-row carry neither .me nor .tg",
+    c.tgRows.find(r => r.name === "Wooklord")?.me === true && c.tgRows.find(r => r.name === "EggHead")?.me === false
+      && JSON.stringify(c.meRows) === JSON.stringify(["Wooklord"]) && c.tags[0].me === false && c.tags[0].tg === false && c.subs[0].tg === false,
+    `rows: ${JSON.stringify(c.tgRows)} meRows: ${JSON.stringify(c.meRows)} tag: ${JSON.stringify(c.tags[0])}`);
+  check("bracket/outline coexistence, checked statically: the bracket is a border-left in --mint on tr.tg td:first-child, .me's inset box-shadow on td:first-child is intact, and no rule puts a box-shadow on tr.tg",
+    /\.lb tr\.tg td:first-child\{border-left:3px solid var\(--mint\)\}/.test(css)
+      && /\.lb tr\.me td:first-child\{box-shadow:inset 2px 0 0 var\(--yolk\)/.test(css)
+      && !/tr\.tg[^-\w][^{]*\{[^}]*box-shadow/.test(css),
+    "styles.css: .lb tr.tg td:first-child / .lb tr.me td:first-child rules");
+  check("three-way partial split: ONE tag naming the first splitting layer, ranks 1/2/2, and the still-shared pair visible only by its equal ranks in the sub-row",
+    tb.three.tags.length === 1 && tb.three.tags[0].text === "Tie for 1st · decided by Fewest zeros" && tb.three.tgRows.length === 3
+      && JSON.stringify(tb.three.tgRows.map(r => r.rank)) === JSON.stringify(["1", "2", "2"])
+      && JSON.stringify(tb.three.subs[0]?.layers[0]?.vals) === JSON.stringify(["1 Wooklord 0", "2 EggHead 1", "2 GlobalAdmin 1"]),
+    `three: ${JSON.stringify(tb.three.tags)} rows ${JSON.stringify(tb.three.tgRows)} subs ${JSON.stringify(tb.three.subs)}`);
+  check("all-zero board (fresh season): no groups, no tags, no sub-rows — the hasAnyScore gate — while the placeholder podium renders (empty-set case)",
+    tb.zero.names.length === 2 && tb.zero.tgRows.length === 0 && tb.zero.tags.length === 0 && tb.zero.subs.length === 0 && tb.zero.placeholderPodium,
+    `zero: rows ${JSON.stringify(tb.zero.tgRows)} tags ${JSON.stringify(tb.zero.tags)} placeholder: ${tb.zero.placeholderPodium}`);
+  check("empty stack (Casual, All time): 'Tie for 1st · shared' with muted 'no tiebreakers set' in the expander's place, no '+', no sub-row",
+    tb.casual.tags.length === 1 && tb.casual.tags[0].text === "Tie for 1st · shared" && tb.casual.tags[0].plus === null
+      && tb.casual.tags[0].none === "no tiebreakers set" && tb.casual.subs.length === 0 && tb.casual.tgRows.length === 2,
+    `casual: ${JSON.stringify(tb.casual.tags)} subs ${tb.casual.subs.length} rows ${tb.casual.tgRows.length}`);
+  check("a leftover ft_board_view=compact key from 1a74cee changes nothing: the group still renders, no chip",
+    tb.leftoverKey.tags.length === 1 && tb.leftoverKey.tgRows.length === 2 && !tb.leftoverKey.chipPresent,
+    `leftover: tags ${tb.leftoverKey.tags.length} rows ${tb.leftoverKey.tgRows.length} chip ${tb.leftoverKey.chipPresent}`);
 
   // (2a/3a) Scores page: View chip, own-entry outline, ellipsis names
   const sv = await runScoresViewScenario({ html, scripts, mode });

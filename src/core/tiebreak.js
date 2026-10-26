@@ -99,6 +99,10 @@ function displayValue(player, layer){
   if (layer === "highest_single_show") return player.high;
   throw new Error("Unknown tiebreaker layer: " + layer);
 }
+// Exported for the board's tie-group sub-row (standings-ux.md item 5),
+// which lists EVERY configured layer with each member's value — not just
+// the layers that split (those are what `layers` below carries).
+export const layerDisplayValue = displayValue;
 
 function groupBy(ids, valueOf){
   const byValue = new Map();
@@ -174,4 +178,51 @@ export function rankStandings(players, primaryMetric, tiebreakers = []){
     rank += g.ids.length;
   }
   return result;
+}
+
+// Ordinal for a rank: 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st. The
+// board's old three-entry array stopped at 3rd; "Tie for 4th" needs this.
+export function ordinal(n){
+  const v = Math.abs(n) % 100;
+  const suffix = (v >= 11 && v <= 13) ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[v % 10] ?? "th");
+  return `${n}${suffix}`;
+}
+
+// Tie groups for the standings board (docs/decisions/standings-ux.md item
+// 5). Walks rankStandings' display order and returns one group per run of
+// TWO OR MORE consecutive rows with equal POINTS — points, not rank: a tie
+// a layer resolved has different ranks but is still one tie, which is the
+// thing the board has to explain. Equal-points rows are always contiguous
+// because rankStandings buckets by points first.
+//   members  — [{ id, rank }] in display order; equal ranks inside a group
+//              are a still-shared sub-placing, shown only by those ranks
+//              (approval decision 1 — one tag per group, no nesting).
+//   place    — the group's best rank, for "Tie for <place>".
+//   deciding — the FIRST layer in configured order that appears in any
+//              member's `layers`, i.e. the layer that first split the
+//              block; null when nothing split.
+//   shared   — true iff deciding is null ("Tie for <place> · shared").
+//   key      — "<points>-<place>", stable across re-renders of the same
+//              data; the board's in-memory expand state is keyed on it.
+// Distinct points → no group at all. An empty stack → every group shared.
+export function groupTies(order, tiebreakers = []){
+  const groups = [];
+  for (let i = 0; i < order.length; ){
+    let j = i;
+    while (j < order.length && order[j].points === order[i].points) j++;
+    if (j - i > 1){
+      const rows = order.slice(i, j);
+      const present = new Set(rows.flatMap(o => (o.layers || []).map(l => l.layer)));
+      const deciding = tiebreakers.find(l => present.has(l)) ?? null;
+      groups.push({
+        key: `${rows[0].points}-${rows[0].rank}`,
+        members: rows.map(o => ({ id: o.id, rank: o.rank })),
+        place: rows[0].rank,
+        deciding,
+        shared: deciding === null,
+      });
+    }
+    i = j;
+  }
+  return groups;
 }

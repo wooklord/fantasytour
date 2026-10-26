@@ -1024,6 +1024,7 @@ Save anyway?`)) return;
     if (layer === "highest_single_show") return player.high;
     throw new Error("Unknown tiebreaker layer: " + layer);
   }
+  var layerDisplayValue = displayValue;
   function groupBy(ids, valueOf) {
     const byValue = /* @__PURE__ */ new Map();
     for (const id of ids) {
@@ -1064,11 +1065,52 @@ Save anyway?`)) return;
     }
     return result;
   }
+  function ordinal(n) {
+    var _a;
+    const v = Math.abs(n) % 100;
+    const suffix = v >= 11 && v <= 13 ? "th" : (_a = { 1: "st", 2: "nd", 3: "rd" }[v % 10]) != null ? _a : "th";
+    return `${n}${suffix}`;
+  }
+  function groupTies(order, tiebreakers = []) {
+    var _a;
+    const groups = [];
+    for (let i = 0; i < order.length; ) {
+      let j = i;
+      while (j < order.length && order[j].points === order[i].points) j++;
+      if (j - i > 1) {
+        const rows = order.slice(i, j);
+        const present = new Set(rows.flatMap((o) => (o.layers || []).map((l) => l.layer)));
+        const deciding = (_a = tiebreakers.find((l) => present.has(l))) != null ? _a : null;
+        groups.push({
+          key: `${rows[0].points}-${rows[0].rank}`,
+          members: rows.map((o) => ({ id: o.id, rank: o.rank })),
+          place: rows[0].rank,
+          deciding,
+          shared: deciding === null
+        });
+      }
+      i = j;
+    }
+    return groups;
+  }
 
   // src/features/standings.js
   function setBoardSeason(v) {
     state.boardSeason = v;
     renderBoard();
+  }
+  var expandedTieGroups = /* @__PURE__ */ new Set();
+  function toggleTieGroup(key) {
+    const open = !expandedTieGroups.has(key);
+    if (open) expandedTieGroups.add(key);
+    else expandedTieGroups.delete(key);
+    const sub = document.querySelector(`tr.tg-sub[data-tg="${key}"]`);
+    const btn = document.querySelector(`tr.tg-tag[data-tg="${key}"] .tg-plus`);
+    if (sub) sub.classList.toggle("hidden", !open);
+    if (btn) {
+      btn.textContent = open ? "\u2212" : "+";
+      btn.setAttribute("aria-expanded", String(open));
+    }
   }
   function arrangePodium(tiers) {
     var _a;
@@ -1127,7 +1169,6 @@ Save anyway?`)) return;
     }
     const season = (seasons || []).find((se) => String(se.id) === state.boardSeason);
     const tiebreakers = ((_a = currentBracket()) == null ? void 0 : _a.bracket_kind) === "official" && season ? ((_b = state.cfg) == null ? void 0 : _b.tiebreakers) || [] : [];
-    const ORDINAL = ["1st", "2nd", "3rd"];
     let rosterJoinDates = {}, rosterIds = [];
     if (season && ((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official") {
       const roster = await rpc("get_season_roster", { p_name: state.session.name, p_pin: state.session.pin, p_season_id: season.id });
@@ -1170,6 +1211,24 @@ Save anyway?`)) return;
     const compactHtml = compactTiers.length ? `<div class="podium-compact">${compactTiers.map((t) => `<div class="pod-col">${isOfficial ? trophy(44, tierFor(t.items[0])) : rankNumeral(44, tierFor(t.items[0]), t.rank)}<div class="pod-names">${t.items.map((o) => `<div class="nm" title="${esc(pname[o.id] || "?")}">${esc(pname[o.id] || "?")}</div>`).join("")}</div></div>`).join("")}</div>` : "";
     const podium = !order.length ? "" : !hasAnyScore ? `<div class="podium">${placeholderBox("silver", 2, false)}${placeholderBox("gold", 1, true)}${placeholderBox("bronze", 3, false)}</div>` : `<div class="podium-wrap">${boxedHtml}${compactHtml}</div>`;
     const statRows = rows.filter(([, r]) => r.shows > 0).sort((a, b) => b[1].scoped / b[1].shows - a[1].scoped / a[1].shows);
+    const tieGroups = hasAnyScore ? groupTies(order, tiebreakers) : [];
+    const tgInfo = /* @__PURE__ */ new Map();
+    for (const g of tieGroups) g.members.forEach((m, k) => tgInfo.set(m.id, { g, first: k === 0, last: k === g.members.length - 1 }));
+    const tagRow = (g) => {
+      const open = expandedTieGroups.has(g.key);
+      const how = g.deciding ? `decided by ${esc(TIEBREAK_SHORT_LABELS[g.deciding])}` : "shared";
+      const ctl = tiebreakers.length ? `<button class="linkbtn tg-plus" onclick="toggleTieGroup('${g.key}')" aria-expanded="${open}" aria-controls="tg-sub-${g.key}" title="${open ? "Hide" : "Show"} tiebreaker values">${open ? "\u2212" : "+"}</button>` : `<span class="muted tg-none">no tiebreakers set</span>`;
+      return `<tr class="tg-tag" data-tg="${g.key}"><td colspan="3"><span class="muted tg-text">Tie for ${ordinal(g.place)} \xB7 ${how}</span>${ctl}</td></tr>`;
+    };
+    const subRow = (g) => {
+      if (!tiebreakers.length) return "";
+      const open = expandedTieGroups.has(g.key);
+      const layers = tiebreakers.map((l) => `<div class="tg-layer${l === g.deciding ? " deciding" : ""}">
+          <span class="tg-layer-label">${esc(TIEBREAK_SHORT_LABELS[l])}${l === g.deciding ? '<span class="tg-decided">decided</span>' : ""}</span>
+          ${g.members.map((m) => `<span class="tg-val"><span class="tg-rank">${m.rank}</span><span class="nm" title="${esc(pname[m.id] || "?")}">${esc(pname[m.id] || "?")}</span><b>${layerDisplayValue(T[m.id], l)}</b></span>`).join("")}
+        </div>`).join("");
+      return `<tr class="tg-sub${open ? "" : " hidden"}" id="tg-sub-${g.key}" data-tg="${g.key}"><td colspan="3">${layers}</td></tr>`;
+    };
     $("#main").innerHTML = `
     <div class="panel">
       <div class="row"><h2 style="margin:0">${isOfficial ? "Official Standings" : "Standings"}</h2>
@@ -1179,14 +1238,15 @@ Save anyway?`)) return;
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map((o) => {
       const r = T[o.id];
-      const layerLines = !hasAnyScore ? "" : (o.layers || []).map((l) => `<div class="muted" style="font-size:.72rem">${ORDINAL[tiebreakers.indexOf(l.layer)]} tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`).join("");
       const nm = pname[o.id] || "?";
-      return `<tr class="${o.id === state.session.id ? "me" : ""}">
-        <td class="rank">${o.rank}</td><td class="pname"><span class="nm" title="${esc(nm)}">${esc(nm)}</span>${layerLines}</td>
-        <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
+      const tg = tgInfo.get(o.id);
+      const cls = [o.id === state.session.id ? "me" : "", tg ? "tg" : "", (tg == null ? void 0 : tg.first) ? "tg-first" : "", (tg == null ? void 0 : tg.last) ? "tg-last" : ""].filter(Boolean).join(" ");
+      return `<tr class="${cls}"${tg ? ` data-tg="${tg.g.key}"` : ""}>
+        <td class="rank">${o.rank}</td><td class="pname"><span class="nm" title="${esc(nm)}">${esc(nm)}</span></td>
+        <td class="pts">${season ? r.scoped : r.career}</td></tr>${(tg == null ? void 0 : tg.last) ? tagRow(tg.g) + subRow(tg.g) : ""}`;
     }).join("") || '<tr><td colspan="3" class="muted">No scores yet \u2014 pick some songs.</td></tr>'}
       </table></div>
-      ${tiebreakers.length ? `<p class="muted" style="margin-top:8px;font-size:.75rem;text-align:center">Tiebreakers<br>${tiebreakers.map((l, i) => `${ORDINAL[i]}: ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" \xB7 ")}</p>` : ""}
+      ${tiebreakers.length ? `<p class="muted" style="margin-top:8px;font-size:.75rem;text-align:center">Tiebreakers<br>${tiebreakers.map((l, i) => `${ordinal(i + 1)}: ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" \xB7 ")}</p>` : ""}
     </div>
     <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">\xB7 ${scopeName}</span></h2>
       <div style="overflow-x:auto"><table class="lb compact"><tr><th>Player</th><th style="text-align:right">Shows</th><th style="text-align:right">Avg</th><th style="text-align:right">High</th><th style="text-align:right">${winBadge(18)}</th></tr>
@@ -1222,7 +1282,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"209d813-898d8a1"}</p>
+      <p class="colophon buildid">build ${"26aef8a-b9061f4"}</p>
     </div>
   </div>`;
   }
@@ -2542,6 +2602,7 @@ Switch anyway?`
     setScoresView,
     renderShows,
     setBoardSeason,
+    toggleTieGroup,
     loadRoster,
     addSeasonRow,
     saveSeason,

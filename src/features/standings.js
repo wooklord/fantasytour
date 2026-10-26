@@ -6,7 +6,7 @@ import { clearTimersFor } from "../core/format.js";
 import { trophy, rankNumeral, winBadge } from "../core/trophy.js";
 import { markTab } from "../core/layout.js";
 import { currentBracket } from "../core/switcher.js";
-import { computeStandings, rankStandings, TIEBREAK_SHORT_LABELS } from "../core/tiebreak.js";
+import { computeStandings, rankStandings, groupTies, ordinal, layerDisplayValue, TIEBREAK_SHORT_LABELS } from "../core/tiebreak.js";
 
 // Bound to the standings-select onchange (see renderBoard below) — replaces the
 // original inline `boardSeason=this.value; renderBoard();` now that boardSeason
@@ -15,7 +15,28 @@ export function setBoardSeason(v){ state.boardSeason = v; renderBoard(); }
 // A View chip briefly lived here (1a74cee, 2026-10-25) and was REVERTED the
 // same day: it was built against the wrong screen — the per-show Scores
 // page is where Compact/Detail belongs (standings-ux.md, correction under
-// item 2 and items 2a/3a). Tiebreak lines are always visible, as before.
+// item 2 and items 2a/3a). The per-row tiebreak lines that lived in the
+// name cell left with item 5 (2026-10-26): a tie now renders as a GROUP —
+// bracket, tag row, expandable sub-row — see groupTies in core/tiebreak.js
+// and the row builder inside renderBoard.
+
+// Expand state for tie groups: IN MEMORY ONLY (item 5 — never persisted,
+// no localStorage key). Keyed on groupTies' `key`, so a realtime re-render
+// of the board (realtime.js) redraws an open group open; a reload closes
+// every group.
+const expandedTieGroups = new Set();
+// Bound to a tag row's "+" / "−" (on window via main.js). Flips the sub-row
+// in place — no refetch, no re-render — and records the state so the next
+// renderBoard draws it the same way. Keys are "<points>-<rank>", digits
+// and a hyphen, so they are safe inside an attribute selector as-is.
+export function toggleTieGroup(key){
+  const open = !expandedTieGroups.has(key);
+  if (open) expandedTieGroups.add(key); else expandedTieGroups.delete(key);
+  const sub = document.querySelector(`tr.tg-sub[data-tg="${key}"]`);
+  const btn = document.querySelector(`tr.tg-tag[data-tg="${key}"] .tg-plus`);
+  if (sub) sub.classList.toggle("hidden", !open);
+  if (btn){ btn.textContent = open ? "−" : "+"; btn.setAttribute("aria-expanded", String(open)); }
+}
 
 // ---------- podium arrangement ----------
 // Traditional centered-podium layout: a lone best tier centers and rises
@@ -112,7 +133,6 @@ export async function renderBoard(){
   // (equal points share a placing, not an arbitrary order) via an empty
   // stack — see tiebreak.js's rankStandings.
   const tiebreakers = (currentBracket()?.bracket_kind === "official" && season) ? (state.cfg?.tiebreakers || []) : [];
-  const ORDINAL = ["1st","2nd","3rd"];
   // Fetched whenever a season is active, not just when tiebreakers are
   // configured — standings used to be built ENTIRELY from get_bracket_scores
   // rows, so a roster member who'd opted in but never had a show finalize
@@ -251,6 +271,42 @@ export async function renderBoard(){
     : `<div class="podium-wrap">${boxedHtml}${compactHtml}</div>`;
   const statRows = rows.filter(([,r]) => r.shows > 0)
     .sort((a,b) => b[1].scoped/b[1].shows - a[1].scoped/a[1].shows);
+
+  // ---- tie groups (standings-ux.md item 5) ----
+  // One group per run of equal-points rows (groupTies), gated on the SAME
+  // hasAnyScore check as the placeholder podium (approval decision 3): a
+  // fresh all-zero season is one big tie that explains nothing, so it gets
+  // no brackets and no tags. The name cell is the name alone; everything
+  // about a tie lives in the group's tag row and sub-row below it.
+  const tieGroups = hasAnyScore ? groupTies(order, tiebreakers) : [];
+  const tgInfo = new Map();
+  for (const g of tieGroups) g.members.forEach((m, k) => tgInfo.set(m.id, { g, first: k === 0, last: k === g.members.length - 1 }));
+  // Tag row: "Tie for <place> · decided by <layer>" or "· shared", then the
+  // "+" / "−" expander (U+2212 while open — decision 5). With no configured
+  // stack (Casual, All time) the muted "no tiebreakers set" takes the
+  // expander's place and there is no sub-row at all (decision 2).
+  const tagRow = g => {
+    const open = expandedTieGroups.has(g.key);
+    const how = g.deciding ? `decided by ${esc(TIEBREAK_SHORT_LABELS[g.deciding])}` : "shared";
+    const ctl = tiebreakers.length
+      ? `<button class="linkbtn tg-plus" onclick="toggleTieGroup('${g.key}')" aria-expanded="${open}" aria-controls="tg-sub-${g.key}" title="${open ? "Hide" : "Show"} tiebreaker values">${open ? "−" : "+"}</button>`
+      : `<span class="muted tg-none">no tiebreakers set</span>`;
+    return `<tr class="tg-tag" data-tg="${g.key}"><td colspan="3"><span class="muted tg-text">Tie for ${ordinal(g.place)} · ${how}</span>${ctl}</td></tr>`;
+  };
+  // Sub-row: EVERY configured layer in stack order — not only the ones
+  // that split (that is what a row's `layers` carries); the values come
+  // from computeStandings' totals, which exist for every layer. Each
+  // member shows rank + name + value; the deciding layer is marked. Equal
+  // ranks in the list are how a still-shared sub-pair shows (decision 1).
+  const subRow = g => {
+    if (!tiebreakers.length) return "";
+    const open = expandedTieGroups.has(g.key);
+    const layers = tiebreakers.map(l => `<div class="tg-layer${l === g.deciding ? " deciding" : ""}">
+          <span class="tg-layer-label">${esc(TIEBREAK_SHORT_LABELS[l])}${l === g.deciding ? '<span class="tg-decided">decided</span>' : ""}</span>
+          ${g.members.map(m => `<span class="tg-val"><span class="tg-rank">${m.rank}</span><span class="nm" title="${esc(pname[m.id]||"?")}">${esc(pname[m.id]||"?")}</span><b>${layerDisplayValue(T[m.id], l)}</b></span>`).join("")}
+        </div>`).join("");
+    return `<tr class="tg-sub${open ? "" : " hidden"}" id="tg-sub-${g.key}" data-tg="${g.key}"><td colspan="3">${layers}</td></tr>`;
+  };
   $("#main").innerHTML = `
     <div class="panel">
       <div class="row"><h2 style="margin:0">${isOfficial ? "Official Standings" : "Standings"}</h2>
@@ -260,45 +316,26 @@ export async function renderBoard(){
       <div style="overflow-x:auto"><table class="lb"><tr><th></th><th>Player</th><th style="text-align:right">Score</th></tr>
       ${order.map(o => {
         const r = T[o.id];
-        // One line per layer the player's group actually went through
-        // (cumulative down the stack, not just whichever one resolved
-        // them), each with their own value — that's what keeps this from
-        // reading as a badge: "fewest zeros (2)" for the player who LOST
-        // that layer looks identical in form to a winner's line, and the
-        // number is what actually explains the placement. No separate
-        // "tied" line: when the stack exhausts, the last layer's values
-        // are already equal on every tied row — that IS the tie, visibly.
-        // Suppressed under the identical hasAnyScore check that gates the
-        // placeholder podium (not a parallel condition) — a fresh season
-        // where everyone's at 0 would otherwise tie through the whole
-        // stack and print a "tiebreak: fewest zeros (0)" line for every
-        // row, which explains nothing real.
-        //
-        // Numbered by the layer's position in the CONFIGURED stack
-        // (tiebreakers.indexOf), not by its position in this row's own
-        // layers list — a layer that resolved nothing is skipped upstream
-        // (resolveGroup only records a layer once it actually splits the
-        // group), so a row often shows just one line, and that line has to
-        // carry the ordinal it actually holds in the full stack (e.g. "3rd
-        // tiebreak" when it's the third configured layer, even though it's
-        // the only line this row shows).
-        const layerLines = !hasAnyScore ? "" : (o.layers||[])
-          .map(l => `<div class="muted" style="font-size:.72rem">${ORDINAL[tiebreakers.indexOf(l.layer)]} tiebreak: ${esc(TIEBREAK_SHORT_LABELS[l.layer])} (${l.value})</div>`)
-          .join("");
         // .me is the own-row outline hook (styles.css) — keyed on the
         // server-issued session id against the RPC's player_id, the
-        // mechanism this board has always used (standings-ux.md 3).
-        // Name cell: .pname/.nm is the ellipsis pair (decision 4); the
-        // full name rides in title.
+        // mechanism this board has always used (standings-ux.md 3). A row
+        // inside a tie group also carries .tg (+ .tg-first / .tg-last at
+        // the bracket's ends); the bracket is a border-left, so it never
+        // touches .me's box-shadows on the same cells. The group's tag row
+        // and sub-row follow its LAST member. Name cell: .pname/.nm is the
+        // ellipsis pair (decision 4), the full name rides in title, and
+        // nothing else lives in it any more (item 5).
         const nm = pname[o.id]||"?";
-        return `<tr class="${o.id===state.session.id?"me":""}">
-        <td class="rank">${o.rank}</td><td class="pname"><span class="nm" title="${esc(nm)}">${esc(nm)}</span>${layerLines}</td>
-        <td class="pts">${season ? r.scoped : r.career}</td></tr>`;
+        const tg = tgInfo.get(o.id);
+        const cls = [o.id===state.session.id ? "me" : "", tg ? "tg" : "", tg?.first ? "tg-first" : "", tg?.last ? "tg-last" : ""].filter(Boolean).join(" ");
+        return `<tr class="${cls}"${tg ? ` data-tg="${tg.g.key}"` : ""}>
+        <td class="rank">${o.rank}</td><td class="pname"><span class="nm" title="${esc(nm)}">${esc(nm)}</span></td>
+        <td class="pts">${season ? r.scoped : r.career}</td></tr>${tg?.last ? tagRow(tg.g) + subRow(tg.g) : ""}`;
       }).join("")
         || '<tr><td colspan="3" class="muted">No scores yet — pick some songs.</td></tr>'}
       </table></div>
       ${tiebreakers.length ? `<p class="muted" style="margin-top:8px;font-size:.75rem;text-align:center">Tiebreakers<br>${
-        tiebreakers.map((l, i) => `${ORDINAL[i]}: ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" · ")
+        tiebreakers.map((l, i) => `${ordinal(i + 1)}: ${esc(TIEBREAK_SHORT_LABELS[l])}`).join(" · ")
       }</p>` : ""}
     </div>
     <div class="panel"><h2>Nerd stats <span class="muted" style="font-size:.78rem">· ${scopeName}</span></h2>

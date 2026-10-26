@@ -196,6 +196,32 @@
    `toggleTieGroup(key)` on `window` flipping a module-level `Set` plus
    the sub-row's `hidden` class in place, no refetch. No SQL in this
    batch. Seven harness cases, five mutations.
+   **BUILT 2026-10-26, bundle `26aef8a-b9061f4`.** `groupTies`, `ordinal`
+   and `layerDisplayValue` in `core/tiebreak.js` (the unit file is now
+   wired into `npm test` beside scenario and showSync — it was not before,
+   the same gap that let the scoring tests go stale); the board renders
+   from `groupTies` with `expandedTieGroups` (module-level `Set`) and
+   `toggleTieGroup` on `window`; CSS under the `.me` rules. The sub-row's
+   values come from `computeStandings` totals (every configured layer),
+   each member as rank · name · value, the deciding layer's label bold
+   with a mint "decided" mark. Mutations, all caught: (M1) group by rank
+   instead of points → 6 unit checks and 12 board failures; (M2) deciding
+   layer taken last instead of first → 1 unit check, and the harness
+   CANNOT see this one (every harness stack is one layer), so the unit
+   test is the only pin; (M3) `Set` never records an open group → the
+   re-render check and the collapse clause, both modes; (M4) all-zero
+   gate dropped → the empty-set case, both modes; (M5) `tg` on the tag
+   row → 12 failures. M1's first unit run died on a `[0].shared`
+   dereference instead of failing an assertion (the mutation log's
+   "caught by JavaScript, not by the tests" shape); the three
+   single-group checks now optional-chain so an empty result fails
+   honestly. **SEAM, stated: phone-width LAYOUT is not proven by anything
+   here.** jsdom is blind to CSS, so the harness pins DOM shape and the
+   stylesheet text only; the wrapping of the sub-row's layer label onto
+   its own line under 520px, the chips wrapping beneath it, and the
+   bracket beside the own-row outline at a real viewport need a look on
+   the device (private tab, `npm run dev` or the live site once Pages
+   serves `26aef8a`).
 
 ## Why these and not the alternatives
 

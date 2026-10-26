@@ -4,7 +4,7 @@
 //
 //   node test/tiebreak.test.mjs
 
-import { computeStandings, rankStandings, TIEBREAK_LABELS } from "../src/core/tiebreak.js";
+import { computeStandings, rankStandings, groupTies, ordinal, layerDisplayValue, TIEBREAK_LABELS } from "../src/core/tiebreak.js";
 
 const failures = [];
 function check(label, actual, expected) {
@@ -205,6 +205,58 @@ function check(label, actual, expected) {
 {
   check("labels exist for all three layers", Object.keys(TIEBREAK_LABELS).sort(),
     ["fewest_zeros", "highest_single_show", "most_wins"].sort());
+}
+
+// =================================================================
+// 5. groupTies / ordinal / layerDisplayValue — the standings board's tie
+//    groups (docs/decisions/standings-ux.md item 5). Inputs are
+//    rankStandings-shaped rows built by hand so each case pins ONE
+//    property of the grouping instead of re-deriving ranks; one case at
+//    the end goes through rankStandings itself. Invented ids, no names.
+// =================================================================
+{
+  const row = (id, rank, points, layers = []) => ({ id, rank, points, tied: false, resolvedBy: null, layers });
+  const fz = v => ({ layer: "fewest_zeros", value: v });
+  const mw = v => ({ layer: "most_wins", value: v });
+
+  // Grouped by POINTS, not rank: a layer-resolved pair has ranks 1 and 2
+  // and is still one tie. The singleton at 4 points is left out.
+  check("groupTies: a layer-resolved pair is ONE group keyed on points, carrying both ranks, decided by the splitting layer",
+    groupTies([row("a", 1, 5, [fz(0)]), row("b", 2, 5, [fz(1)]), row("c", 3, 4)], ["fewest_zeros"]),
+    [{ key: "5-1", members: [{ id: "a", rank: 1 }, { id: "b", rank: 2 }], place: 1, deciding: "fewest_zeros", shared: false }]);
+  check("groupTies: an empty stack gives a shared group (Casual / All time)",
+    groupTies([row("a", 1, 5), row("b", 1, 5)], []),
+    [{ key: "5-1", members: [{ id: "a", rank: 1 }, { id: "b", rank: 1 }], place: 1, deciding: null, shared: true }]);
+  check("groupTies: a configured stack that never split anything is shared, not decided",
+    groupTies([row("a", 1, 5), row("b", 1, 5)], ["most_wins"])[0]?.shared, true);
+  // Partial split (decision 1): one group, one tag; the shared pair shows
+  // only by its equal ranks.
+  const three = groupTies([row("a", 1, 5, [fz(0)]), row("b", 2, 5, [fz(1)]), row("c", 2, 5, [fz(1)])], ["fewest_zeros", "most_wins"]);
+  check("groupTies: a partial split is ONE group decided by the splitting layer; the still-shared pair is visible only by equal ranks",
+    [three.length, three[0].deciding, three[0].members.map(m => m.rank)], [1, "fewest_zeros", [1, 2, 2]]);
+  // Deciding = the FIRST configured layer any member carries, not the last.
+  check("groupTies: deciding is the FIRST configured layer present (fewest_zeros) even though most_wins also split a sub-group",
+    groupTies([row("a", 1, 5, [fz(0), mw(2)]), row("b", 2, 5, [fz(0), mw(1)]), row("c", 3, 5, [fz(1)])], ["fewest_zeros", "most_wins"])[0]?.deciding,
+    "fewest_zeros");
+  check("groupTies: a configured layer that split nothing is skipped — the deciding layer is the first that DID",
+    groupTies([row("a", 1, 5, [mw(2)]), row("b", 2, 5, [mw(1)])], ["fewest_zeros", "most_wins"])[0]?.deciding, "most_wins");
+  check("groupTies: two groups on one board get distinct keys; the singleton between them is not grouped",
+    groupTies([row("a", 1, 5, [fz(0)]), row("b", 2, 5, [fz(1)]), row("c", 3, 4), row("d", 4, 3), row("e", 4, 3)], ["fewest_zeros"])
+      .map(g => [g.key, g.members.map(m => m.id), g.place, g.shared]),
+    [["5-1", ["a", "b"], 1, false], ["3-4", ["d", "e"], 4, true]]);
+  // Empty set: the upper bound. Distinct points must produce NOTHING.
+  check("groupTies empty-set: distinct points → no groups", groupTies([row("a", 1, 5), row("b", 2, 4), row("c", 3, 3)], ["fewest_zeros"]), []);
+  check("groupTies empty-set: empty board → no groups", groupTies([], ["fewest_zeros"]), []);
+  // Through rankStandings itself.
+  const players = { a: { scoped: 5, zeros: 0, wins: 1, high: 4 }, b: { scoped: 5, zeros: 1, wins: 1, high: 5 } };
+  check("groupTies on rankStandings output: a resolved by fewest_zeros, ranks 1 and 2, one group",
+    groupTies(rankStandings(players, p => p.scoped, ["fewest_zeros"]), ["fewest_zeros"]).map(g => [g.deciding, g.members.map(m => `${m.id}:${m.rank}`)]),
+    [["fewest_zeros", ["a:1", "b:2"]]]);
+  check("layerDisplayValue reads natural units (zeros as a count, not the negated sort key)",
+    [layerDisplayValue(players.b, "fewest_zeros"), layerDisplayValue(players.b, "most_wins"), layerDisplayValue(players.b, "highest_single_show")], [1, 1, 5]);
+  check("ordinal: 1st 2nd 3rd 4th, the 11–13 exception, and the 21st/101st family",
+    [1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 111, 112, 113].map(ordinal),
+    ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "101st", "111th", "112th", "113th"]);
 }
 
 // ---------------------------------------------------------------
