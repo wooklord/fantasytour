@@ -2406,7 +2406,7 @@ export async function runMembersPanelScenario({ html, scripts, mode }){
 }
 
 // Empty ranked ladder (admin-panel.md → "EMPTY RANKED LADDER", LOCKED
-// 2026-10-26; incident docs/history/2026-10-26-casual-empty-ladder.md).
+// 2026-10-26; incident docs/history/2026-10-26-empty-ranked-ladder.md).
 // Three loads, all on the Casual bracket (slots mode in the base fixture):
 //   flip, no ranked key   — the league-creation shape;
 //   flip, ranked:{ladder:[]} — the shape a slots-mode Save rules leaves;

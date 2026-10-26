@@ -3,7 +3,8 @@
 -- ============================================================
 -- Run ONCE in the Supabase SQL Editor. Record: docs/decisions/admin-panel.md
 -- → "EMPTY RANKED LADDER — LOCKED 2026-10-26" (decision 1); incident:
--- docs/history/2026-10-26-casual-empty-ladder.md.
+-- docs/history/2026-10-26-empty-ranked-ladder.md (two instances; the
+-- second was found by this file's own footer step 4 on first run).
 --
 -- WHAT: admin_update_config refuses a config whose mode is 'ranked_choice'
 -- while ranked.ladder is missing, not an array, or empty. Same signature

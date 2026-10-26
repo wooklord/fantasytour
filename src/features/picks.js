@@ -189,7 +189,7 @@ export async function renderPickSheet(show){
   // Empty-ladder guard (admin-panel.md → "EMPTY RANKED LADDER", LOCKED
   // 2026-10-26, decision 3): ranked mode with no ladder has no rows to
   // draw. A bare "Lock 'em in" over nothing is what shipped on 2026-10-26
-  // (docs/history/2026-10-26-casual-empty-ladder.md); say what is wrong
+  // (docs/history/2026-10-26-empty-ranked-ladder.md); say what is wrong
   // and who can fix it. The ROLE, not a nickname — the admin's name is
   // not readable with the anon key, and nicknames stay off tracked files.
   // Paper-safe markup only (.sheet is theme-invariant — frontend-css.md),

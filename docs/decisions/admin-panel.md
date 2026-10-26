@@ -33,7 +33,9 @@ consequences were invisible from where you acted.
   assertion whose two sides agree by construction proves nothing.
 
 **EMPTY RANKED LADDER — LOCKED 2026-10-26 (dev's call after the Green
-Eggs Casual incident; full record `docs/history/2026-10-26-casual-empty-ladder.md`).**
+Eggs Casual incident; a second instance, Ambassadors Official, surfaced
+the same day from Stage V's own footer — full record of both:
+`docs/history/2026-10-26-empty-ranked-ladder.md`).**
 The master switch carried a stored empty ladder through a flip to ranked
 mode while the rules region previewed the default ladder without saving
 it; the pick sheet then had zero rows and an empty Rules card. Four
@@ -54,12 +56,16 @@ both save paths:
    open a show, assert rows or the notice; and assert that
    `saveMasterSwitch`'s `admin_update_config` payload never carries
    ranked mode with an empty ladder.
-**BUILT 2026-10-26, bundle `11227b3-6c0fb8c`. Stage V WRITTEN, NOT
-APPLIED until the dev runs it** (`sql/stage_v_ranked_ladder_gate.sql`,
-footer: deploy check → `begin … rollback` behaviour test with four
-calls → nothing-persisted check → state query expecting no rows). Apply
-order: Stage V first, then the already-pushed client; either order is
-safe. Open points resolved at approval: the notice names the ROLE ("ask
+**BUILT 2026-10-26, bundle `11227b3-6c0fb8c`. Stage V APPLIED
+2026-10-26 by the dev** (`sql/stage_v_ranked_ladder_gate.sql`; footer:
+deploy check → `begin … rollback` behaviour test with four calls →
+nothing-persisted check → state query expecting no rows). **Footer step
+4 found a SECOND instance on first run** — bracket 1, Ambassadors
+Official, in ranked mode with an empty ladder; the dev repaired it in
+the app the same day, and steps 1–4 then passed with step 4 returning
+no rows. Details, including two facts the session was not given, in the
+history file. Apply order was Stage V first, then the already-pushed
+client; either order is safe. Open points resolved at approval: the notice names the ROLE ("ask
 your league admin"), never a nickname; the flip case runs twice, on a
 bracket with no `ranked` key (league-creation shape) and on
 `ranked: { ladder: [] }` (the Save-rules shape both live brackets

@@ -1,6 +1,6 @@
-# 2026-10-26 — Green Eggs Casual: ranked mode with an empty ladder
+# 2026-10-26 — Empty ranked ladder, twice: Green Eggs Casual, then Ambassadors Official
 
-> Historical record, written 2026-10-26 from a read-only diagnosis the same day. The decisions it produced are LOCKED in `docs/decisions/admin-panel.md` → "TWO SAVES WRITE `brackets.config`" (the entry that owns `admin_update_config` and both save paths), dated 2026-10-26, which points back here. `CLAUDE.md` is unchanged (at its size limit). No player nicknames here, per the standing rule in Conventions.
+> Historical record, written 2026-10-26 from a read-only diagnosis the same day; renamed from `2026-10-26-casual-empty-ladder.md` later that day when a second instance in a different league and bracket surfaced (see "Second instance" below). The decisions it produced are LOCKED in `docs/decisions/admin-panel.md` → "TWO SAVES WRITE `brackets.config`" (the entry that owns `admin_update_config` and both save paths), dated 2026-10-26, which points back here. `CLAUDE.md` is unchanged (at its size limit). No player nicknames here, per the standing rule in Conventions.
 
 ## What happened
 
@@ -30,4 +30,11 @@
 
 ## Decisions taken from it
 
-Recorded and LOCKED 2026-10-26 in `docs/decisions/admin-panel.md` → the save-split entry: a server gate in `admin_update_config`; the master switch writing mode and ladder in one write; a render guard on the sheet and an unsaved-default flag in the admin region; and the two empty-set tests.
+Recorded and LOCKED 2026-10-26 in `docs/decisions/admin-panel.md` → the save-split entry: a server gate in `admin_update_config`; the master switch writing mode and ladder in one write; a render guard on the sheet and an unsaved-default flag in the admin region; and the two empty-set tests. Built the same day (bundle `11227b3-6c0fb8c`); Stage V applied the same day.
+
+## Second instance — Ambassadors Official (bracket 1), found by Stage V's own footer
+
+- **Found 2026-10-26** by Stage V's verification step 4, the "state the gate prevents" query, run right after the stage was applied: bracket 1 (Ambassadors Official, league 1) had `mode: "ranked_choice"` with an empty ladder. Not an artefact of the footer's behaviour test: that ran against bracket 4 inside `begin … rollback` and persisted nothing.
+- **Repair:** the dev set the bracket's mode in the app on 2026-10-26. **Which mode — slots, or ranked with a ladder — was NOT reported to the session; fill in.** The date of the last Ambassadors Official picks before the repair, from the picks query, was **likewise NOT reported; fill in.** Both are left blank on purpose rather than guessed (CLAUDE.md discipline item 7: record at the weight the evidence supports).
+- **What it adds to the cause:** the same flow reached the same state in a different league and a different bracket. Ambassadors Official is a slots-mode bracket by design (Module B shipped in Casual — `docs/decisions/scoring-modes.md`), so ranked mode there was itself not intended. How long the bracket had been in that state, and whether any pick sheet was opened against it, are not known to the session.
+- **Why it cannot recur:** Stage V's gate now refuses `ranked_choice` with an empty or missing ladder at the only writer, `admin_update_config`; the client writes mode and ladder together and warns on both surfaces. Footer steps 1–4 passed after the repair, step 4 returning no rows.
