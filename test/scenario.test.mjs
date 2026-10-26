@@ -1026,16 +1026,18 @@ async function runMode(mode){
   // The cell-tint amendment's recorded example, all four facts: (1) High
   // Score cells tinted for all three, (2) Fewest Zeros tinted for the
   // pair only, (3) the first player's Fewest Zeros cell PLAIN, (4) Most
-  // Wins (1–1) plain — and, per amendment A, the tag names BOTH layers
-  // that worked and both headers carry the tint + mark; Most Wins (which
-  // split nobody) stays unmarked. Footer Title Case (amendment B).
+  // Wins (1–1) plain — and, per amendment A + its addendum, the tag names
+  // BOTH layers that worked; the "decided" mark sits on both headers
+  // (this column did work) while the TINT sits on High Score only (where
+  // the group first broke); Most Wins (split nobody) gets neither.
+  // Footer Title Case (amendment B).
   const tsub = tb.three.subs[0];
-  check("three-way, three-layer stack: ONE tag 'Tie for 1st · decided by High Score & Fewest Zeros'; header tint + decided mark on BOTH named layers, Most Wins unmarked; cells — High Score tinted for all three, Fewest Zeros tinted for the pair only, the split-off player's Fewest Zeros cell plain, Most Wins plain; ranks 1/2/3; footer '1st: High Score · 2nd: Fewest Zeros · 3rd: Most Wins'",
+  check("three-way, three-layer stack: ONE tag 'Tie for 1st · decided by High Score & Fewest Zeros'; High Score header tinted AND marked, Fewest Zeros header marked but NOT tinted, Most Wins neither; cells — High Score tinted for all three, Fewest Zeros tinted for the pair only, the split-off player's Fewest Zeros cell plain, Most Wins plain; ranks 1/2/3; footer '1st: High Score · 2nd: Fewest Zeros · 3rd: Most Wins'",
     tb.three.tags.length === 1 && tb.three.tags[0].text === "Tie for 1st · decided by High Score & Fewest Zeros" && tb.three.tgRows.length === 3
       && J(tb.three.tgRows.map(r => r.rank)) === J(["1", "2", "3"])
       && /^Tiebreakers1st: High Score · 2nd: Fewest Zeros · 3rd: Most Wins$/.test(tb.three.footer)
       && J(tsub?.headers) === J([{ layer: "highest_single_show", label: "High Score", deciding: true, decidedMark: true },
-                                 { layer: "fewest_zeros", label: "Fewest Zeros", deciding: true, decidedMark: true },
+                                 { layer: "fewest_zeros", label: "Fewest Zeros", deciding: false, decidedMark: true },
                                  { layer: "most_wins", label: "Most Wins", deciding: false, decidedMark: false }])
       && /repeat\(3,/.test(tsub?.cols ?? "") && tsub?.stray === 0
       && J(tsub?.rows.map(r => [r.rank, r.name, r.vals.map(v => `${v.value}:${v.deciding}`)]))

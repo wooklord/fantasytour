@@ -299,11 +299,17 @@
    short labels joined with " & " — e.g. "Tie for 11th · decided by High
    Score & Most Wins". When all three configured layers were used it
    collapses to "Tie for 11th · decided by all 3 tiebreaks" to save
-   width. "· shared" is unchanged. In the expanded grid the header tint
-   and "decided" mark go on every layer named in the tag; per-member
-   cell tints stay as built. **Recorded: marking every named header was
-   Chat's consistency call, and first-only is the fallback if three
-   marked headers read busy on the phone.**
+   width. "· shared" is unchanged. In the expanded grid the "decided"
+   mark goes in the header of EVERY layer named in the tag; per-member
+   cell tints stay as built.
+   **ADDENDUM to A, same day (dev's call) — the header rule:** the
+   "decided" mark goes in the header of every layer named in the tag, as
+   built; the header TINT moves back to the primary (first splitting)
+   layer ONLY, not every marked header. Per-member cell tints unchanged.
+   **The meaning, recorded:** tint = where the group first broke;
+   "decided" = this column did work; cell tint = for whom. (This replaces
+   an earlier note that marking and tinting every named header was
+   Chat's consistency call with first-only as a fallback.)
    **AMENDMENT B 2026-10-26 — label case.** The short labels were
    inconsistent: "High Score" (a hand-set override) beside "Most wins"
    and "Fewest zeros". All three become Title Case — "High Score", "Most
@@ -332,7 +338,17 @@
    "decided by High Score" alone and the three-way check failed in both
    modes; revert byte-identical, bundle matched the index after the
    rebuild. Nothing outside `tiebreak.js`, `tagRow`/`subRow` and the
-   tests changed; `admin.js`'s full labels are untouched.
+   tests changed; `admin.js`'s full labels are untouched. (The "both
+   headers tinted" in that build is superseded by the addendum below.)
+   **ADDENDUM BUILT 2026-10-26, bundle `cb5400f-3a10695`.** `subRow`:
+   header tint from `deciding` only (`tint(l)`), the "decided" mark from
+   `decidingAll` (`worked(l)`); cells unchanged. Three-way assertion:
+   High Score tinted and marked, Fewest Zeros marked but NOT tinted, Most
+   Wins neither; the resolved pair's single header stays tinted and
+   marked. Mutation result: with the tint applied to every marked header
+   the Fewest Zeros header came back tinted and the three-way check
+   failed in both modes; revert byte-identical, bundle matched the index
+   after the rebuild. Scope held to `subRow` and the tests.
 
 ## Why these and not the alternatives
 
