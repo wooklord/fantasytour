@@ -234,6 +234,11 @@ const RPC_HANDLERS = {
   // saveConfig(): the read-through fallbacks that preserve fields whose
   // inputs aren't rendered are only observable in what actually got written.
   admin_update_config: async (args, tables) => {
+    // Stage V gate (sql/stage_v_ranked_ladder_gate.sql): ranked mode needs a
+    // non-empty ladder. The fake must be at least as strict as the RPC, or
+    // a client that ships an empty ladder passes against nothing.
+    const d = args.p_data || {};
+    if (d.mode === "ranked_choice" && !(Array.isArray(d.ranked?.ladder) && d.ranked.ladder.length)) throw new Error("A ranked-choice bracket needs at least one rank");
     const br = (tables.brackets || []).find(b => b.id === args.p_bracket_id);
     if (br) br.config = args.p_data;
     return { ok: true };
@@ -2398,4 +2403,86 @@ export async function runMembersPanelScenario({ html, scripts, mode }){
       onclicks: [...r.querySelectorAll(".member-l2 button")].map(b => b.getAttribute("onclick") ?? ""),
     })),
   };
+}
+
+// Empty ranked ladder (admin-panel.md → "EMPTY RANKED LADDER", LOCKED
+// 2026-10-26; incident docs/history/2026-10-26-casual-empty-ladder.md).
+// Three loads, all on the Casual bracket (slots mode in the base fixture):
+//   flip, no ranked key   — the league-creation shape;
+//   flip, ranked:{ladder:[]} — the shape a slots-mode Save rules leaves;
+//   notice               — the incident state itself (ranked, ladder []).
+// A flip sets the mode select, calls onModeChange (the region previews the
+// default ladder), calls saveMasterSwitch and presses NOTHING else, then
+// opens a show. Both scenarios are the empty-set case the ranked scenario
+// skipped (its fixture stores a five-value ladder). The handlers are
+// INVOKED; the fake admin_update_config carries the Stage V gate, and a
+// direct call proves the gate rather than assuming it.
+export async function runEmptyLadderScenario({ html, scripts, mode }){
+  async function boot(mutate){
+    const { tables, ids } = makeFixtures();
+    mutate(tables, ids);
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+    w.localStorage.setItem("ft_session", JSON.stringify({ id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+    w.localStorage.setItem("ft_bracket_id", String(ids.CASUAL_ID));
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    return { w, tables, ids, calls };
+  }
+  const openShow1 = async w => {
+    clickTab(w, "shows");
+    await tick(); await tick();
+    w.openShow(1);
+    await tick(); await tick(); await tick();
+    return {
+      rows: w.document.querySelectorAll(".slotline").length,
+      saveBtn: !!w.document.getElementById("save"),
+      revert: !!w.document.getElementById("revert-link"),
+      sheetNotice: w.document.getElementById("ladder-missing")?.textContent ?? null,
+      rulesNotice: w.document.querySelector(".rules-sheet .sheetnote")?.textContent ?? null,
+      ruleTerms: [...w.document.querySelectorAll(".rd-term")].map(e => e.textContent),
+      sheetHasAppClass: !!w.document.querySelector(".sheet .noticebox, .sheet .pill, .sheet .muted"),
+    };
+  };
+  async function flip(mutate){
+    const b = await boot(mutate);
+    const { w, calls } = b;
+    clickTab(w, "admin");
+    await tick(); await tick(); await tick(); await tick();
+    w.document.getElementById("c-mode").value = "ranked_choice";
+    w.onModeChange();
+    const previewed = [...w.document.querySelectorAll("#rankladder .rank-pts")].map(i => Number(i.value));
+    const flagShown = !!w.document.getElementById("ladder-unsaved");
+    await w.saveMasterSwitch();
+    await tick(); await tick();
+    const payloads = calls.filter(c => c.type === "rpc" && c.fn === "admin_update_config").map(c => c.args.p_data);
+    const stored = b.tables.brackets.find(x => x.id === b.ids.CASUAL_ID).config;
+    return {
+      previewed, flagShown, payloads,
+      msErr: w.document.getElementById("ms-err")?.textContent ?? "",
+      flagAfterSave: !!w.document.getElementById("ladder-unsaved"),
+      storedMode: stored.mode, storedLadder: stored.ranked?.ladder ?? null,
+      show: await openShow1(w),
+    };
+  }
+  const noKey = await flip(() => {});
+  const emptyKey = await flip(t => { const c = t.brackets.find(x => x.kind === "casual"); c.config = { ...c.config, ranked: { ladder: [] } }; });
+
+  const n = await boot(t => { const c = t.brackets.find(x => x.kind === "casual"); c.config = { ...c.config, mode: "ranked_choice", ranked: { ladder: [] } }; });
+  const notice = await openShow1(n.w);
+  clickTab(n.w, "admin");
+  await tick(); await tick(); await tick(); await tick();
+  const adminFlag = {
+    present: !!n.w.document.getElementById("ladder-unsaved"),
+    text: n.w.document.getElementById("ladder-unsaved")?.textContent ?? "",
+    editorRows: n.w.document.querySelectorAll("#rankladder .rank-pts").length,
+  };
+  let gateError = null, gateOk = null;
+  try{ await RPC_HANDLERS.admin_update_config({ p_bracket_id: n.ids.CASUAL_ID, p_data: { mode: "ranked_choice", ranked: { ladder: [] } } }, n.tables); }
+  catch(e){ gateError = e.message; }
+  try{ gateOk = await RPC_HANDLERS.admin_update_config({ p_bracket_id: n.ids.CASUAL_ID, p_data: { mode: "ranked_choice", ranked: { ladder: [3] } } }, n.tables); }
+  catch(e){ gateOk = { error: e.message }; }
+  return { noKey, emptyKey, notice, adminFlag, gateError, gateOk };
 }

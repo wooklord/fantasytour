@@ -290,6 +290,10 @@ html[data-theme="light"] .panel.live-halo{
    .savebtn at the bottom — a quiet text link, not a second button
    competing with "Lock 'em in" for attention. */
 .sheet .revertlink{display:none;background:none;border:none;color:var(--paper-ink-soft);font-size:.78rem;text-decoration:underline;padding:0;margin:2px 0 0;cursor:pointer}
+/* Empty-ladder notice on the pick sheet (admin-panel.md → "EMPTY RANKED
+   LADDER", decision 3). Paper tokens only — .sheet is theme-invariant
+   paper and never takes an app-wide component class (frontend-css.md). */
+.sheet .sheetnote{color:var(--paper-ink-soft);font-size:.9rem;line-height:1.5;margin:8px 0 0;text-align:center}
 .sheet.dirty .revertlink{display:inline-block}
 .sheet .divider{border-top:1px solid rgba(43,33,64,.2);margin:18px 0 6px;padding-top:10px;font-family:var(--mono);font-size:.72rem;color:var(--paper-ink-soft);letter-spacing:1px;text-transform:uppercase}
 /* Admin scope line — visually the same idea as .sheet .divider above, but a

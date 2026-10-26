@@ -216,7 +216,15 @@ function rulesRegionHtml(cfg, mode){
   if (mode === "ranked_choice") {
     const stored = cfg.ranked?.ladder ?? [];
     const ladder = stored.length ? stored : DEFAULT_RANKED_LADDER;
+    // Unsaved-default flag (admin-panel.md → "EMPTY RANKED LADDER",
+    // decision 3): the editor below previews the default when nothing is
+    // stored, and on 2026-10-26 that preview was mistaken for a saved
+    // ladder — ranked mode shipped with no rows. Say so, in the panel.
+    const unsaved = !stored.length
+      ? `<div class="noticebox" id="ladder-unsaved">⚠️ Default ladder shown — <b>not saved yet</b>. Until Save rules (or Save master switch) stores it, the pick sheet for this bracket has no rows.</div>`
+      : "";
     return collapsible("rules-ranked", "Game rules — ranked choice", `
+      ${unsaved}
       <p class="muted">Players pick one song per rank. A pick scores its rank's value if that
         song is played anywhere in the show — position doesn't matter, so a single ladder
         covers every show regardless of format. There's no separate one-set section here.</p>
@@ -1103,6 +1111,22 @@ export async function saveMasterSwitch(){
     mode,
     bonuses: { ...(state.cfg.bonuses || {}), perfect: Number($("#c-bperfect").value) },
   };
+  // Empty-ladder gate, client side (admin-panel.md → "EMPTY RANKED LADDER",
+  // LOCKED 2026-10-26, decision 2): switching to ranked with no stored
+  // ladder writes the ladder TOGETHER with the mode — the one the editor
+  // shows (it previews the default after onModeChange, and the admin may
+  // have edited it) or the default itself — so ranked mode never lands
+  // without rows. Stage V refuses that server-side regardless; this is
+  // the courtesy that keeps the admin's own ladder instead of an error.
+  if (mode === "ranked_choice" && !(state.cfg.ranked?.ladder ?? []).length){
+    let ladder = DEFAULT_RANKED_LADDER;
+    if ($("#rankladder")){
+      const shown = readLadder();
+      if (shown === null){ $("#ms-err").textContent = $("#cfg-err").textContent; return; }
+      if (shown.length) ladder = shown;
+    }
+    data.ranked = { ladder };
+  }
   try{
     await rpc("admin_update_config", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_data:data });
     state.cfg = data; toast("Master switch saved ✔", "score");

@@ -559,6 +559,22 @@
     const savedVal = (k) => ((mine.find((p) => p.slot === k) || {}).songname || "").trim();
     const val = (k) => esc((draft && draft[k] != null ? draft[k] : savedVal(k)) || "");
     const slots = slotDefs(show.format);
+    if (state.cfg.mode === "ranked_choice" && !slots.length) {
+      const note = "This bracket's ranked ladder isn't set up yet, so there's nothing to pick. Ask your league admin to save the ladder under Game rules.";
+      $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">\u2190 shows</button></p>
+    <div class="sheet">
+      <h2>${esc(show.venue || "TBA")}</h2>
+      <div class="sub">${fmtDate(show.showdate)} \xB7 ${esc(show.city || "")}${show.state ? ", " + esc(show.state) : ""}${show.format === "one_set" ? " \xB7 FESTIVAL SET" : ""}</div>
+      <p class="sheetnote" id="ladder-missing">${note}</p>
+    </div>
+    <div class="sheet rules-sheet">
+      <h2>The Rules</h2>
+      <p class="sheetnote">${note}</p>
+    </div>
+    ${footerHtml()}`;
+      return;
+    }
     const rankedRow = state.cfg.mode === "ranked_choice";
     const slotHtml = (s) => `
     <div class="slotline autocomplete${rankedRow ? " ranked" : ""}">
@@ -1391,7 +1407,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"49c5461-d08e486"}</p>
+      <p class="colophon buildid">build ${"11227b3-6c0fb8c"}</p>
     </div>
   </div>`;
   }
@@ -1645,7 +1661,9 @@ Relay this to them now \u2014 it will not be shown again.`);
     if (mode === "ranked_choice") {
       const stored = (_b = (_a = cfg.ranked) == null ? void 0 : _a.ladder) != null ? _b : [];
       const ladder = stored.length ? stored : DEFAULT_RANKED_LADDER;
+      const unsaved = !stored.length ? `<div class="noticebox" id="ladder-unsaved">\u26A0\uFE0F Default ladder shown \u2014 <b>not saved yet</b>. Until Save rules (or Save master switch) stores it, the pick sheet for this bracket has no rows.</div>` : "";
       return collapsible("rules-ranked", "Game rules \u2014 ranked choice", `
+      ${unsaved}
       <p class="muted">Players pick one song per rank. A pick scores its rank's value if that
         song is played anywhere in the show \u2014 position doesn't matter, so a single ladder
         covers every show regardless of format. There's no separate one-set section here.</p>
@@ -2289,6 +2307,7 @@ Switch anyway?`
     return true;
   }
   async function saveMasterSwitch() {
+    var _a, _b;
     $("#ms-err").textContent = "";
     const mode = $("#c-mode").value;
     if (!await confirmModeChange(mode)) return;
@@ -2298,6 +2317,18 @@ Switch anyway?`
       mode,
       bonuses: { ...state.cfg.bonuses || {}, perfect: Number($("#c-bperfect").value) }
     };
+    if (mode === "ranked_choice" && !((_b = (_a = state.cfg.ranked) == null ? void 0 : _a.ladder) != null ? _b : []).length) {
+      let ladder = DEFAULT_RANKED_LADDER;
+      if ($("#rankladder")) {
+        const shown = readLadder();
+        if (shown === null) {
+          $("#ms-err").textContent = $("#cfg-err").textContent;
+          return;
+        }
+        if (shown.length) ladder = shown;
+      }
+      data.ranked = { ladder };
+    }
     try {
       await rpc("admin_update_config", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_data: data });
       state.cfg = data;

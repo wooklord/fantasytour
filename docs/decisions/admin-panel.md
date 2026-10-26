@@ -54,8 +54,26 @@ both save paths:
    open a show, assert rows or the notice; and assert that
    `saveMasterSwitch`'s `admin_update_config` payload never carries
    ranked mode with an empty ladder.
-Status: docs only as of 2026-10-26; the change plan (SQL Stage V, the
-client changes, the scenarios, three mutations) awaits approval.
+**BUILT 2026-10-26, bundle `11227b3-6c0fb8c`. Stage V WRITTEN, NOT
+APPLIED until the dev runs it** (`sql/stage_v_ranked_ladder_gate.sql`,
+footer: deploy check → `begin … rollback` behaviour test with four
+calls → nothing-persisted check → state query expecting no rows). Apply
+order: Stage V first, then the already-pushed client; either order is
+safe. Open points resolved at approval: the notice names the ROLE ("ask
+your league admin"), never a nickname; the flip case runs twice, on a
+bracket with no `ranked` key (league-creation shape) and on
+`ranked: { ladder: [] }` (the Save-rules shape both live brackets
+carried). Client: `saveMasterSwitch` adds the editor's ladder (or the
+default) to its payload when switching to ranked with nothing stored;
+`rulesRegionHtml`'s ranked branch renders `#ladder-unsaved` above the
+editor when nothing is stored; `renderPickSheet` returns a paper-safe
+notice sheet (`.sheet .sheetnote`, paper tokens only) with no save,
+revert or countdown wiring when ranked mode has no ladder. Harness:
+`runEmptyLadderScenario` (three loads) and the fake `admin_update_config`
+carries the gate; a direct call proves it. Mutations, all caught in
+both modes: gate removed from the fake (the direct-call check), master
+switch shipping an empty ladder (both flip cases, since the fake's gate
+then refuses the write), notice suppressed (the incident-state check).
 
 **The admin tab is GROUPED BY SCOPE and ordered by FREQUENCY within each
 group. The order is load-bearing — read this before reordering anything in

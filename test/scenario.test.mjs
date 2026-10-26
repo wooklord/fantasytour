@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -1113,6 +1113,33 @@ async function runMode(mode){
       && /\.leaders\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(css)
       && /@media \(min-width:520px\)\{ \.leaders\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)\} \}/.test(css),
     "styles.css: .lb th .arrow / .lb td.active / .leaders rules");
+
+  // Empty ranked ladder (admin-panel.md → "EMPTY RANKED LADDER", LOCKED
+  // 2026-10-26). The empty-set case the ranked scenario skipped.
+  const el = await runEmptyLadderScenario({ html, scripts, mode });
+  for (const [label, f] of [["no ranked key", el.noKey], ["ranked: { ladder: [] }", el.emptyKey]]){
+    check(`empty-ladder flip (${label}): onModeChange previews the default ladder and flags it unsaved; saveMasterSwitch makes ONE admin_update_config call whose payload carries mode ranked_choice WITH that ladder, no error, the stored config holds it, the flag clears; opening a show then renders five ranked rows, Lock 'em in, no notice, and a Ladder rule`,
+      J(f.previewed) === J([5, 4, 3, 2, 1]) && f.flagShown === true
+        && f.payloads.length === 1 && f.payloads[0].mode === "ranked_choice" && J(f.payloads[0].ranked?.ladder) === J([5, 4, 3, 2, 1])
+        && f.msErr === "" && f.storedMode === "ranked_choice" && J(f.storedLadder) === J([5, 4, 3, 2, 1]) && f.flagAfterSave === false
+        && f.show.rows === 5 && f.show.saveBtn === true && f.show.sheetNotice === null && f.show.ruleTerms.includes("Ladder"),
+      `${label}: ${J(f)}`);
+  }
+  check("empty-ladder notice (the incident state: ranked mode, ladder []): zero rows, NO Lock 'em in, no revert link, the sheet and the Rules card both carry the notice naming the ROLE ('ask your league admin'), no rule terms, and no app-wide class on the paper sheet",
+    el.notice.rows === 0 && el.notice.saveBtn === false && el.notice.revert === false
+      && /ask your league admin/i.test(el.notice.sheetNotice || "") && /ask your league admin/i.test(el.notice.rulesNotice || "")
+      && !/Wooklord|EggHead|GlobalAdmin/.test(el.notice.sheetNotice || "")
+      && el.notice.ruleTerms.length === 0 && el.notice.sheetHasAppClass === false,
+    `notice: ${J(el.notice)}`);
+  check("admin ranked region in the incident state flags the unsaved default ladder above a five-row editor",
+    el.adminFlag.present === true && /not saved yet/.test(el.adminFlag.text) && el.adminFlag.editorRows === 5,
+    `adminFlag: ${J(el.adminFlag)}`);
+  check("the fake admin_update_config mirrors Stage V: ranked mode with an empty ladder throws 'A ranked-choice bracket needs at least one rank'; with a ladder it succeeds",
+    el.gateError === "A ranked-choice bracket needs at least one rank" && el.gateOk?.ok === true,
+    `gateError: ${el.gateError} gateOk: ${J(el.gateOk)}`);
+  check("stylesheet, statically: the sheet notice uses paper tokens only (.sheet .sheetnote on --paper-ink-soft)",
+    /\.sheet \.sheetnote\{color:var\(--paper-ink-soft\)/.test(css),
+    "styles.css: .sheet .sheetnote rule");
 
   // (2a/3a) Scores page: View chip, own-entry outline, ellipsis names
   const sv = await runScoresViewScenario({ html, scripts, mode });

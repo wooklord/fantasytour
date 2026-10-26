@@ -186,6 +186,31 @@ export async function renderPickSheet(show){
   const savedVal = k => ((mine.find(p => p.slot===k)||{}).songname || "").trim();
   const val = k => esc((draft && draft[k] != null ? draft[k] : savedVal(k)) || "");
   const slots = slotDefs(show.format);
+  // Empty-ladder guard (admin-panel.md → "EMPTY RANKED LADDER", LOCKED
+  // 2026-10-26, decision 3): ranked mode with no ladder has no rows to
+  // draw. A bare "Lock 'em in" over nothing is what shipped on 2026-10-26
+  // (docs/history/2026-10-26-casual-empty-ladder.md); say what is wrong
+  // and who can fix it. The ROLE, not a nickname — the admin's name is
+  // not readable with the anon key, and nicknames stay off tracked files.
+  // Paper-safe markup only (.sheet is theme-invariant — frontend-css.md),
+  // and no save/revert/countdown wiring, since none of those elements
+  // exist on this sheet.
+  if (state.cfg.mode === "ranked_choice" && !slots.length){
+    const note = "This bracket's ranked ladder isn't set up yet, so there's nothing to pick. Ask your league admin to save the ladder under Game rules.";
+    $("#main").innerHTML = `
+    <p style="margin-top:14px"><button class="btn ghost small" onclick="renderShows()">← shows</button></p>
+    <div class="sheet">
+      <h2>${esc(show.venue||"TBA")}</h2>
+      <div class="sub">${fmtDate(show.showdate)} · ${esc(show.city||"")}${show.state?", "+esc(show.state):""}${show.format==='one_set' ? " · FESTIVAL SET" : ""}</div>
+      <p class="sheetnote" id="ladder-missing">${note}</p>
+    </div>
+    <div class="sheet rules-sheet">
+      <h2>The Rules</h2>
+      <p class="sheetnote">${note}</p>
+    </div>
+    ${footerHtml()}`;
+    return;
+  }
   // Ranked rows drop the label and put the points bubble where it was: the
   // rank IS the points, so "Rank 1" and "5" are two encodings of one fact at
   // opposite ends of the row, and the number is the one that tells a player
