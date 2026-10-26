@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-26 — Batch 1 LIVE, Stage F APPLIED)
+## RESUME HERE (updated 2026-10-26 — Batch 1 LIVE, Stage F APPLIED, Batch 3 LOCKED)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -18,11 +18,13 @@ statements: the post-apply count of `official_opt_in = false` rows is 0
 and the column default reads `true` (`information_schema.columns`). The
 default is now the reaffirmed decision in the live catalog, not the
 2026-10-11 accident. Record: `official-opt-in-default.md` → "Stage F apply
-decision". (`CLAUDE.md`'s official-opt-in bullet still says the live
-default is `false` because Stage F was never applied — stale as of this
-date, left for a byte-neutral edit; that file is at its size limit.)
+decision". (`CLAUDE.md`'s official-opt-in bullet has since been updated
+to "Stage F APPLIED 2026-10-26"; this parenthetical said it was stale
+until then.)
 
-**Remaining:** Batch 3 (welcome card + first-save toast) per decision 6 below.
+**Remaining:** Batch 3 (welcome card, install guide, first-save toast) —
+LOCKED 2026-10-26 under decision 6 below; change plan pending the dev's
+approval, nothing built. Then Batch 4 (join codes).
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -116,7 +118,52 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
       section (two URL fields + save; no join-code field at all — amended
       2026-10-24, it was first planned as a read-only line).
    2. Stage F apply (see 5 above and Part 3 below).
-   3. Welcome card + first-save toast.
+   3. Welcome card + install guide + first-save toast.
+      **LOCKED 2026-10-26 (dev's call).** This fills in the card and
+      toast already locked in decision 2 and adds an install guide. Plan
+      pending approval; nothing built yet.
+      1. **Welcome card.** Shown in the in-league-no-picks state, derived
+         exactly as decision 2 says: all-zero `get_my_pick_counts` AND no
+         `ft_draft_*` key for this player. Contents: the league's name as
+         the heading; three how-to-play lines; the next open show's
+         cutoff with a "Make your picks" button that opens that show; a
+         pointer to The Rules on any pick sheet; the league's community
+         links via `communityLinks()`; a ✕ that stores
+         `ft_welcome_<playerId>`. It hides itself once any picks exist.
+      2. **"Get the app" section inside the card.** Shown ONLY when the
+         app is not running standalone (`display-mode: standalone`, or
+         `navigator.standalone` on iOS) AND only on phones. Branches:
+         - (a) `beforeinstallprompt` captured (Android Chrome, Edge,
+           Samsung Internet): one Install button calling `prompt()`; the
+           section hides on `appinstalled`.
+         - (b) Android without a captured prompt: "Browser menu (⋮) →
+           Install app / Add to Home screen".
+         - (c) iPhone / iPad: "Tap Share, then Add to Home Screen", plus
+           "You'll sign in once more inside the app, so keep your PIN
+           handy". iOS home-screen apps do not share Safari's storage,
+           so the session does not carry over into the installed app.
+         - (d) In-app browsers (Facebook, Messenger, Instagram, detected
+           by user agent): "You're in <app>'s browser, which can't
+           install apps. Tap ⋯ → Open in browser, then install from
+           there." **Why (d) matters:** the Facebook group is the
+           recruiting channel, so a recruit's first open is most likely
+           inside Facebook's or Messenger's in-app browser, where
+           neither install path exists.
+      3. **Install bar for players who already have picks.** When not
+         standalone, a slim one-line bar on the shows list: "Add Fantasy
+         Eggy to your home screen", a "How?" that expands the same
+         platform instructions, and a ✕ that stores
+         `ft_install_dismissed` (per device, not per player). Standalone
+         always hides both the bar and the card's section. *Not
+         specified when locked:* whether the bar is phones-only like the
+         card's section. Open until the plan is approved.
+      4. **First-save toast**, once per player per device
+         (`ft_first_save_<playerId>`): "Picks locked in ✔ Change them
+         any time before cutoff. Scores show up on the show's Scores
+         page after it ends."
+      5. **Rejected:** a modal, because it would block the shows list on
+         first load; server-side dismissal state, because per-device is
+         enough at this scale.
    4. Join codes: `league_join_codes` table + its three RPCs, entry on the
       no-league screen, rotation in Community.
 
