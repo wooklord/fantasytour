@@ -1422,7 +1422,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"ef5032a-d2ffaaf"}</p>
+      <p class="colophon buildid">build ${"1809a0b-8fc54e5"}</p>
     </div>
   </div>`;
   }
@@ -1854,7 +1854,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       <div class="grid2">
         ${[0, 1, 2].map((i) => tiebreakerSelectRow(i, (cfg.tiebreakers || [])[i] || "")).join("")}
       </div>
-      <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros \u2014 any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins \u2014 per-show ties still share the crown. Highest single-show score.</p>
+      <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros \u2014 any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most laurels \u2014 per-show ties still share the crown. Highest single-show score.</p>
     `) : ""}
     <div class="panel">
       <button class="btn" onclick="saveConfig()">Save rules</button>

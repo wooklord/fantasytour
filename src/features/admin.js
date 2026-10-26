@@ -499,7 +499,7 @@ export async function renderAdmin(){
       <div class="grid2">
         ${[0,1,2].map(i => tiebreakerSelectRow(i, (cfg.tiebreakers||[])[i] || "")).join("")}
       </div>
-      <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros — any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most wins — per-show ties still share the crown. Highest single-show score.</p>
+      <p class="muted" style="margin-top:6px;font-size:.78rem">Fewest zeros — any show in scope worth 0 points, including one never picked at all, counts against you (scoped from when you joined the season roster, not the season's start). Most laurels — per-show ties still share the crown. Highest single-show score.</p>
     `) : ""}
     <div class="panel">
       <button class="btn" onclick="saveConfig()">Save rules</button>

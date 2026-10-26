@@ -2008,11 +2008,22 @@ export async function runStandingsTiebreakScenario({ html, scripts, mode }){
   const none = (await load({ scores: noTie })).read();
   // Three-layer stack: the header tint must stay on the FIRST splitting
   // layer only, and the cell tints must follow each member's own path.
-  const three = (await load({ scores: threeWay, roster: ["p1", "p2", "p4"], stack: ["highest_single_show", "fewest_zeros", "most_wins"], thirdShow: true })).read();
+  const threeLoad = await load({ scores: threeWay, roster: ["p1", "p2", "p4"], stack: ["highest_single_show", "fewest_zeros", "most_wins"], thirdShow: true });
+  const three = threeLoad.read();
+  // Same Official bracket, admin tab (p1 is the league admin): the Season
+  // tiebreakers help prose must use the select's own wording — "Most
+  // laurels", never "Most wins" (item 5 amendment B addendum, follow-up).
+  // The section body renders even while collapsed, so textContent reads it.
+  clickTab(threeLoad.w, "admin");
+  await tick(); await tick(); await tick();
+  const tbSec = threeLoad.w.document.getElementById("sec-tiebreakers");
+  const adminTiebreak = { present: !!tbSec,
+    help: [...(tbSec?.querySelectorAll("p.muted") ?? [])].map(p => p.textContent).find(t => /^Fewest zeros —/.test(t)) ?? "",
+    options: [...(tbSec?.querySelectorAll("#tb-0 option") ?? [])].map(o => o.textContent) };
   const zero = (await load({ scores: allZero })).read();
   const casual = (await load({ scores: casualTie, bracket: "casual" })).read();
   const leftoverKey = (await load({ scores: resolved, preset: "compact" })).read();
-  return { collapsed, expanded, collapsedAgain, afterRerender, shared, none, three, zero, casual, leftoverKey };
+  return { collapsed, expanded, collapsedAgain, afterRerender, shared, none, three, adminTiebreak, zero, casual, leftoverKey };
 }
 
 // Scores page View chip + own-entry outline (standings-ux.md 2a/3a).

@@ -1043,6 +1043,12 @@ async function runMode(mode){
       && J(tsub?.rows.map(r => [r.rank, r.name, r.vals.map(v => `${v.value}:${v.deciding}`)]))
          === J([["1", "Wooklord", ["6:true", "2:false", "1:false"]], ["2", "GlobalAdmin", ["3:true", "0:true", "1:false"]], ["3", "EggHead", ["3:true", "1:true", "1:false"]]]),
     `three: ${J(tb.three.tags)} rows ${J(tb.three.tgRows)} subs ${J(tb.three.subs)}`);
+  check("admin Season tiebreakers (Official, league admin): the help prose says 'Most laurels — per-show ties still share the crown', matching the select's own 'Most laurels' option, and no 'wins' wording remains in it (laurels addendum follow-up)",
+    tb.adminTiebreak.present
+      && tb.adminTiebreak.help.includes("Most laurels — per-show ties still share the crown.")
+      && !/\bwins?\b/i.test(tb.adminTiebreak.help)
+      && tb.adminTiebreak.options.includes("Most laurels") && !tb.adminTiebreak.options.some(o => /\bwins?\b/i.test(o)),
+    `admin tiebreakers: ${J(tb.adminTiebreak)}`);
   check("all-zero board (fresh season): no groups, no tags, no sub-rows — the hasAnyScore gate — while the placeholder podium renders (empty-set case)",
     tb.zero.names.length === 2 && tb.zero.tgRows.length === 0 && tb.zero.tags.length === 0 && tb.zero.subs.length === 0 && tb.zero.placeholderPodium,
     `zero: rows ${JSON.stringify(tb.zero.tgRows)} tags ${JSON.stringify(tb.zero.tags)} placeholder: ${tb.zero.placeholderPodium}`);

@@ -331,11 +331,24 @@
    shared and three-way harness checks (grid header, footer) now read
    "Most Laurels". Mutation result: the old short label restored failed
    4 unit checks and 2 board checks per mode; revert byte-identical,
-   bundle matched the index. **Observed, outside this scope, not
-   changed:** the admin tiebreaker help paragraph (`admin.js`, the
+   bundle matched the index. **Observed, outside this scope, then
+   RESOLVED (follow-up below):** the admin tiebreaker help paragraph (`admin.js`, the
    muted text under the three selects) still says "Most wins — per-show
    ties still share the crown" in prose beside a select that now reads
    "Most laurels". A one-word prose edit for a later batch.
+   **FOLLOW-UP BUILT 2026-10-26, bundle `1809a0b-8fc54e5`** (dev's
+   call): the help paragraph now reads "Most laurels — per-show ties
+   still share the crown." A sweep of `src/` for other player-facing
+   "wins" wording found two candidates, both left alone deliberately.
+   The Stats footnote's "laurels = shows won" is the term's
+   definition, not a stale label. "No winner" heads the per-show result
+   panel when nobody scored, which names the show's result, not the
+   stat. Everything else is code: the `most_wins` key, the `wins`
+   fields and comments. New check: the tiebreak scenario's three-way
+   load opens the admin tab as the league admin and asserts the help
+   prose says "Most laurels", has no "win"/"wins" word, and that the
+   select offers "Most laurels". Mutation: the old phrase restored
+   failed it in both modes; revert byte-identical, bundle matched.
    Build shape for both: `TIEBREAK_SHORT_LABELS` title-cased;
    `groupTies` gains `decidingAll` (layers present in any member's path,
    stack order; `deciding` stays as the first for anything still using
