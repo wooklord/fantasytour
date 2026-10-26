@@ -58,9 +58,12 @@ export function makeFixtures(){
     // silently fell out of admin's Shows & cutoffs list once "today" moved far
     // enough past its old hardcoded date, breaking a Reopen-button assertion
     // that had nothing to do with dates at all.
+    // sync_flag: null is the live shape after Stage U (sql/stage_u_show_sync.sql)
+    // and the base for runSyncFlagScenario's no-notice case — explicit, so
+    // "no notice" is asserted against a null column, not an absent one.
     shows: [
-      { id: 1, showdate: day(0), venue: "The Barn", city: "Woodstock", state: "NY" },
-      { id: 2, showdate: day(-5), venue: "Old Mill", city: "Hudson", state: "NY" },
+      { id: 1, showdate: day(0), venue: "The Barn", city: "Woodstock", state: "NY", sync_flag: null },
+      { id: 2, showdate: day(-5), venue: "Old Mill", city: "Hudson", state: "NY", sync_flag: null },
     ],
     league_shows: [
       { league_id: LEAGUE_ID, show_id: 1, cutoff_at: iso(60), format: "standard", status: "upcoming",

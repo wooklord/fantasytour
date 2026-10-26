@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -1021,6 +1021,25 @@ async function runMode(mode){
   check("a padded 22-character input is accepted because both sides trim first, and the stored name is the trimmed one",
     reg.padded.err === "" && reg.padded.registerCalls.length === 1 && reg.padded.session?.name === "Z".repeat(20),
     `err: "${reg.padded.err}" session: ${JSON.stringify(reg.padded.session)}`);
+
+  // Show-sync flag notice (docs/show_sync_plan.md, Stage U)
+  const sf = await runSyncFlagScenario({ html, scripts, mode });
+  check("a show with sync_flag renders exactly one .noticebox.sync-flag, under its own row head, carrying the flag text and a Clear button wired to clearSyncFlag(<id>)",
+    sf.flagged.sectionPresent && sf.flagged.rowCount === 2 && sf.flagged.notices.length === 1
+      && sf.flagged.notices[0].show === "1" && sf.flagged.notices[0].underRowHead
+      && sf.flagged.notices[0].text.includes(sf.flagText) && /^clearSyncFlag\(1,/.test(sf.flagged.notices[0].onclick),
+    `flagged: ${JSON.stringify(sf.flagged)}`);
+  check("clearSyncFlag is on window and calls admin_clear_sync_flag once with the session's name/PIN and p_show_id",
+    sf.handlerOnWindow && sf.rpcCalls.length === 1 && sf.rpcCalls[0].p_show_id === 1
+      && sf.rpcCalls[0].p_name === "Wooklord" && sf.rpcCalls[0].p_pin === "1234",
+    `onWindow: ${sf.handlerOnWindow} calls: ${JSON.stringify(sf.rpcCalls)}`);
+  check("the fake logs the cleared text and nulls the flag, and the re-render drops the notice while keeping both show rows",
+    sf.tableFlagAfter === null && sf.clearLog.length === 1 && sf.clearLog[0].note === sf.flagText && sf.clearLog[0].show_id === 1
+      && sf.cleared.notices.length === 0 && sf.cleared.rowCount === 2,
+    `flagAfter: ${JSON.stringify(sf.tableFlagAfter)} log: ${JSON.stringify(sf.clearLog)} cleared: ${JSON.stringify(sf.cleared)}`);
+  check("the default fixture (sync_flag null on every show) renders no notice at all (empty-set case)",
+    sf.none.sectionPresent && sf.none.rowCount === 2 && sf.none.notices.length === 0,
+    `none: ${JSON.stringify(sf.none)}`);
 
   return failures.length;
 }

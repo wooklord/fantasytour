@@ -1222,7 +1222,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"2c817d8-82712ab"}</p>
+      <p class="colophon buildid">build ${"209d813-898d8a1"}</p>
     </div>
   </div>`;
   }
@@ -1573,8 +1573,10 @@ Relay this to them now \u2014 it will not be shown again.`);
       const tz = sh.timezone || null;
       const inputVal = !sh.cutoff_at ? "" : tz ? venueLocalInputValue(sh.cutoff_at, tz) : new Date(new Date(sh.cutoff_at).getTime() - (/* @__PURE__ */ new Date()).getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
       const zoneLabel = !sh.cutoff_at ? "" : tz ? `<div class="muted" style="font-size:.75rem;margin:8px 0 2px">Timezone: <b style="color:var(--cream)">${esc(venueLongName(sh.cutoff_at, tz))}</b>${hasDstTransition(inputVal, tz) ? ' <span style="color:var(--coral)">\u26A0 DST changes on this date \u2014 double-check this time</span>' : ""}</div>` : `<div class="muted" style="font-size:.75rem;margin:8px 0 2px"><span style="color:var(--coral)">Device time \u2014 venue timezone unknown</span></div>`;
+      const flagNotice = sh.sync_flag ? `<div class="noticebox sync-flag" data-show="${sh.id}">\u26A0\uFE0F Show sync: ${esc(sh.sync_flag)} <button class="linkbtn" onclick="clearSyncFlag(${sh.id}, this)">Clear</button></div>` : "";
       return `<div class="arow">
         <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue || "TBA")}</span></div>
+        ${flagNotice}
         ${zoneLabel}
         <input class="cutoff-in" type="datetime-local" step="900" data-show="${sh.id}" data-tz="${tz || ""}" value="${inputVal}">
         <div class="switcher" style="margin-bottom:8px" title="pick sheet format">
@@ -2232,6 +2234,22 @@ Switch anyway?`
       toast(esc(e.message));
     }
   }
+  async function clearSyncFlag(showId, btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "\u2026";
+    }
+    try {
+      await rpc("admin_clear_sync_flag", { p_name: state.session.name, p_pin: state.session.pin, p_show_id: showId });
+      await renderAdmin();
+    } catch (e) {
+      toast(esc(e.message));
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Clear";
+      }
+    }
+  }
   async function finalizeShow(showId, btn) {
     if (!confirm("Run final scoring and mark this show complete? Picks and scores lock for good.")) return;
     btn.disabled = true;
@@ -2556,6 +2574,7 @@ Switch anyway?`
     globalResetPin,
     saveLeagueConfig,
     setRosterFilter,
+    clearSyncFlag,
     switchToBracket,
     switchToLeague
   });

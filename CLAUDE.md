@@ -429,9 +429,9 @@ toggle and game numbering each have a revisit trigger there.
 
 **DECIDED 2026-08-17, NOT STARTED: `sync_shows`, `sync_songs` and `score` are
 UNAUTHENTICATED** — `docs/decisions/cron-secret-edge-auth.md`. Dual path (a
-`CRON_SECRET` for the cron, name/PIN for the buttons), keep the three buttons,
-hourly `sync_shows` folded in and HELD until the first Green Eggs show scores
-cleanly. Do not probe the endpoint casually: unknown actions run scoring.
+`CRON_SECRET` for the cron, name/PIN for the buttons), keep the three buttons.
+Hourly `sync_shows` SUPERSEDED by the daily in-tick show sync — BUILT 2026-10-26,
+pending Stage U → deploy → push (`docs/show_sync_plan.md`). Unknown actions run scoring: don't probe.
 
 **HOW TO ANSWER "IS THE NEW BUNDLE LIVE?" — build id:** compare the
 `<hash>-<sha>` the Settings card shows with what `curl` of the live `app.js`

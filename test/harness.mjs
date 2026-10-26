@@ -239,6 +239,22 @@ const RPC_HANDLERS = {
     return { ok: true };
   },
   admin_set_cutoff: async () => ({ ok: true }),
+  // Stage U (sql/stage_u_show_sync.sql): any league admin or global; logs
+  // what was cleared, then nulls the flag; a null flag logs nothing. Real
+  // join against league_members, not a fixed stub, so a dropped client
+  // check or a wrong argument name fails here the way it would live.
+  admin_clear_sync_flag: async ({ p_name, p_pin, p_show_id }, tables) => {
+    if (p_pin == null) throw new Error("Wrong name or PIN");
+    const me = tables.players_public.find(p => p.name === p_name);
+    const isAdmin = !!me && tables.league_members.some(m => m.player_id === me.id && m.is_league_admin === true);
+    if (!isAdmin) throw new Error("League admins only");
+    const sh = tables.shows.find(s => s.id === p_show_id);
+    if (!sh) throw new Error("Show not found");
+    if (sh.sync_flag == null) return { ok: true, cleared: false };
+    (tables.sync_flag_clears ??= []).push({ show_id: p_show_id, cleared_by: me.id, note: sh.sync_flag });
+    sh.sync_flag = null;
+    return { ok: true, cleared: true };
+  },
   // Session 4 step 2 — flips must_change_pin on the matching players_public
   // row, mirroring the real RPC's effect (real join, not a fixed stub, same
   // idiom as my_leagues/get_bracket_scores above).
@@ -2101,5 +2117,62 @@ export async function runRegisterLengthScenario({ html, scripts, mode }){
     over: await attempt("Z".repeat(21)),
     max: await attempt("Z".repeat(20)),
     padded: await attempt("  " + "Z".repeat(20) + "  "),
+  };
+}
+
+// Show-sync flag notice (docs/show_sync_plan.md → Admin Shows section): a
+// show carrying shows.sync_flag renders a .noticebox.sync-flag under its
+// row head in "Shows: cutoffs & finalizing", with a Clear button wired to
+// clearSyncFlag → admin_clear_sync_flag → re-render. The fake mirrors the
+// Stage U RPC (any league admin, allow-plus-log). The handler is INVOKED,
+// not just asserted present — the "does anything invoke this?" rule in
+// testing-harness.md. The no-flag case is the untouched base fixture, so
+// it is a genuine empty-set check rather than a mutation of the flagged one.
+export async function runSyncFlagScenario({ html, scripts, mode }){
+  async function load(mutate = () => {}){
+    const { tables } = makeFixtures();
+    mutate(tables);
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+    w.localStorage.setItem("ft_session", JSON.stringify({ id: "p1", name: "Wooklord", pin: "1234", is_global_admin: false }));
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    clickTab(w, "admin");
+    await tick(); await tick(); await tick(); await tick();
+    const read = () => {
+      const sec = w.document.getElementById("sec-shows");
+      const notices = sec ? [...sec.querySelectorAll(".noticebox.sync-flag")] : [];
+      return {
+        sectionPresent: !!sec,
+        rowCount: sec ? sec.querySelectorAll(".arow").length : 0,
+        notices: notices.map(n => ({
+          show: n.dataset.show,
+          text: n.textContent.replace(/\s+/g, " ").trim(),
+          onclick: n.querySelector("button")?.getAttribute("onclick") || "",
+          // Under its own row head, not floating elsewhere in the section.
+          underRowHead: n.previousElementSibling?.classList.contains("arow-head") === true,
+        })),
+      };
+    };
+    return { w, tables, calls, read };
+  }
+  const flagText = "Carton changed showdate (2026-11-01 → 2026-11-02); not applied — finalized in 1 league(s)";
+  const a = await load(t => { t.shows[0].sync_flag = flagText; });
+  const flagged = a.read();
+  const btn = a.w.document.querySelector("#sec-shows .noticebox.sync-flag button");
+  const handlerOnWindow = typeof a.w.clearSyncFlag === "function";
+  if (handlerOnWindow) await a.w.clearSyncFlag(1, btn);
+  await tick(); await tick();
+  const cleared = a.read();
+  const rpcCalls = a.calls.filter(c => c.type === "rpc" && c.fn === "admin_clear_sync_flag").map(c => c.args);
+  const b = await load();
+  const none = b.read();
+  return {
+    flagText, flagged, cleared, rpcCalls, handlerOnWindow,
+    tableFlagAfter: a.tables.shows[0].sync_flag,
+    clearLog: a.tables.sync_flag_clears ?? [],
+    none,
   };
 }

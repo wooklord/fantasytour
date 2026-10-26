@@ -37,10 +37,21 @@
 //   | reopen {p_name,p_pin,league_id,show_id}
 //   | cutoff_changed {p_name,p_pin,league_id,show_id}
 //   | finalize {p_name,p_pin,league_id,show_id}
+// v8 (daily in-tick show sync, LOCKED 2026-10-25 — see
+//     docs/decisions/cron-secret-edge-auth.md and docs/show_sync_plan.md):
+//     `score` also runs syncShows() once a day after 09:00 ET, gated by the
+//     sync_state table and isolated from the scoring path. syncShows() now
+//     DIFFS The Carton against the stored rows: a finalized show (final in
+//     ANY league) is flagged, never rewritten; a show that disappears is
+//     flagged, never deleted; a date move recomputes a derived cutoff
+//     (posting the existing cutoff-changed message) and flags an admin-set
+//     one. The decisions are pure functions in showSync.js; this file
+//     fetches, calls them, and applies the writes they return.
 // ============================================================
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { norm, deriveSlotFacts, scorePicks } from "./scoring.js";
+import { dailyGateDue, diffShows, cutoffPlan, appendFlag } from "./showSync.js";
 
 // Instance constant: setlist data source.
 const CARTON = "https://thecarton.net/api/v2";
@@ -224,8 +235,22 @@ function venueCutoffISO(showdate: string, state: string | null, hour = DEFAULT_C
 }
 
 // ---------- sync shows (global) + per-league league_shows overlay ----------
+// Shared by the daily in-tick run (dailyShowSync, below) and the admin
+// "Sync shows" button; both end by stamping sync_state.ran_at, so a manual
+// run counts as that day's run. The diff / flag / cutoff decisions are pure
+// functions in showSync.js (unit-tested under Node); this function fetches,
+// calls them, and applies what they return. Guardrails, locked 2026-10-25
+// (docs/decisions/cron-secret-edge-auth.md): a finalized show's global row
+// is never modified; a show that disappears from The Carton is never
+// deleted; a date change posts the EXISTING cutoff-changed message.
+const DAILY_SYNC_KEY = "daily_show_sync";
 async function syncShows() {
   const rows = await carton(`/shows.json?order_by=showdate&direction=desc&limit=200`);
+  // An empty page is a failed fetch, not "every upcoming show vanished" — a
+  // hiccup on The Carton's side must not flag the whole schedule and post
+  // about it. Throwing leaves attempted_at set and ran_at unset, so the
+  // daily gate retries in 30 minutes; the button shows the error.
+  if (!rows.length) throw new Error("Carton returned no shows — sync aborted");
   const floor = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
   const incoming = rows
     .filter((r: any) => r.showdate >= floor)
@@ -245,8 +270,101 @@ async function syncShows() {
       // corrected or STATE_TZ gains a mapping, same as permalink above.
       timezone: resolveVenueTz(r.state ?? null),
     }));
-  for (const s of incoming) {
-    await supa.from("shows").upsert(s, { onConflict: "id" });
+  const today = easternDate(0);
+  const nowIso = new Date().toISOString();
+
+  // What the app holds: the rows for the incoming ids, plus every row dated
+  // today or later (the only set a vanished show can come from). finalIds
+  // is one entry per league_shows row with status 'final' — ANY league's
+  // final is final, and the duplicates are how "finalized in N league(s)"
+  // is counted.
+  const incomingIds = incoming.map((s: any) => s.id);
+  const [{ data: byId, error: e1 }, { data: upcoming, error: e2 }, { data: finalRows, error: e3 }] = await Promise.all([
+    supa.from("shows").select("*").in("id", incomingIds.length ? incomingIds : [-1]),
+    supa.from("shows").select("*").gte("showdate", today),
+    supa.from("league_shows").select("show_id").eq("status", "final"),
+  ]);
+  if (e1 || e2 || e3) throw (e1 ?? e2 ?? e3);
+  const existingMap = new Map<number, any>();
+  for (const r of [...(byId ?? []), ...(upcoming ?? [])]) existingMap.set(Number(r.id), r);
+  const existing = [...existingMap.values()];
+  const finalIds = (finalRows ?? []).map((r: any) => Number(r.show_id));
+
+  const { inserts, updates, flags, vanished } = diffShows({ incoming, existing, finalIds, today });
+
+  // Flag notes accumulate per show in memory and are written once each
+  // (a show can pick up a vanished note AND a kept-cutoff note in one
+  // pass). appendFlag never re-adds a note already present, so yesterday's
+  // vanished note is not duplicated today; `newNotes` is what actually got
+  // recorded this run, and is what gets posted.
+  const flagText = new Map<number, string>();
+  const newNotes: { id: number; note: string }[] = [];
+  const addFlag = (id: number, note: string) => {
+    const current = flagText.has(id) ? flagText.get(id) : (existingMap.get(id)?.sync_flag ?? null);
+    const { text, added } = appendFlag(current, note);
+    if (added) { flagText.set(id, text); newNotes.push({ id, note }); }
+  };
+  for (const f of flags) addFlag(f.id, f.note);
+
+  const { data: leagues } = await supa.from("leagues").select("id,name");
+  const leagueName = new Map((leagues ?? []).map((l: any) => [l.id, l.name]));
+
+  // Date moves: one decision per league_shows row of the moved show. The
+  // overlay writes go BEFORE the shows upsert on purpose: a crash between
+  // the two leaves the OLD date stored, so the next run re-finds the move
+  // and finishes the job (the recompute stamps cutoff_set_by_admin = false,
+  // so a retry classifies the row the same way). The reverse order would
+  // store the new date and never look at the cutoffs again.
+  let cutoffsMoved = 0;
+  for (const u of updates) {
+    if (!u.changed.includes("showdate")) continue;
+    const oldShow = existingMap.get(u.id);
+    const { data: overlays } = await supa.from("league_shows").select("*").eq("show_id", u.id);
+    for (const ov of overlays ?? []) {
+      const plan = cutoffPlan({
+        overlay: ov, oldShow, newShow: u.row, defaultOf: venueCutoffISO, now: nowIso,
+        leagueName: leagueName.get(ov.league_id),
+      });
+      if (plan.kind === "keep") { if (plan.note) addFlag(u.id, plan.note); continue; }
+      const patch: any = { cutoff_at: plan.cutoff_at, cutoff_set_by_admin: false };
+      // A cutoff moved into the future needs its reminder and lock to fire
+      // again; one moved within the past has already had both.
+      if (plan.resetStamps) { patch.remind_sent = null; patch.lock_sent = null; }
+      const { error } = await supa.from("league_shows").update(patch)
+        .eq("league_id", ov.league_id).eq("show_id", ov.show_id);
+      if (error) { console.error(`syncShows: cutoff move failed for league ${ov.league_id} show ${u.id}:`, error); continue; }
+      cutoffsMoved++;
+      await pingRealtime(ov.league_id, ov.show_id);
+      await notifyLeague(leagueName.get(ov.league_id) ?? "",
+        cutoffChangedMessage(u.row.venue ?? u.row.showdate ?? u.id, plan.cutoff_at));
+    }
+  }
+
+  // Global rows: new shows, and non-final rows that changed. Finalized rows
+  // were routed to `flags` by diffShows and appear in neither list. Errors
+  // are logged, not swallowed — an unreadable failure here is how the
+  // overlay bug went unnoticed for two months.
+  for (const s of inserts) {
+    const { error } = await supa.from("shows").upsert(s, { onConflict: "id" });
+    if (error) console.error(`syncShows: insert failed for show ${s.id}:`, error);
+  }
+  for (const u of updates) {
+    const { error } = await supa.from("shows").upsert(u.row, { onConflict: "id" });
+    if (error) console.error(`syncShows: update failed for show ${u.id} (${u.changed.join(",")}):`, error);
+  }
+
+  // Flags: one write per show. Posted to every league on first record only
+  // (shows are global; any league's admin may clear). notifyLeague no-ops
+  // where a league has no hook — known: Green Eggs' hook currently points
+  // at the Ambassadors channel (docs/decisions/discord-routing.md).
+  for (const [id, text] of flagText) {
+    const { error } = await supa.from("shows").update({ sync_flag: text }).eq("id", id);
+    if (error) console.error(`syncShows: flag write failed for show ${id}:`, error);
+  }
+  for (const n of newNotes) {
+    const sh = existingMap.get(n.id);
+    const label = sh ? `${sh.venue ?? "TBA"} (${sh.showdate})` : `show ${n.id}`;
+    for (const lg of leagues ?? []) await notifyLeague(lg.name, `⚠️ **Show sync** — ${label}: ${n.note}`);
   }
 
   // Festival-tagged shows default to one_set format (promote only — a manual
@@ -260,20 +378,24 @@ async function syncShows() {
   // Every league needs an overlay row for every show — not just at Stage A
   // migration time, but ongoing, so a brand-new league (the FB league) or a
   // brand-new show both get covered automatically on the next sync.
-  const { data: leagues } = await supa.from("leagues").select("id");
   let overlaysCreated = 0, cutoffsDefaulted = 0;
   for (const lg of leagues ?? []) {
-    const { data: existing } = await supa.from("league_shows")
+    const { data: have0 } = await supa.from("league_shows")
       .select("show_id").eq("league_id", lg.id);
-    const have = new Set((existing ?? []).map((r: any) => r.show_id));
+    const have = new Set((have0 ?? []).map((r: any) => r.show_id));
     const missing = incoming.filter((s: any) => !have.has(s.id));
     for (const s of missing) {
-      await supa.from("league_shows").insert({
+      // cutoff_set_by_admin = false: a sync-written cutoff is derived by
+      // definition, so a later date move may recompute it without the
+      // old-default comparison that pre-flag rows need.
+      const { error } = await supa.from("league_shows").insert({
         league_id: lg.id,
         show_id: s.id,
         cutoff_at: venueCutoffISO(s.showdate, s.state),
+        cutoff_set_by_admin: false,
         format: festIds.includes(s.id) ? "one_set" : "standard",
       });
+      if (error) { console.error(`syncShows: overlay insert failed for league ${lg.id} show ${s.id}:`, error); continue; }
       overlaysCreated++; cutoffsDefaulted++;
     }
     if (festIds.length) {
@@ -287,12 +409,53 @@ async function syncShows() {
       const s = incoming.find((x: any) => x.id === row.show_id);
       if (!s) continue;
       await supa.from("league_shows")
-        .update({ cutoff_at: venueCutoffISO(s.showdate, s.state) })
+        .update({ cutoff_at: venueCutoffISO(s.showdate, s.state), cutoff_set_by_admin: false })
         .eq("league_id", lg.id).eq("show_id", row.show_id);
       cutoffsDefaulted++;
     }
   }
-  return { synced: incoming.length, overlays_created: overlaysCreated, cutoffs_defaulted: cutoffsDefaulted };
+
+  const counts = {
+    synced: incoming.length, created: inserts.length, updated: updates.length,
+    flagged: newNotes.length, vanished: vanished.length, cutoffs_moved: cutoffsMoved,
+    overlays_created: overlaysCreated, cutoffs_defaulted: cutoffsDefaulted,
+  };
+  // ran_at ONLY after every write above succeeded (the activateSeasons
+  // write-ordering lesson): a throw anywhere above leaves it unstamped and
+  // the daily gate retries after its 30-minute backoff.
+  const { error: stampErr } = await supa.from("sync_state")
+    .upsert({ key: DAILY_SYNC_KEY, ran_at: new Date().toISOString(), note: JSON.stringify(counts) }, { onConflict: "key" });
+  if (stampErr) console.error("syncShows: ran_at stamp failed (is Stage U applied?):", stampErr);
+  return counts;
+}
+
+// ---------- daily in-tick show sync ----------
+// Runs at the END of scoreShows, after scoring has produced its result.
+// Gate (showSync.js dailyGateDue): Eastern hour >= 9, no ran_at on today's
+// Eastern date, no attempted_at in the last 30 minutes. attempted_at is
+// stamped BEFORE the Carton call and ran_at (inside syncShows) only after
+// every write succeeded, so a failure backs off for 30 minutes instead of
+// retrying every minute or being recorded as a success. Skipped on a
+// live-burst tick: that invocation already sleeps ~36 s and the free-tier
+// wall clock is the one real limit; it runs the next minute instead.
+async function dailyShowSync(live: boolean) {
+  if (live) return { skipped: "live burst" };
+  const now = new Date();
+  const { data: st, error } = await supa.from("sync_state").select("*").eq("key", DAILY_SYNC_KEY).maybeSingle();
+  if (error) throw error;
+  if (!dailyGateDue({ ranAt: st?.ran_at ?? null, attemptedAt: st?.attempted_at ?? null, now })) return { due: false };
+  const { error: stampErr } = await supa.from("sync_state")
+    .upsert({ key: DAILY_SYNC_KEY, attempted_at: now.toISOString() }, { onConflict: "key" });
+  if (stampErr) throw stampErr; // no backoff record → don't run without one
+  const counts = await syncShows();
+  return { due: true, ...counts };
+}
+// Isolation: nothing in the sync can throw into the scoring path. By the
+// time this is called scoring has already run and built its result; a
+// failure here is logged and returned beside it as daily_sync.error.
+async function dailyShowSyncSafe(live: boolean) {
+  try { return await dailyShowSync(live); }
+  catch (e) { console.error("dailyShowSync failed (scoring unaffected):", e); return { error: String(e) }; }
 }
 
 // ---------- sync songs (global catalog — unchanged by the multi-tenant split) ----------
@@ -535,9 +698,13 @@ async function scoreShows() {
   const autoclosed = await autoFinalize();
   await announcements();
   let rows = await eligibleLeagueShows();
+  // The daily show sync runs on BOTH return paths — "no eligible shows" is
+  // the normal tick on most days of the year, so it is the path the sync
+  // mostly runs on.
   if (!rows.length) return {
     scored: [], autoclosed, seasons_activated: seasonActivation.activated,
     season_activation_failures: seasonActivation.failed, note: "no eligible shows",
+    daily_sync: await dailyShowSyncSafe(false),
   };
 
   const live = rows.some((r: any) => isLiveWindow(r.show));
@@ -554,6 +721,7 @@ async function scoreShows() {
   return {
     scored: results, burst: live, autoclosed, seasons_activated: seasonActivation.activated,
     season_activation_failures: seasonActivation.failed,
+    daily_sync: await dailyShowSyncSafe(live),
   };
 }
 
@@ -753,6 +921,15 @@ async function reopenShow(name: string, pin: string, leagueId: number, showId: n
 }
 
 // ---------- cutoff-changed notice ----------
+// One wording for "cutoff changed", whoever moved it: the admin's Change
+// cutoff button (cutoffChanged, below) and the daily sync's derived-cutoff
+// recompute (syncShows) both post through this.
+function cutoffChangedMessage(label: string | number, cutoffAt: string | null) {
+  const when = cutoffAt
+    ? new Date(cutoffAt).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }) + " ET"
+    : "cleared";
+  return `\u{1F553} **Cutoff changed** for ${label} — now ${when}.`;
+}
 async function cutoffChanged(name: string, pin: string, leagueId: number, showId: number) {
   await requireLeagueAdmin(name, pin, leagueId);
   const { data: ls } = await supa.from("league_shows").select("cutoff_at")
@@ -760,10 +937,7 @@ async function cutoffChanged(name: string, pin: string, leagueId: number, showId
   const { data: lg } = await supa.from("leagues").select("name").eq("id", leagueId).single();
   const { data: show } = await supa.from("shows").select("venue,showdate").eq("id", showId).single();
   if (!lg || !ls) return { ok: false, error: "league or show not found" };
-  const when = ls.cutoff_at
-    ? new Date(ls.cutoff_at).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }) + " ET"
-    : "cleared";
-  await notifyLeague(lg.name, `\u{1F553} **Cutoff changed** for ${show?.venue ?? show?.showdate ?? showId} — now ${when}.`);
+  await notifyLeague(lg.name, cutoffChangedMessage(show?.venue ?? show?.showdate ?? showId, ls.cutoff_at));
   return { ok: true };
 }
 

@@ -1,5 +1,15 @@
 # BUILD PLAN — approved in Chat 2026-10-25, build starts 2026-10-26
 
+> **STATUS 2026-10-26 — BUILT and committed locally. NOT pushed. Stage U
+> NOT applied. Edge function NOT deployed.** The next step is the dev's,
+> in the strict order below: apply `sql/stage_u_show_sync.sql` and run its
+> verification footer (steps 1–8; 9 optional), then
+> `supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz`,
+> then `git push`. Everything the build added beyond this file, and the
+> mutation results, are recorded under "BUILT 2026-10-26" in
+> `docs/decisions/cron-secret-edge-auth.md`. No question is open from the
+> build itself.
+
 Daily in-tick show sync: new shows AND changes to existing ones, from The
 Carton. Decision record (binding, six locked items plus the survey
 findings): `docs/decisions/cron-secret-edge-auth.md` → "LOCKED 2026-10-25 —

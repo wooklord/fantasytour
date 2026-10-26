@@ -405,8 +405,17 @@ export async function renderAdmin(){
               hasDstTransition(inputVal, tz) ? ' <span style="color:var(--coral)">⚠ DST changes on this date — double-check this time</span>' : ""
             }</div>`
           : `<div class="muted" style="font-size:.75rem;margin:8px 0 2px"><span style="color:var(--coral)">Device time — venue timezone unknown</span></div>`;
+        // Show-sync flag (docs/show_sync_plan.md): written by the daily sync
+        // when it refused a change to a finalized show, saw a show vanish
+        // from The Carton, or left an admin-set cutoff alone on a date move.
+        // Rendered under the row head so it reads as about THIS show; Clear
+        // goes through admin_clear_sync_flag (allow-plus-log) and re-renders.
+        const flagNotice = sh.sync_flag
+          ? `<div class="noticebox sync-flag" data-show="${sh.id}">⚠️ Show sync: ${esc(sh.sync_flag)} <button class="linkbtn" onclick="clearSyncFlag(${sh.id}, this)">Clear</button></div>`
+          : "";
         return `<div class="arow">
         <div class="arow-head"><span class="date">${fmtDate(sh.showdate)}</span><span class="venue">${esc(sh.venue||"TBA")}</span></div>
+        ${flagNotice}
         ${zoneLabel}
         <input class="cutoff-in" type="datetime-local" step="900" data-show="${sh.id}" data-tz="${tz||''}" value="${inputVal}">
         <div class="switcher" style="margin-bottom:8px" title="pick sheet format">
@@ -1250,6 +1259,18 @@ export async function saveCutoff(showId, btn){
     // fire-and-forget rather than awaited inside the try/catch above it.
     edgeFn("cutoff_changed", { p_name:state.session.name, p_pin:state.session.pin, league_id:state.currentLeagueId, show_id:showId }).catch(() => {});
   }catch(e){ toast(esc(e.message)); }
+}
+// Clears a show's sync flag (see flagNotice in renderAdmin). Any league
+// admin or global may clear — shows are global, so the RPC takes no league
+// id. The RPC logs who cleared what (sync_flag_clears) before nulling the
+// flag; this just re-renders so the notice disappears. Awaited, so a caller
+// (the harness) sees the re-rendered Shows section when it resolves.
+export async function clearSyncFlag(showId, btn){
+  if (btn){ btn.disabled = true; btn.textContent = "…"; }
+  try{
+    await rpc("admin_clear_sync_flag", { p_name:state.session.name, p_pin:state.session.pin, p_show_id:showId });
+    await renderAdmin();
+  }catch(e){ toast(esc(e.message)); if (btn){ btn.disabled = false; btn.textContent = "Clear"; } }
 }
 export async function finalizeShow(showId, btn){
   if (!confirm("Run final scoring and mark this show complete? Picks and scores lock for good.")) return;

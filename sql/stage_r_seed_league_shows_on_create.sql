@@ -4,6 +4,13 @@
 -- ⚠️⚠️⚠️ STATUS: WRITTEN 2026-10-11, NOT APPLIED — apply after the first
 -- Green Eggs show scores, alongside the cron change. ⚠️⚠️⚠️
 --
+-- ⚠️ REQUIRES STAGE U FIRST (sql/stage_u_show_sync.sql, 2026-10-26): the
+-- INSERT in SECTION 2 seeds league_shows.cutoff_set_by_admin = false, a
+-- column Stage U creates (a seeded cutoff is derived, so the daily show
+-- sync may recompute it on a date move). Applied before Stage U, this file
+-- fails loudly on that column inside its transaction — it cannot
+-- half-apply. Stage U precedes it in every build order.
+--
 -- Until SECTION 3's catalog check passes, the live global_create_league is
 -- still the stage N body and a NEW LEAGUE STILL STARTS WITH ZERO
 -- league_shows ROWS. Do not read this file's presence in sql/ as evidence
@@ -139,12 +146,13 @@ begin
   -- day would stamp that day's show 'final' where the sync would not. Not
   -- worth a timezone dance here: a show-day creation is an edge case and an
   -- admin can Reopen.
-  insert into league_shows (league_id, show_id, cutoff_at, format, status, remind_sent, lock_sent, winner_sent)
+  insert into league_shows (league_id, show_id, cutoff_at, format, status, remind_sent, lock_sent, winner_sent, cutoff_set_by_admin)
   select new_league_id, s.id, default_show_cutoff(s.showdate, s.timezone), 'standard',
          case when s.showdate < current_date then 'final' else 'upcoming' end,
          case when s.showdate < current_date then now() end,
          case when s.showdate < current_date then now() end,
-         case when s.showdate < current_date then now() end
+         case when s.showdate < current_date then now() end,
+         false  -- Stage U: a seeded cutoff is derived, never admin-set (header note)
   from shows s;
   get diagnostics seeded = row_count;
 

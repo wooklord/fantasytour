@@ -95,6 +95,46 @@ The shape of the fix is settled; only the implementation is outstanding.
   6. **Recorded, NOT in scope of this batch:** `scoreShow`'s fallback to
      every setlist row for that date when the show id matches nothing;
      `cutoffChanged()` having no dedupe stamp.
+  **BUILT 2026-10-26 — committed locally, NOT pushed; Stage U NOT applied;
+  edge function NOT deployed (build order in the plan file).** What
+  landed: `supabase/functions/carton-sync/showSync.js` (`dailyGateDue`,
+  `diffShows`, `cutoffPlan`, `appendFlag`); `index.ts` (gate + stamps at
+  the end of `scoreShows` on BOTH return paths — "no eligible shows" is the
+  normal tick — in its own try/catch, reported as `daily_sync` in the
+  response; `syncShows` now diffs, flags, moves derived cutoffs and stamps
+  `ran_at`; `cutoffChangedMessage` factored out so the button and the sync
+  share one wording); `sql/stage_u_show_sync.sql`; the admin notice +
+  Clear (`clearSyncFlag`); `test/showSync.test.mjs` wired into `npm test`;
+  `runSyncFlagScenario` in the harness. Deno type-check clean. Seven
+  mutations, all caught: gate hour (1 check), finalIds check dropped (6),
+  old default computed from the NEW date (5), vanished floor dropped (4),
+  unchanged-row skip dropped (3), notice rendered unconditionally (3 per
+  mode), Clear without the RPC (2 per mode). **Build-time calls beyond the
+  plan — recorded so they are not later mistaken for Chat decisions:**
+  (a) `diffShows` also returns `inserts`, so the whole write-set comes from
+  the pure module; (b) `permalink`/`timezone` are "carried" fields: a
+  non-final row is rewritten when only they differ (keeping today's
+  self-healing refresh, which the plan's restriction would have silently
+  dropped), a final row never is, and neither flags nor posts; (c) a null
+  `cutoff_at` with a null flag is derived, not admin-set; (d) a recompute
+  and the NULL-refill both write `cutoff_set_by_admin = false`, so a run
+  that crashed mid-way retries identically, and overlay writes precede the
+  shows upsert so a crash leaves the OLD date for the next run to re-find;
+  (e) a newly recorded flag note ALSO posts to Discord — every league,
+  first record only — because decision 5 says so even though the plan's
+  step 3 did not list it; (f) an empty Carton page throws (abort, 30-min
+  backoff) rather than flagging every upcoming show as vanished; (g) the
+  gate formats the hour with `hourCycle: "h23"` rather than `hour12:false`
+  (some ICU builds print midnight as "24", and 24 ≥ 9); (h) Stage R's
+  INSERT now seeds the column itself, with a header note, rather than a
+  note alone; (i) `admin_clear_sync_flag` logs nothing and returns
+  `cleared:false` on an already-null flag, and `sync_flag_clears.cleared_by`
+  is `on delete set null` because `global_boot_player` deletes `players`
+  rows; (j) the counts gain `created`, and `flagged` counts notes newly
+  recorded this run, not the diff's total. **Observed, not changed,
+  mentioned once:** a date moved from the past into the future leaves an
+  overlay already at `status = 'live'` as live; nothing resets it to
+  upcoming. No decision was taken on it.
   **BUILD PLAN — approved in Chat 2026-10-25, build starts 2026-10-26:
   `docs/show_sync_plan.md`** (full plan, the two approval decisions —
   `syncSongs` stays out of the daily run; `admin_clear_sync_flag` is any
