@@ -151,12 +151,29 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
            neither install path exists.
       3. **Install bar for players who already have picks.** When not
          standalone, a slim one-line bar on the shows list: "Add Fantasy
-         Eggy to your home screen", a "How?" that expands the same
-         platform instructions, and a ✕ that stores
-         `ft_install_dismissed` (per device, not per player). Standalone
-         always hides both the bar and the card's section. *Not
-         specified when locked:* whether the bar is phones-only like the
-         card's section. Open until the plan is approved.
+         Eggy to your home screen", plus a "How?" that expands the same
+         platform instructions. Standalone always hides both the bar and
+         the card's section. *Not specified when locked:* whether the
+         bar is phones-only like the card's section. Open until the
+         plan is approved.
+         **AMENDED 2026-10-26, same day (dev's call): install help is
+         permanently dismissable.** As first written, `ft_install_dismissed`
+         governed the bar only and its ✕ was a plain close. Now:
+         - **ONE device flag, `ft_install_dismissed`, governs ALL install
+           help**: the bar AND the "Get the app" section inside the
+           welcome card. Dismissing either hides both.
+         - **Permanent.** No expiry and no re-show. Never cleared by
+           logout, re-login, or switching players on the device.
+         - **The dismiss control on both reads "Don't show again"**, as
+           text or as the ✕'s aria-label and title, never a bare close.
+         - **The undo is a Settings switch, "Show install tips"**, which
+           clears the flag. It is hidden when the app is already running
+           standalone.
+         - **Per device, not per account**, the same posture as the
+           welcome card's dismissal. Per-account would need server
+           state, and was judged not worth it.
+         The card's own ✕ (`ft_welcome_<playerId>`, item 1) is a
+         separate control and is unchanged by this amendment.
       4. **First-save toast**, once per player per device
          (`ft_first_save_<playerId>`): "Picks locked in ✔ Change them
          any time before cutoff. Scores show up on the show's Scores
