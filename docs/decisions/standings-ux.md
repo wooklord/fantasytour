@@ -567,7 +567,11 @@
    changed:** the value column's `3ch` minimum is the same mechanism. It
    resolves against the row's font, Outfit 16px, not the value's mono
    .95rem, which is why the names track differs by font. It still means
-   "at least ~3ch" as specified, in row units.
+   "at least ~3ch" as specified, in row units. **Deploy note:** the
+   truncation fix's own Pages deploy (`d2ffaaf`) failed in GitHub's
+   deploy step on a token-request timeout, so `eb4017a-859418e` never
+   went live. Both fixes first went live together in `ef5032a-d2ffaaf`,
+   confirmed by grepping the live `app.js` and `styles.css`.
 
 ## Why these and not the alternatives
 
