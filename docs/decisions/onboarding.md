@@ -25,7 +25,9 @@ until then.)
 **Remaining:** Batch 3 (welcome card, install guide, first-save toast) —
 LOCKED 2026-10-26 under decision 6 below; plan APPROVED the same day with
 six decisions recorded there; BUILT the same day (bundle `7b4f28f-503c56d`),
-device checks listed there still open. Then Batch 4 (join codes).
+device checks listed there still open; install-help fixes from the dev's
+live device checks AMENDED the same day (end of item 3 below). Then Batch 4
+(join codes).
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -150,6 +152,8 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
            recruiting channel, so a recruit's first open is most likely
            inside Facebook's or Messenger's in-app browser, where
            neither install path exists.
+         **Wording of (b) and (c) superseded 2026-10-26** by the
+         device-check amendment at the end of this item.
       3. **Install bar for players who already have picks.** When not
          standalone, a slim one-line bar on the shows list: "Add Fantasy
          Eggy to your home screen", plus a "How?" that expands the same
@@ -260,6 +264,75 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
       Instagram in-app browsers on both OSes, to add to the unit table;
       links opened from Discord, whose built-in browser view is not on the
       detection list.
+      **AMENDED 2026-10-26: install-help fixes from the dev's live device
+      checks (the dev's calls, the same day as BUILT).**
+      1. **Branch (b), Chrome: DEVICE-VERIFIED** on the dev's Android
+         Chrome. The ⋮ menu item reads "Install and create shortcut". It
+         opens a sheet with "Install" and "Create shortcut"; a shortcut
+         opens in Chrome, so it is not an install. Older Chrome labels the
+         menu item "Add to home screen" and leads to the same sheet. New
+         text: "Tap ⋮ (top right), then Install and create shortcut (older
+         Chrome: Add to home screen), then Install."
+         *Noted, not changed:* every non-Samsung Android browser without a
+         captured prompt (Edge, Firefox) still lands in this branch and gets
+         Chrome's wording, as it got the ⋮ glyph before.
+      2. **Branch (b), Samsung Internet: DEVICE-VERIFIED** on the dev's
+         phone: ≡ menu → "Add page to" → "Home screen". New text: "Tap ≡
+         (bottom), then Add page to, then Home screen." This closes the
+         Samsung ≡ device check listed under BUILT.
+      3. **iOS branch (c): "If you see Open as Web App, leave it on." is
+         ADDED**, between the Share line and the sign-in line.
+         - Verified by search on 2026-10-26: WebKit's own WWDC25 post on
+           Safari 26 shows the Add to Home Screen sheet with an "Open as Web
+           App" toggle, on by default. Turned off, the icon becomes a
+           bookmark that opens in Safari, even for a site with a manifest.
+         - iOS before 26 has no such switch, hence "If you see".
+         - Not checked on a device.
+      4. **Already installed, same browser only.**
+         - **What changes.** The manifest gains `related_applications` with
+           one `"platform": "webapp"` entry whose `url` is the app's own
+           manifest, written relative (`manifest.webmanifest`). Chrome's
+           docs allow a relative path, and it resolves to the manifest
+           itself on any host. `main.js` calls
+           `navigator.getInstalledRelatedApps()` at boot, beside the prompt
+           capture.
+         - **When the list holds a `webapp` entry, ALL install help is
+           hidden in the browser tab:** the card's section, the bar and the
+           Settings switch. The result is held in memory only.
+           `ft_install_dismissed` is NOT set, so an uninstall brings help
+           back on the next load.
+         - Where the API is missing (iOS, Samsung Internet, desktop) or
+           throws, behaviour is exactly as before.
+         - **Recorded honestly: Chat first guessed "already installed" as
+           the cause of the dev's logged-out Chrome check, and that guess was
+           WRONG.** The dev's installed copy came from Samsung Internet. A
+           browser can only detect an install made by that same browser, so
+           this check can never see a cross-browser install. It is kept on
+           its own merits, for the same-browser case.
+         - **Interaction with approved decision 4, flagged and left
+           unchanged:** `appinstalled` still sets `ft_install_dismissed`.
+           An install started from one of our tabs fires it, and after that
+           install help stays hidden even once the app is uninstalled.
+           "Uninstalling brings help back" holds only where the flag was
+           never set, such as an install that predates Batch 3 or one made
+           with no tab of ours open. Changing decision 4 is the dev's call.
+         - **Deliberately not done:**
+           - No manifest `id`. Chrome needs it only on desktop, and desktop
+             never shows install help.
+           - Nothing for "Create shortcut". It is not an install, so this
+             check cannot see it, and it opens in Chrome, where help still
+             showing is correct.
+      5. **Observed, not changed: browsers do not share storage.** Each
+         browser keeps its own `localStorage`, so a player who installed
+         through one browser and opens a link that lands in another appears
+         logged out there. This explains the dev's logged-out Chrome tab. No
+         code can bridge it.
+      **Device checks still open:**
+      - The one-tap Install button appearing after Chrome's engagement
+        delay (about 30 seconds and a tap).
+      - A phone with a Chrome-installed copy showing no install help in a
+        Chrome tab.
+      **Build status: in progress.**
    4. Join codes: `league_join_codes` table + its three RPCs, entry on the
       no-league screen, rotation in Community.
 
