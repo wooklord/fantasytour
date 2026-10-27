@@ -28,7 +28,8 @@ six decisions recorded there; BUILT the same day (bundle `7b4f28f-503c56d`),
 device checks listed there still open; install-help fixes from the dev's
 live device checks AMENDED the same day (end of item 3 below). **Batch 4
 (join codes) is HELD as of 2026-10-27** (decision 7 below). Its replacement,
-the "vet-first fast path" batch, has its plan in review and nothing built.
+the "vet-first fast path" batch, has its plan APPROVED 2026-10-27 (decision 7)
+and is being built.
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -392,13 +393,115 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
      - **The real spam exposure is that `register_player` and `login` are
        unthrottled.** That is the existing login rate-limiting item, gate
        #1 (`auth-security.md`).
-   - **Replacement: the "vet-first fast path" batch** (2026-10-27; plan in
-     review, nothing built). Two parts:
-     - an Admin-tab badge counting recently registered unaffiliated
-       players;
-     - an admin add during an active Official season also puts the player
-       on that season's roster.
-     The approved plan will be recorded here.
+   - **Replacement: the "vet-first fast path" batch. Plan APPROVED
+     2026-10-27 with the dev's four decisions.** Nothing was built at
+     approval. Two parts: an Admin-tab badge for recent registrations
+     (Part A), and an admin add during an active Official season also
+     putting the player on that season's roster (Part B). Both ship in
+     one SQL stage, Stage W.
+
+     **Part A: the Admin-tab badge.**
+     - **What it counts:** unaffiliated players (in no league, the Stage Q
+       predicate) whose account was created within `NEW_SIGNUP_DAYS` days
+       (`src/core/config.js`).
+     - **Decision 1: `NEW_SIGNUP_DAYS = 14`.** It spans an admin who checks
+       in weekly, and a junk account stops lighting the badge on its own.
+       League admins cannot delete accounts; only Global can
+       (`global_boot_player`).
+     - **Stage W changes `admin_list_unaffiliated_players`.** It is dropped
+       and recreated, since the return type changes:
+       - it returns `created_at`;
+       - it orders `created_at desc`, then name;
+       - the cap stays 50, but now drops the OLDEST rows instead of the
+         alphabetically last.
+       So the in-window count is exact below 50, and shows "50+" when all
+       50 rows fall inside the window. The badge and the panel come from
+       one call, so they cannot disagree.
+     - **Decision 2: the panel goes newest first, with each row's
+       registration date and a "new" mark inside the window.** This
+       CHANGES the Stage Q panel's order, which was alphabetical until now.
+     - **Where it shows:** a pill on `#admintab` and on the desktop
+       `#col-admin-title`.
+       - It is rendered inside `renderHeaderChrome()`, which sets those
+         labels with `textContent` and would otherwise wipe it.
+       - It is hidden at 0, never shown as "0".
+       - It shows only where `isCurrentLeagueAdmin()` is true: league
+         admins, and Global under the superset rule. A non-admin never gets
+         it, and the client never calls the RPC for one.
+     - **When it refreshes:**
+       - once on load, for an admin;
+       - on every admin-tab render, from `loadUnaffiliated()`'s own result,
+         so with no extra call;
+       - **decision 3: on foreground**, one call from the existing
+         `visibilitychange` hook in `realtime.js`. No polling loop.
+     - **The count is a pure `countRecent()`**, unit-tested at the window
+       boundary, with a future-dated row, empty, and at the cap.
+
+     **Part B: an admin add mid-season also adds the roster row.**
+     - **Server-side, inside `admin_add_league_member` (Stage W), not a
+       second client call.** Why:
+       - It is atomic. A second call can fail on venue LTE after the
+         membership has landed, silently leaving the player off the roster.
+       - The client cannot tell a new membership from a no-op: `on conflict
+         do nothing` returns `{ok:true}` either way. It also has only the
+         current bracket's seasons, and its own clock and timezone.
+       - The badge needs SQL anyway.
+       What the client path would have saved: any SQL stage at all, since
+       `admin_set_season_roster` already exists.
+     - **The condition, in words:** this call created the membership, the
+       new row is opted in, and a season of this league's Official bracket
+       has already taken its snapshot (`roster_locked_at` is not null) and
+       has not ended (`end_date` ≥ Eastern today, the rule
+       `activateSeasons()` uses).
+       - A season not yet snapshotted picks the player up by itself, so it
+         is not touched.
+       - It is set-valued: overlapping seasons each get a row.
+     - **The row** is stamped `added_at = now()`, `on conflict do nothing`.
+       The return gains `rostered_seasons`: the active seasons that have the
+       player on their roster after the call.
+     - **An explicit admin action**, consistent with "admin override edits
+       the roster explicitly". The toast names the season ("X added, and to
+       the <season> roster"), and an open Seasons roster panel refreshes.
+     - **Fairness basis:** a late joiner has no scores for past shows, so
+       starts at 0 points. "Fewest zeros" counts only from the later of the
+       join date and `start_date` (`src/core/tiebreak.js`).
+     - **Decision 4: `global_appoint_league_admin` does NOT get the roster
+       add.** It can create a membership too (it upserts), but appointing a
+       non-member admin mid-season is rare, and Manage roster covers it.
+     - **Observed, not changed:** a player booted and then re-added keeps
+       their original roster `added_at`. This is the known bug in
+       `boot-removed-at.md`: a boot leaves the roster row behind. The new
+       path inherits it, because the roster insert conflicts and the old row
+       stays. The toast is accurate either way, because `rostered_seasons`
+       reports the roster after the call, not what this call inserted.
+
+     **Deploy order:**
+     1. **Before applying:** a read-only `pg_get_functiondef` of both live
+        functions, compared against `stage_n`/`stage_q`. `create or
+        replace` discards anything that exists only in the live database.
+     2. Apply Stage W and verify it.
+     3. Push the client.
+     The new return fields are additive, so the old client ignores them. The
+     new client against the old SQL would show no badge and no roster line.
+
+     **Tests:**
+     - **Unit:** `countRecent()`.
+     - **Harness:** the fakes are rebuilt to mirror the SQL. Scenarios
+       cover:
+       - the badge count, and its empty case;
+       - a non-admin, who gets no badge and makes no call;
+       - the badge after an Add;
+       - a mid-season add landing on the active roster;
+       - no active season writing no row;
+       - the toast naming the season.
+     - **SQL smoke test,** in Stage W's footer: one DO block that builds a
+       throwaway league, brackets, seasons and players, runs the cases, and
+       ends in `raise exception` carrying PASS/FAIL, so it rolls itself back.
+     - **Mutations:**
+       - the badge shown to a non-admin (client);
+       - the roster add skipped, run against the fake only. That proves the
+         checks read the roster, not that the SQL writes it; the smoke test
+         is the SQL proof.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
