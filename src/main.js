@@ -8,7 +8,7 @@ import { openShow, setScoresView } from "./features/picks.js";
 import { renderShows, dismissWelcome } from "./features/shows.js";
 import { setBoardSeason, toggleTieGroup, setStatsSort } from "./features/standings.js";
 import { changeOwnPin } from "./features/settings.js";
-import { captureInstallPrompt, promptInstall, dismissInstall, toggleInstallHow, setInstallTips } from "./core/install.js";
+import { captureInstallPrompt, checkInstalledApp, promptInstall, dismissInstall, toggleInstallHow, setInstallTips } from "./core/install.js";
 import {
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
   toggleFormat, saveCutoff, finalizeShow, reopenShow, toggleBans, unban, runEdge, bootPlayer,
@@ -37,4 +37,5 @@ Object.assign(window, {
 // Before boot(): beforeinstallprompt can fire at any point after load, and
 // a missed one is gone (onboarding.md Batch 3).
 captureInstallPrompt();
+checkInstalledApp(); // async; hides install help when it resolves
 boot();

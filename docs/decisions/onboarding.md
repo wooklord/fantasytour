@@ -332,7 +332,33 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
         delay (about 30 seconds and a tap).
       - A phone with a Chrome-installed copy showing no install help in a
         Chrome tab.
-      **Build status: in progress.**
+      **BUILT 2026-10-26, bundle `5179756-416d858`.**
+      - `install.js`: the three texts; `checkInstalledApp()`, called from
+        `main.js` right after `captureInstallPrompt()`; an in-memory
+        `installedHere` folded into `installHelpPossible()`. That one
+        function gates the card's section, the bar and the Settings switch.
+        `renderInstallSlots()` now also removes an on-screen switch when an
+        answer lands after render.
+      - `manifest.webmanifest`: the `related_applications` entry.
+      - **Unit tests** (`test/install.test.mjs`):
+        - both branch (b) texts, with Edge on Android pinned to Chrome's;
+        - the three iOS lines;
+        - a static check that the manifest has exactly one related app, a
+          `webapp` entry, resolving to the manifest `index.html` links. It
+          is checked on the live host, the dev server and a subpath.
+      - **Scenario checks** (three new, per mode):
+        - an installed entry hides the section, the bar and the switch, and
+          leaves the flag unset;
+        - the next load with nothing installed brings help back;
+        - an answer landing after render clears the section, a picks
+          player's bar, and an open Settings switch;
+        - an empty list or a throwing API changes nothing. "API absent" is
+          every other onboarding check, which jsdom runs without the API.
+      - **Mutation, the installed check ignored** (`&& !installedHere` dropped
+        from `installHelpPossible()`): the two installed checks failed in
+        both modes, 4 failures, and the empty/throwing check correctly still
+        passed. The anchored revert was byte-identical to the backup, and the
+        rebuilt bundle matched the pre-mutation one.
    4. Join codes: `league_join_codes` table + its three RPCs, entry on the
       no-league screen, rotation in Community.
 

@@ -46,7 +46,10 @@ export function isStandalone(win){
 // The platform instructions, branches (a)-(d) of item 2. The in-app branch
 // wins over a captured prompt: an in-app browser cannot install at all.
 // Menu glyphs per approved decision 5: Samsung Internet's menu is ≡; the
-// in-app browsers use ⋯ on iOS and ⋮ on Android.
+// in-app browsers use ⋯ on iOS and ⋮ on Android. Branch (b)'s two texts are
+// the menu paths the dev read off real devices, and the iOS "Open as Web
+// App" line follows the switch iOS 26 shows on its sheet (onboarding.md,
+// the 2026-10-26 device-check amendment).
 export function installStepsHtml(p, { canPrompt = false } = {}){
   if (!p?.phone) return "";
   if (p.kind === "inapp"){
@@ -54,11 +57,11 @@ export function installStepsHtml(p, { canPrompt = false } = {}){
     return `<p class="ih-step">You're in ${p.app}'s browser, which can't install apps. Tap ${menu} → Open in browser, then install from there.</p>`;
   }
   if (p.kind === "ios")
-    return `<p class="ih-step">Tap Share, then Add to Home Screen.</p><p class="ih-step">You'll sign in once more inside the app, so keep your PIN handy.</p>`;
+    return `<p class="ih-step">Tap Share, then Add to Home Screen.</p><p class="ih-step">If you see Open as Web App, leave it on.</p><p class="ih-step">You'll sign in once more inside the app, so keep your PIN handy.</p>`;
   if (canPrompt) return `<button class="btn small ih-install" onclick="promptInstall()">Install</button>`;
   return p.samsung
-    ? `<p class="ih-step">Browser menu (≡) → Add page to → Home screen</p>`
-    : `<p class="ih-step">Browser menu (⋮) → Install app / Add to Home screen</p>`;
+    ? `<p class="ih-step">Tap ≡ (bottom), then Add page to, then Home screen.</p>`
+    : `<p class="ih-step">Tap ⋮ (top right), then Install and create shortcut (older Chrome: Add to home screen), then Install.</p>`;
 }
 
 // ---------- runtime ----------
@@ -71,9 +74,14 @@ export function installDismissed(){
 function setDismissed(on){
   try { on ? localStorage.setItem(INSTALL_FLAG, "1") : localStorage.removeItem(INSTALL_FLAG); } catch { /* storage blocked: nothing to persist */ }
 }
+// This browser reports the app as installed (checkInstalledApp below). Held
+// in memory only, never the device flag, so an uninstall brings help back
+// on the next load.
+let installedHere = false;
 // Could install help ever show on this device? A phone, not already the
-// installed app. Settings offers its switch exactly where this is true.
-export function installHelpPossible(){ return platformNow().phone && !isStandalone(window); }
+// installed app, and not an app this browser already installed. Settings
+// offers its switch exactly where this is true.
+export function installHelpPossible(){ return platformNow().phone && !isStandalone(window) && !installedHere; }
 export function installHelpApplies(){ return installHelpPossible() && !installDismissed(); }
 
 const DONT = "Don't show again";
@@ -100,9 +108,13 @@ export function renderInstallSlots(){
   if (sec) sec.innerHTML = applies ? sectionHtml(p) : "";
   if (bar) bar.innerHTML = applies && !sec ? barHtml(p) : "";
   // The wide layout shows Settings beside the list (an iPad in landscape is
-  // a "phone" here), so a dismissal must not leave the switch stale.
+  // a "phone" here), so a dismissal must not leave the switch stale, and an
+  // installed check that lands after render takes the switch away.
   const box = document.getElementById("install-tips");
-  if (box) box.checked = !installDismissed();
+  if (box){
+    if (installHelpPossible()) box.checked = !installDismissed();
+    else box.closest(".tips-switch")?.remove();
+  }
 }
 
 export function dismissInstall(){ setDismissed(true); renderInstallSlots(); }
@@ -141,4 +153,20 @@ export function captureInstallPrompt(){
     setDismissed(true);
     renderInstallSlots();
   });
+}
+
+// Wired from main.js at boot (2026-10-26 device-check amendment, item 4).
+// The manifest's related_applications lists one "webapp" entry, the app's
+// own manifest; a webapp entry coming back means THIS browser installed the
+// app. A browser sees only its own installs, so a copy installed through
+// another browser stays invisible here. Where the API is missing (iOS,
+// Samsung Internet, desktop) or throws, nothing changes.
+export async function checkInstalledApp(){
+  const nav = window.navigator;
+  if (typeof nav.getInstalledRelatedApps !== "function") return;
+  let apps;
+  try { apps = await nav.getInstalledRelatedApps(); } catch { return; }
+  if (!Array.isArray(apps) || !apps.some(a => a?.platform === "webapp")) return;
+  installedHere = true;
+  renderInstallSlots();
 }

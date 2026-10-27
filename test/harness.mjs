@@ -12,9 +12,18 @@ function stripScripts(html){
 // agent (which reads as desktop, so every older scenario sees no install
 // help), `standalone` answers the display-mode query, `navStandalone` sets
 // iOS's navigator.standalone, `maxTouchPoints` sets touch support.
+// `relatedApps` (2026-10-26 amendment) adds navigator.getInstalledRelatedApps:
+// an array resolves at once, "late" waits for window.__resolveRelatedApps(list),
+// "throw" rejects. Left out, the API is missing, as on iOS and in jsdom.
 function installGlobals(window, mode, tables, rpcHandlers, calls, dbHolder, env = {}){
   const nav = (k, v) => Object.defineProperty(window.navigator, k, { value: v, configurable: true });
   if (env.ua) nav("userAgent", env.ua);
+  if (env.relatedApps !== undefined){
+    const r = env.relatedApps;
+    nav("getInstalledRelatedApps", r === "throw" ? () => Promise.reject(new Error("blocked"))
+      : r === "late" ? () => new Promise(res => { window.__resolveRelatedApps = res; })
+      : () => Promise.resolve(r));
+  }
   if (env.navStandalone !== undefined) nav("standalone", env.navStandalone);
   if (env.maxTouchPoints !== undefined) nav("maxTouchPoints", env.maxTouchPoints);
   window.matchMedia = (query) => ({
@@ -2572,7 +2581,7 @@ export async function runOnboardingScenario({ html, scripts, mode }){
     desktop: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
   };
   const NAMES = { p1: "Wooklord", p2: "EggHead", p5: "Marigold", p6: "Quartz" };
-  async function load({ who = "p2", ua = UA.android, standalone = false, navStandalone, storage = {}, tweak = () => {}, tab = "shows" } = {}){
+  async function load({ who = "p2", ua = UA.android, standalone = false, navStandalone, relatedApps, storage = {}, tweak = () => {}, tab = "shows" } = {}){
     const { tables, ids } = makeFixtures();
     tables.players_public.push({ id: "p5", name: NAMES.p5, created_at: "2026-01-05" }, { id: "p6", name: NAMES.p6, created_at: "2026-01-06" });
     tables.league_members.push({ league_id: ids.LEAGUE_ID, player_id: "p5", is_league_admin: false, official_opt_in: true },
@@ -2585,7 +2594,7 @@ export async function runOnboardingScenario({ html, scripts, mode }){
     const calls = [];
     const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
     const w = dom.window;
-    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {}, { ua, standalone, navStandalone });
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {}, { ua, standalone, navStandalone, relatedApps });
     for (const [k, v] of Object.entries(storage)) w.localStorage.setItem(k, v);
     w.localStorage.setItem("ft_session", JSON.stringify({ id: who, name: NAMES[who], pin: "1234", is_global_admin: false }));
     w.localStorage.setItem("ft_bracket_id", String(ids.CASUAL_ID));
@@ -2829,5 +2838,41 @@ export async function runOnboardingScenario({ html, scripts, mode }){
   const fsVet = await load({ who: "p1" });
   await fsVet.save("Distraction");
   out.firstSave.veteranToasts = fsVet.read().toasts;
+
+  // 10. Already installed from THIS browser (2026-10-26 amendment, item 4):
+  //     a webapp entry hides ALL install help, in memory, never the flag.
+  const INSTALLED = [{ platform: "webapp", url: "http://localhost/manifest.webmanifest" }];
+  const flagOf = r => r.storageNow()["ft_install_dismissed"] ?? null;
+  const inst = await load({ who: "p2", relatedApps: INSTALLED });
+  out.installed = { shows: inst.read() };
+  await inst.settingsTab();
+  out.installed.settings = inst.read();
+  out.installed.flag = flagOf(inst);
+  out.installed.picks = (await load({ who: "p1", relatedApps: INSTALLED })).read();
+  //     An uninstall: the next load hears nothing installed and help is back.
+  const unin = await load({ who: "p2", relatedApps: [], storage: inst.storageNow() });
+  out.installed.uninstalled = unin.read();
+  //     The answer landing AFTER render clears what is already on screen.
+  const lateNew = await load({ who: "p2", relatedApps: "late" });
+  out.late = { newBefore: lateNew.read() };
+  lateNew.w.__resolveRelatedApps(INSTALLED); await tick(); await tick();
+  out.late.newAfter = lateNew.read();
+  const latePicks = await load({ who: "p1", relatedApps: "late" });
+  out.late.picksBefore = latePicks.read();
+  latePicks.w.__resolveRelatedApps(INSTALLED); await tick(); await tick();
+  out.late.picksAfter = latePicks.read();
+  const lateSet = await load({ who: "p2", relatedApps: "late" });
+  await lateSet.settingsTab();
+  out.late.settingsBefore = lateSet.read();
+  lateSet.w.__resolveRelatedApps(INSTALLED); await tick(); await tick();
+  out.late.settingsAfter = lateSet.read();
+  out.late.flag = flagOf(lateSet);
+  //     The API present but reporting nothing, or throwing: unchanged.
+  const empty = await load({ who: "p2", relatedApps: [] });
+  out.relatedEmpty = { shows: empty.read() };
+  await empty.settingsTab();
+  out.relatedEmpty.settings = empty.read();
+  out.relatedEmpty.picks = (await load({ who: "p1", relatedApps: [] })).read();
+  out.relatedThrow = { shows: (await load({ who: "p2", relatedApps: "throw" })).read(), picks: (await load({ who: "p1", relatedApps: "throw" })).read() };
   return out;
 }

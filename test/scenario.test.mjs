@@ -1307,8 +1307,8 @@ async function runMode(mode){
     "Change your picks any time until the cutoff.",
     "Scoring details are in The Rules under every pick sheet.",
   ];
-  const MENU_B = "Browser menu (⋮) → Install app / Add to Home screen";
-  const IOS_STEPS = ["Tap Share, then Add to Home Screen.", "You'll sign in once more inside the app, so keep your PIN handy."];
+  const MENU_B = "Tap ⋮ (top right), then Install and create shortcut (older Chrome: Add to home screen), then Install.";
+  const IOS_STEPS = ["Tap Share, then Add to Home Screen.", "If you see Open as Web App, leave it on.", "You'll sign in once more inside the app, so keep your PIN handy."];
   const IN_APP = (app, menu) => `You're in ${app}'s browser, which can't install apps. Tap ${menu} → Open in browser, then install from there.`;
   const FIRST_TOAST = "Picks locked in ✔ Change them any time before cutoff. Scores show up on the show's Scores page after it ends.";
   const DONT = "Don't show again";
@@ -1366,7 +1366,7 @@ async function runMode(mode){
       && J(ob.branchFbIos.sectionSteps) === J([IN_APP("Facebook", "⋯")])
       && J(ob.branchMsgrAndroid.sectionSteps) === J([IN_APP("Messenger", "⋮")])
       && J(ob.branchIgIos.sectionSteps) === J([IN_APP("Instagram", "⋯")])
-      && J(ob.branchSamsung.sectionSteps) === J(["Browser menu (≡) → Add page to → Home screen"]),
+      && J(ob.branchSamsung.sectionSteps) === J(["Tap ≡ (bottom), then Add page to, then Home screen."]),
     `ios ${J(ob.branchIos.sectionSteps)} fb ${J(ob.branchFbIos.sectionSteps)} msgr ${J(ob.branchMsgrAndroid.sectionSteps)} ig ${J(ob.branchIgIos.sectionSteps)} samsung ${J(ob.branchSamsung.sectionSteps)}`);
   check("a captured beforeinstallprompt, branch (a): preventDefault'd, ONE Install button replaces the menu text; firing it calls prompt() exactly once, then the menu text returns; appinstalled sets ft_install_dismissed and clears the help (decision 4)",
     ob.prompt.prevented === true && ob.prompt.before.sectionInstall === "promptInstall()" && J(ob.prompt.before.sectionSteps) === J([])
@@ -1396,6 +1396,22 @@ async function runMode(mode){
       && J(ob.firstSave.toasts2) === J([FIRST_TOAST, "Picks saved ✔"]) && J(ob.firstSave.reloadToasts) === J(["Picks saved ✔"])
       && J(ob.firstSave.otherPlayerToasts) === J([FIRST_TOAST]) && J(ob.firstSave.veteranToasts) === J(["Picks saved ✔"]),
     `firstSave: ${J(ob.firstSave)}`);
+  // 2026-10-26 device-check amendment, item 4: the same-browser installed check.
+  const ins = ob.installed, late = ob.late;
+  const help3 = r => J({ card: r.card, section: r.section, bar: r.bar, tips: r.tips });
+  check("installed from THIS browser (getInstalledRelatedApps returns a webapp entry): the welcome stays but its install section goes, no bar for a player with picks, no Settings switch, and ft_install_dismissed stays UNSET; the next load with nothing installed (an uninstall) brings the section back",
+    ins.shows.card && noHelp(ins.shows) && ins.settings.tips === null && ins.flag === null && noHelp(ins.picks)
+      && ins.uninstalled.card && ins.uninstalled.section && J(ins.uninstalled.sectionSteps) === J([MENU_B]),
+    `shows ${help3(ins.shows)} settings tips ${J(ins.settings.tips)} flag ${ins.flag} picks bar ${ins.picks.bar} uninstalled ${help3(ins.uninstalled)}`);
+  check("the installed answer landing AFTER render clears what is on screen: the card's section, a picks player's bar, an open Settings switch; the flag stays unset",
+    late.newBefore.section && late.newAfter.card && noHelp(late.newAfter) && late.newAfter.tips === null
+      && late.picksBefore.bar && noHelp(late.picksAfter)
+      && late.settingsBefore.tips?.checked === true && late.settingsAfter.tips === null && late.flag === null,
+    `new ${help3(late.newBefore)} → ${help3(late.newAfter)} picks bar ${late.picksBefore.bar} → ${late.picksAfter.bar} settings ${J(late.settingsBefore.tips)} → ${J(late.settingsAfter.tips)} flag ${late.flag}`);
+  check("the API present but reporting nothing, or throwing, changes nothing (absent is every other onboarding check here): section, bar and switch as before",
+    ob.relatedEmpty.shows.section && J(ob.relatedEmpty.shows.sectionSteps) === J([MENU_B]) && ob.relatedEmpty.settings.tips?.checked === true && ob.relatedEmpty.picks.bar
+      && ob.relatedThrow.shows.section && ob.relatedThrow.picks.bar,
+    `empty ${help3(ob.relatedEmpty.shows)} tips ${J(ob.relatedEmpty.settings.tips)} bar ${ob.relatedEmpty.picks.bar} throw ${help3(ob.relatedThrow.shows)} bar ${ob.relatedThrow.picks.bar}`);
   {
     const showsSrc = readFileSync(join(root, "src/features/shows.js"), "utf8");
     const configSrc = readFileSync(join(root, "src/core/config.js"), "utf8");

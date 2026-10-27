@@ -875,9 +875,9 @@ Save anyway?`)) return;
       return `<p class="ih-step">You're in ${p.app}'s browser, which can't install apps. Tap ${menu} \u2192 Open in browser, then install from there.</p>`;
     }
     if (p.kind === "ios")
-      return `<p class="ih-step">Tap Share, then Add to Home Screen.</p><p class="ih-step">You'll sign in once more inside the app, so keep your PIN handy.</p>`;
+      return `<p class="ih-step">Tap Share, then Add to Home Screen.</p><p class="ih-step">If you see Open as Web App, leave it on.</p><p class="ih-step">You'll sign in once more inside the app, so keep your PIN handy.</p>`;
     if (canPrompt) return `<button class="btn small ih-install" onclick="promptInstall()">Install</button>`;
-    return p.samsung ? `<p class="ih-step">Browser menu (\u2261) \u2192 Add page to \u2192 Home screen</p>` : `<p class="ih-step">Browser menu (\u22EE) \u2192 Install app / Add to Home screen</p>`;
+    return p.samsung ? `<p class="ih-step">Tap \u2261 (bottom), then Add page to, then Home screen.</p>` : `<p class="ih-step">Tap \u22EE (top right), then Install and create shortcut (older Chrome: Add to home screen), then Install.</p>`;
   }
   var deferredPrompt = null;
   var platformNow = () => detectPlatform(navigator.userAgent, { maxTouchPoints: navigator.maxTouchPoints || 0 });
@@ -894,8 +894,9 @@ Save anyway?`)) return;
     } catch {
     }
   }
+  var installedHere = false;
   function installHelpPossible() {
-    return platformNow().phone && !isStandalone(window);
+    return platformNow().phone && !isStandalone(window) && !installedHere;
   }
   function installHelpApplies() {
     return installHelpPossible() && !installDismissed();
@@ -913,13 +914,17 @@ Save anyway?`)) return;
     <div class="installhow hidden" id="install-how">${installStepsHtml(p, { canPrompt: !!deferredPrompt })}</div>`;
   }
   function renderInstallSlots() {
+    var _a;
     const sec = document.getElementById("welcome-install");
     const bar = document.getElementById("install-bar");
     const applies = installHelpApplies(), p = platformNow();
     if (sec) sec.innerHTML = applies ? sectionHtml(p) : "";
     if (bar) bar.innerHTML = applies && !sec ? barHtml(p) : "";
     const box = document.getElementById("install-tips");
-    if (box) box.checked = !installDismissed();
+    if (box) {
+      if (installHelpPossible()) box.checked = !installDismissed();
+      else (_a = box.closest(".tips-switch")) == null ? void 0 : _a.remove();
+    }
   }
   function dismissInstall() {
     setDismissed(true);
@@ -959,6 +964,19 @@ Save anyway?`)) return;
       setDismissed(true);
       renderInstallSlots();
     });
+  }
+  async function checkInstalledApp() {
+    const nav = window.navigator;
+    if (typeof nav.getInstalledRelatedApps !== "function") return;
+    let apps;
+    try {
+      apps = await nav.getInstalledRelatedApps();
+    } catch {
+      return;
+    }
+    if (!Array.isArray(apps) || !apps.some((a) => (a == null ? void 0 : a.platform) === "webapp")) return;
+    installedHere = true;
+    renderInstallSlots();
   }
 
   // src/features/shows.js
@@ -1630,7 +1648,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"6b99cd2-2c88aec"}</p>
+      <p class="colophon buildid">build ${"5179756-416d858"}</p>
     </div>
   </div>`;
   }
@@ -3013,6 +3031,7 @@ Switch anyway?`
     dismissWelcome
   });
   captureInstallPrompt();
+  checkInstalledApp();
   boot();
 })();
 //# sourceMappingURL=app.js.map

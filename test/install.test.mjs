@@ -9,6 +9,7 @@
 // numbers that need not match any one release; real ones captured on
 // devices should be added here when available (a device check).
 
+import { readFileSync } from "node:fs";
 import { detectPlatform, isStandalone, installStepsHtml, INSTALL_FLAG } from "../src/core/install.js";
 
 const failures = [];
@@ -68,14 +69,18 @@ check("standalone: no window at all is false", isStandalone(undefined), false);
 
 // ---------- installStepsHtml (branches a-d) ----------
 const steps = (k, canPrompt = false) => strip(installStepsHtml(P(UA[k], k === "macSafari" ? 5 : 0), { canPrompt }));
-const IOS_TEXT = "Tap Share, then Add to Home Screen.|You'll sign in once more inside the app, so keep your PIN handy.";
+const IOS_TEXT = "Tap Share, then Add to Home Screen.|If you see Open as Web App, leave it on.|You'll sign in once more inside the app, so keep your PIN handy.";
+// Branch (b) as the dev read it off real devices (2026-10-26 amendment).
+const MENU_CHROME = "Tap ⋮ (top right), then Install and create shortcut (older Chrome: Add to home screen), then Install.";
+const MENU_SAMSUNG = "Tap ≡ (bottom), then Add page to, then Home screen.";
 const inApp = (app, menu) => `You're in ${app}'s browser, which can't install apps. Tap ${menu} → Open in browser, then install from there.`;
 check("(a) captured prompt on Android: one Install button, no menu text", steps("androidChrome", true), "Install");
 check("(a) the button calls promptInstall()", /onclick="promptInstall\(\)"/.test(installStepsHtml(P(UA.androidChrome), { canPrompt: true })), true);
 check("(a) also wins on Samsung when a prompt was captured", steps("samsung", true), "Install");
-check("(b) Android, no prompt: ⋮ menu", steps("androidChrome"), "Browser menu (⋮) → Install app / Add to Home screen");
-check("(b) Samsung, no prompt: ≡ menu (decision 5)", steps("samsung"), "Browser menu (≡) → Add page to → Home screen");
-check("(c) iPhone: Share plus the sign-in-again line", steps("iosSafari"), IOS_TEXT);
+check("(b) Android Chrome, no prompt: the device-verified ⋮ path, both Chrome labels, ending on Install", steps("androidChrome"), MENU_CHROME);
+check("(b) Edge on Android lands in the same branch (noted in the record, not changed)", steps("edgeAndroid"), MENU_CHROME);
+check("(b) Samsung, no prompt: the device-verified ≡ path (decision 5)", steps("samsung"), MENU_SAMSUNG);
+check("(c) iPhone: Share, the Open as Web App line, then the sign-in-again line", steps("iosSafari"), IOS_TEXT);
 check("(c) iOS Chrome and iPadOS get the iOS text", [steps("iosChrome"), steps("macSafari")], [IOS_TEXT, IOS_TEXT]);
 check("(d) Facebook on iOS: ⋯", steps("fbIos"), inApp("Facebook", "⋯"));
 check("(d) Facebook on Android: ⋮ (decision 5)", steps("fbAndroid"), inApp("Facebook", "⋮"));
@@ -84,6 +89,25 @@ check("(d) Messenger and Instagram name their own app", [steps("msgrIos"), steps
 check("(d) beats a captured prompt: an in-app browser cannot install", steps("fbAndroid", true), inApp("Facebook", "⋮"));
 check("desktop: no instructions at all, even with a prompt", steps("desktopChrome", true), "");
 check("the device flag is the locked key", INSTALL_FLAG, "ft_install_dismissed");
+
+// ---------- manifest related_applications (2026-10-26 amendment, item 4) ----------
+// The condition: the ONE webapp entry names the app's OWN manifest, i.e. its
+// url resolved against the manifest's URL IS the manifest's URL, the one
+// index.html links, wherever the site is served from.
+{
+  const manifest = JSON.parse(readFileSync(new URL("../manifest.webmanifest", import.meta.url), "utf8"));
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const href = html.match(/<link rel="manifest" href="([^"]+)">/)?.[1];
+  const apps = manifest.related_applications ?? [];
+  const webapps = apps.filter(a => a.platform === "webapp");
+  const ownManifest = page => {
+    const mUrl = new URL(href, page).href;
+    return webapps.length === 1 && new URL(webapps[0].url, mUrl).href === mUrl;
+  };
+  check("manifest: exactly one related app, a webapp entry, resolving to the app's own manifest on the live host, the dev server and a subpath",
+    [apps.length, ownManifest("https://fantasyeggy.wooklord.net/"), ownManifest("http://localhost:8080/"), ownManifest("https://example.com/sub/dir/")],
+    [1, true, true, true]);
+}
 
 if (failures.length) {
   console.log(`FAIL — ${failures.length} check(s):`);
