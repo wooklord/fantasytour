@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-26 — Batch 1 LIVE, Stage F APPLIED, Batch 3 LOCKED)
+## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -26,8 +26,9 @@ until then.)
 LOCKED 2026-10-26 under decision 6 below; plan APPROVED the same day with
 six decisions recorded there; BUILT the same day (bundle `7b4f28f-503c56d`),
 device checks listed there still open; install-help fixes from the dev's
-live device checks AMENDED the same day (end of item 3 below). Then Batch 4
-(join codes).
+live device checks AMENDED the same day (end of item 3 below). **Batch 4
+(join codes) is HELD as of 2026-10-27** (decision 7 below). Its replacement,
+the "vet-first fast path" batch, has its plan in review and nothing built.
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -115,6 +116,9 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
      someone in a second league by accident.
    - New-signup admin ping: CUT. Join codes remove the admin step the ping
      existed to prompt.
+     **Rationale void while Batch 4 is HELD (2026-10-27, decision 7).**
+     With no codes, the admin step stays. The "vet-first fast path" badge
+     takes up what the ping was for.
 
 6. **Batch order** (each its own commit set, each verified before the next):
    1. `leagues.config` + links on the no-league screen + admin Community
@@ -361,6 +365,40 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
         rebuilt bundle matched the pre-mutation one.
    4. Join codes: `league_join_codes` table + its three RPCs, entry on the
       no-league screen, rotation in Community.
+      **HELD 2026-10-27 (dev's call), see decision 7.** Nothing was built.
+
+7. **Batch 4 (join codes) HELD 2026-10-27 (dev's call).**
+   - **Why:** a code lets an account into the league, and onto the
+     standings, without an admin seeing it first. The dev prefers vetting
+     before entry.
+   - **The locked design stays on file, unchanged.** That covers decision
+     1's `league_join_codes` table and three RPCs, decision 5's join-codes
+     v1 bullet, and batch item 4. None of it was built and no SQL file
+     exists for it.
+   - **If codes are ever revived, these after-the-fact vetting tools come
+     with them**, so a revival never ships the code alone:
+     - a new-members review list with Keep / Boot;
+     - an Admin-tab badge on join;
+     - a join log;
+     - rotate-on-burst.
+     The dev named these four as a list on 2026-10-27, nothing more. None
+     has a design yet; in particular, rotate-on-burst has no threshold.
+   - **Context, for whoever revisits this:**
+     - **Registration is already open to anyone.** `register_player` is
+       granted to `anon`, has no gate beyond the name, PIN and blocklist
+       checks, and creates an account in no league
+       (`sql/stage_t_name_length_cap.sql`). Holding codes changes who gets
+       INTO a league, not who can create an account.
+     - **The real spam exposure is that `register_player` and `login` are
+       unthrottled.** That is the existing login rate-limiting item, gate
+       #1 (`auth-security.md`).
+   - **Replacement: the "vet-first fast path" batch** (2026-10-27; plan in
+     review, nothing built). Two parts:
+     - an Admin-tab badge counting recently registered unaffiliated
+       players;
+     - an admin add during an active Official season also puts the player
+       on that season's roster.
+     The approved plan will be recorded here.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
