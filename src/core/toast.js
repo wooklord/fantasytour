@@ -1,6 +1,7 @@
 import { $ } from "./dom.js";
 
 const seenToasts = new Set();
+// `msg` is HTML: wrap anything a user typed (a name above all) in esc().
 // `ms` defaults to the usual 6s; the first-save toast (onboarding.md
 // Batch 3) passes 10s because it carries two sentences of instructions.
 export function toast(msg, cls="", key=null, ms=6000){

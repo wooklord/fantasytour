@@ -31,6 +31,7 @@
     return el.querySelector(sel);
   };
   var esc = (s) => String(s != null ? s : "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  var jsArg = (s) => esc(JSON.stringify(String(s != null ? s : "")));
   var footerHtml = () => `<footer class="colophon-foot">K McKinley</footer>`;
 
   // src/core/config.js
@@ -1689,7 +1690,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"8624351-eaeb74f"}</p>
+      <p class="colophon buildid">build ${"79883fa-56e0833"}</p>
     </div>
   </div>`;
   }
@@ -1869,7 +1870,7 @@ Save anyway?`)) return;
     }
     try {
       await rpc("global_create_league", { p_name: state.session.name, p_pin: state.session.pin, p_league_name: name });
-      toast(`${name} created`, "score");
+      toast(`${esc(name)} created`, "score");
       $("#gc-league-name").value = "";
       loadGlobalLeagues();
     } catch (e) {
@@ -1889,7 +1890,7 @@ Save anyway?`)) return;
       $(resultsSel).innerHTML = (rows || []).map((p) => `
       <div class="pickres">
         <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
-        <span class="pt">${kind === "appoint" ? `<button class="btn ghost small" onclick="globalAppointAdmin('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Appoint</button>` : `<button class="btn ghost small" onclick="globalResetPin('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Reset PIN</button>`}</span>
+        <span class="pt">${kind === "appoint" ? `<button class="btn ghost small" onclick="globalAppointAdmin('${p.player_id}', ${jsArg(p.name)})">Appoint</button>` : `<button class="btn ghost small" onclick="globalResetPin('${p.player_id}', ${jsArg(p.name)})">Reset PIN</button>`}</span>
       </div>`).join("") || '<p class="muted">No matches.</p>';
     } catch (e) {
       $(resultsSel).innerHTML = `<p class="err">${esc(e.message)}</p>`;
@@ -1903,7 +1904,7 @@ Save anyway?`)) return;
     }
     try {
       await rpc("global_appoint_league_admin", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: leagueId, p_player_id: id });
-      toast(`${name} appointed league admin`, "score");
+      toast(`${esc(name)} appointed league admin`, "score");
       $("#gc-appoint-search").value = "";
       $("#gc-appoint-results").innerHTML = "";
     } catch (e) {
@@ -2152,7 +2153,7 @@ Relay this to them now \u2014 it will not be shown again.`);
   }
   async function loadMembers() {
     const rows = await rpc("admin_list_members", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId });
-    const args = (p) => "'" + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + "'";
+    const args = (p) => "'" + p.player_id + "', " + jsArg(p.name);
     $("#playerlist").innerHTML = (rows || []).map((p) => `
     <div class="pickres hit member-row">
       <div class="member-l1"><span class="member-mark">${p.is_league_admin ? "\u2605" : "\xB7"}</span><span class="mname" title="${esc(p.name)}">${esc(p.name)}</span>${p.is_league_admin ? '<small class="muted">admin</small>' : ""}${p.player_id === state.session.id ? '<small class="muted">you</small>' : ""}${p.official_opt_in === false ? '<span class="pill casual-only">casual only</span>' : ""}</div>
@@ -2197,7 +2198,7 @@ Relay this to them now \u2014 it will not be shown again.`);
         <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         ${p.created_at ? `<span class="reg" title="Registered">${esc(fmtRegistered(p.created_at))}</span>` : ""}
         ${isRecent(p.created_at, recent) ? '<span class="pill new-signup">new</span>' : ""}
-        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Add</button></span>
+        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button></span>
       </div>`).join("")}`;
   }
   async function resetMemberPin(id, name) {
@@ -2222,7 +2223,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       $("#member-results").innerHTML = (rows || []).map((p) => `
       <div class="pickres">
         <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
-        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Add</button></span>
+        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button></span>
       </div>`).join("") || '<p class="muted">No matches.</p>';
     } catch (e) {
       $("#member-results").innerHTML = `<p class="err">${esc(e.message)}</p>`;
@@ -2290,7 +2291,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       panel.innerHTML = (members || []).map((m) => `
       <div class="pickres ${onRoster.has(m.player_id) ? "hit" : "miss"}">
         <span>${onRoster.has(m.player_id) ? "\u2714" : "\u2014"}</span><span class="nm" title="${esc(m.name)}">${esc(m.name)}</span>
-        <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)}, '${esc(m.name).replace(/'/g, "\\'")}')">${onRoster.has(m.player_id) ? "Remove" : "Add"}</button></span>
+        <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)}, ${jsArg(m.name)})">${onRoster.has(m.player_id) ? "Remove" : "Add"}</button></span>
       </div>`).join("") || '<p class="muted">No members in this league yet.</p>';
     } catch (e) {
       panel.innerHTML = `<p class="err">${esc(e.message)}</p>`;
@@ -2375,7 +2376,7 @@ If you re-add them later, their join date resets to that moment and every zero t
       $("#banlist").innerHTML = (rows || []).map((r) => `
       <div class="pickres miss"><span>\u26D4</span><span class="nm" title="${esc(r.name)}">${esc(r.name)}</span>
         <span class="pt"><small class="muted">${new Date(r.banned_at).toLocaleDateString()}</small>
-          <button class="btn ghost small" onclick="unban('${esc(r.name).replace(/'/g, "\\'")}')">Unban</button></span>
+          <button class="btn ghost small" onclick="unban(${jsArg(r.name)})">Unban</button></span>
       </div>`).join("") || '<p class="muted">Nobody is banned. A peaceful kingdom.</p>';
     } catch (e) {
       $("#banlist").innerHTML = `<p class="err">${esc(e.message)}</p>`;
@@ -2385,7 +2386,7 @@ If you re-add them later, their join date resets to that moment and every zero t
     if (!confirm(`Unban "${name}"? The name becomes registerable again.`)) return;
     try {
       await rpc("admin_unban", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_banned: name });
-      toast(`${name} unbanned`, "score");
+      toast(`${esc(name)} unbanned`, "score");
       bansOpen = false;
       toggleBans();
     } catch (e) {
@@ -2416,7 +2417,7 @@ There is currently NO way to prevent this. Removing them from the season roster 
 OK = remove + ban \xB7 Cancel = remove only`);
     try {
       await rpc("admin_league_boot", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_player_id: id, p_ban: ban });
-      toast(`${name} removed${ban ? " and banned" : ""}`, "score");
+      toast(`${esc(name)} removed${ban ? " and banned" : ""}`, "score");
       loadMembers();
       loadRoster();
     } catch (e) {

@@ -3076,3 +3076,77 @@ export async function runVetFirstScenario({ html, scripts, mode }){
   out.escaped = x.read().toasts;
   return out;
 }
+
+// Player names render as text in an admin's browser (onboarding.md decision
+// 7, "Names in admin HTML"). A registrant picks their own name and
+// registration caps only its length, so markup and quotes must survive two
+// paths: toast(), which renders HTML, and an inline onclick argument, where
+// esc() alone is defeated (the attribute decodes &#39; back to ' before the
+// handler compiles). Each button is clicked by running its onclick
+// attribute, as a browser does. A Global admin, so one load reaches both
+// the Global console and the league panel (the superset rule).
+export async function runNameEscapeScenario({ html, scripts, mode }){
+  const BS = String.fromCharCode(92);
+  const TAG = { id: "x1", name: "<b>x</b>" };
+  const BREAK = { id: "x2", name: "x')+boom()+('" };   // ends the old JS string, then calls boom()
+  const SLASH = { id: "x3", name: "a" + BS + "'b" };     // a backslash before a quote
+  const { tables, ids } = makeFixtures();
+  tables.players_public.push(...[TAG, BREAK, SLASH].map(p => ({ ...p, created_at: new Date().toISOString() })));
+  const calls = [], confirms = [];
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const w = dom.window;
+  installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+  w.confirm = m => { confirms.push(m); return true; };
+  let boomed = 0;
+  w.boom = () => { boomed++; };
+  const me = tables.players_public.find(p => p.id === "p4");   // the fixture's Global admin
+  w.localStorage.setItem("ft_session", JSON.stringify({ id: me.id, name: me.name, pin: "1234", is_global_admin: true }));
+  w.localStorage.setItem("ft_bracket_id", String(ids.CASUAL_ID));
+  for (const src of scripts) w.eval(src);
+  const d = w.document;
+  const settle = async () => { for (let i = 0; i < 8; i++) await tick(); };
+  await settle();
+  clickTab(w, "admin");
+  await settle();
+
+  // Runs one button's onclick and reports what a browser would see: whether
+  // the handler compiled, the player id the RPC received, the toast it left
+  // (and whether that toast holds any element), and the confirm text.
+  const click = async (button, fn) => {
+    const code = button?.getAttribute("onclick");
+    const before = { calls: calls.length, toasts: new Set(d.querySelectorAll("#toasts .toast")), confirms: confirms.length };
+    let fired = code ? "ran" : "no button";
+    if (code) try { new w.Function(code).call(button); } catch (e) { fired = e.name; }
+    await settle();
+    const t = [...d.querySelectorAll("#toasts .toast")].filter(x => !before.toasts.has(x)).at(-1);
+    return {
+      fired,
+      sent: calls.slice(before.calls).find(c => c.type === "rpc" && c.fn === fn)?.args?.p_player_id ?? null,
+      toast: t ? { text: t.textContent, elements: t.children.length } : null,
+      confirm: confirms.slice(before.confirms)[0] ?? null,
+    };
+  };
+  const rowButton = (sel, name) => [...d.querySelectorAll(sel)]
+    .find(r => (r.querySelector(".nm") || r.querySelector(".mname"))?.textContent === name)?.querySelector("button");
+  const globalButton = async (kind, name) => {
+    d.getElementById(`gc-${kind}-search`).value = name;
+    await w.globalSearchPlayers(kind);
+    await settle();
+    return rowButton(`#gc-${kind}-results .pickres`, name);
+  };
+  const out = { names: { TAG: TAG.name, BREAK: BREAK.name, SLASH: SLASH.name } };
+
+  // The unaffiliated list's Add (this batch's list), then the new member's
+  // Reset PIN in the members list (the shared args builder).
+  out.addBreak = await click(rowButton("#unaffiliated .signup-row", BREAK.name), "admin_add_league_member");
+  out.memberReset = await click(rowButton("#playerlist .member-row", BREAK.name), "admin_reset_player_pin");
+  // The Global console: Appoint (the markup toast, then the quote and
+  // backslash), and Reset PIN.
+  const sel = d.getElementById("gc-appoint-league");
+  if (sel) sel.value = String(ids.LEAGUE_ID);
+  out.appointTag = await click(await globalButton("appoint", TAG.name), "global_appoint_league_admin");
+  out.appointSlash = await click(await globalButton("appoint", SLASH.name), "global_appoint_league_admin");
+  out.globalReset = await click(await globalButton("reset", SLASH.name), "admin_reset_player_pin");
+  out.boomed = boomed;
+  return out;
+}

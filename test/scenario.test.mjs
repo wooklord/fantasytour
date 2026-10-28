@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario, runVetFirstScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario, runVetFirstScenario, runNameEscapeScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -1464,6 +1464,20 @@ async function runMode(mode){
   check("the Add toast escapes the registrant's name (toast() renders HTML; a registrant picks their own name)",
     vf.escaped.some(t => t.text === "<b>Bold</b> added" && t.bold === false),
     `escaped: ${J(vf.escaped)}`);
+
+  // Player names in admin HTML (onboarding.md decision 7).
+  const ne = await runNameEscapeScenario({ html, scripts, mode });
+  check("a name containing markup renders as TEXT in the 'appointed league admin' toast (toast() renders HTML; registration caps a name's length, not its characters)",
+    ne.appointTag.fired === "ran" && ne.appointTag.sent === "x1"
+      && ne.appointTag.toast?.text === "<b>x</b> appointed league admin" && ne.appointTag.toast?.elements === 0,
+    `appointTag: ${J(ne.appointTag)}`);
+  check("a quote, or a backslash before one, survives the inline onclick argument: Add (unaffiliated list), the members list's Reset PIN, and the Global console's Appoint and Reset PIN each run, send the right player, show the exact name, and the name's own code never runs",
+    ne.addBreak.fired === "ran" && ne.addBreak.sent === "x2" && ne.addBreak.toast?.text === `${ne.names.BREAK} added`
+      && ne.memberReset.fired === "ran" && ne.memberReset.sent === "x2" && ne.memberReset.confirm?.startsWith(`Reset ${ne.names.BREAK}'s PIN?`)
+      && ne.appointSlash.fired === "ran" && ne.appointSlash.sent === "x3" && ne.appointSlash.toast?.text === `${ne.names.SLASH} appointed league admin`
+      && ne.globalReset.fired === "ran" && ne.globalReset.sent === "x3" && ne.globalReset.confirm?.startsWith(`Reset ${ne.names.SLASH}'s PIN app-wide?`)
+      && ne.boomed === 0,
+    `nameEscape: ${J(ne)}`);
 
   return failures.length;
 }

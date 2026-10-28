@@ -8,6 +8,13 @@ export const $ = (sel, el=document) => {
 };
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+// A value passed as an argument INSIDE an inline handler (onclick="f(…)").
+// esc() alone is wrong there: the HTML parser decodes &#39; back to ' before
+// the handler compiles, so an apostrophe in a name ends the JS string (a
+// dead button, or code the name supplies). JSON.stringify makes a JS string
+// literal first; esc() then makes that literal safe inside the attribute.
+export const jsArg = s => esc(JSON.stringify(String(s ?? "")));
+
 // Appended at the end of every top-level #main render — a barely-there
 // colophon. The more visible credit (with the fan-project disclaimer and
 // Carton/merch links) lives in the Settings panel, not here.

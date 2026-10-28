@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first BUILT and awaiting Stage W)
+## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first BUILT, Stage W APPLIED)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -29,9 +29,9 @@ device checks listed there still open; install-help fixes from the dev's
 live device checks AMENDED the same day (end of item 3 below). **Batch 4
 (join codes) is HELD as of 2026-10-27** (decision 7 below). Its replacement,
 the "vet-first fast path" batch, has its plan APPROVED 2026-10-27 (decision 7)
-and was BUILT the same day: committed locally, NOT pushed, because Stage W
-(`sql/stage_w_vet_first_fast_path.sql`) must be applied and verified in
-Supabase first (decision 7, "BUILT 2026-10-27").
+and was BUILT the same day. Stage W (`sql/stage_w_vet_first_fast_path.sql`)
+was APPLIED and verified 2026-10-27, and the client push follows it
+(decision 7, "BUILT 2026-10-27").
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -505,9 +505,16 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
          checks read the roster, not that the SQL writes it; the smoke test
          is the SQL proof.
 
-     **BUILT 2026-10-27, committed locally, NOT pushed.** The client reads
-     `created_at`, so the push waits until Stage W is applied and verified
-     (deploy order above). Bundle `8624351-eaeb74f`.
+     **BUILT 2026-10-27.** The client reads `created_at`, so the push
+     waited until Stage W was applied and verified (deploy order above).
+     Bundles: `8624351-eaeb74f` (first commit), `79883fa-56e0833` (with
+     the name fixes below).
+
+     **✅ Stage W APPLIED 2026-10-27 by the dev,** with all three checks as
+     expected:
+     - STEP 0 matched `stage_n` / `stage_q` before the apply;
+     - STEP 2A showed Stage W's md5s after it;
+     - the STEP 2B smoke test read "0 of 14 FAILED | PASS".
      - **Files:**
        - **SQL:** `sql/stage_w_vet_first_fast_path.sql`. Its footer is one
          block comment, so pasting the whole file runs only `begin … commit`.
@@ -558,26 +565,65 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
          redraw. So the toast and the panel follow the server's answer.
      - **Contrast:** `--badge-ink` (theme-invariant) on `--coral` is 6.82:1
        dark and 4.69:1 light; the fill is 3.45:1 against the light chrome.
-     - **Found while building, NOT FIXED (the dev's call): unescaped names
-       in admin toasts.** `toast()` renders HTML, and registration limits a
-       name only by length (2–20 characters, `stage_t`), not by character,
-       so a registrant can put markup in a name.
-       - **Fixed in this batch:** `addMember`'s toast escapes the name, with
-         a test.
-       - **Still raw,** in `src/features/admin.js`:
+     - **Names in admin HTML: a pre-existing defect, FIXED in this batch
+       (second commit, the dev's call 2026-10-27).**
+       - **Why it matters:** registration limits a name only by length
+         (2–20 characters, `stage_t`), not by character, and an admin's
+         browser holds their PIN in `ft_session` (gate #2). So a
+         registrant's name must render as text in an admin's browser.
+       - **How it was found:** the first commit fixed only `addMember`'s
+         toast and reported the rest. The dev asked for them fixed, and for
+         a sweep of `src/`, before the push.
+       - **Toasts** (`toast()` renders HTML) now use `esc(name)`, in
+         `src/features/admin.js`:
          - line 158, appointed league admin (Global console);
          - line 816, unbanned;
-         - line 867, removed or banned.
-       - Line 129 (league created) shows only the Global admin's own input.
-       - Only `admin.js` was checked. The fix is `esc(name)` at each site.
-       - **Weight:** real, because an admin's browser holds their PIN in
-         `ft_session` (gate #2). Limited, because 20 characters leave little
-         room for a payload. Names from before Stage T are uncapped.
+         - line 867, removed or banned;
+         - line 129, league created. This one is a league name, the Global
+           admin's own input, fixed for consistency.
+       - **Inline `onclick` arguments: worse, and found by the sweep.**
+         - **The defect:** seven sites passed a name as
+           `'${esc(name)…}'`, with a `.replace` meant to escape its quotes.
+           But `esc()` had already turned every `'` into `&#39;`, so the
+           `.replace` found nothing, and the attribute decodes `&#39;` back
+           to `'` before the handler compiles.
+         - **The effect:** an apostrophe in a name made the button dead. A
+           14-character name such as `x')+boom()+('` ran its own code in
+           the admin's browser.
+         - **The fix:** `jsArg()` (`src/core/dom.js`), which applies
+           `JSON.stringify` first, then `esc()`.
+         - **The sites,** all in `admin.js`, 8 buttons:
+           - 148 Appoint and 149 Reset PIN (Global console);
+           - 549, the members list's `args` builder (Reset PIN and Boot);
+           - 618 Add (the unaffiliated list) and 643 Add (member search);
+           - 724, the roster panel's Add/Remove;
+           - 808 Unban.
+       - **Checked and already safe:**
+         - every other name interpolation in `src/` (`esc()` in an HTML
+           context);
+         - `confirm()` / `alert()` text, which is plain text;
+         - the realtime toasts;
+         - every other inline handler, which passes only numeric ids or
+           code-defined keys.
+         `toast.js` now says its message is HTML.
+       - **Tests:** two scenario checks per mode (`runNameEscapeScenario`),
+         clicking the real buttons through their `onclick` attribute:
+         - `<b>x</b>` renders as text in the appointed toast;
+         - a quote, and a backslash before one, through four buttons: list
+           Add, the members list's Reset PIN, Global Appoint and Global
+           Reset PIN. Each runs, sends the right player and shows the exact
+           name, and the name's own code never runs.
+         Not clicked: 643, 724 and 808. They use the same helper.
+       - **Mutations: both caught in both modes.** Each was reverted, then
+         confirmed with `cmp`, and the rebuilt bundle was byte-identical.
+         - `esc()` removed from the appointed toast: it rendered a live
+           `<b>`.
+         - `jsArg()` put back to the old escaping: every leg failed, with
+           the name cut short or its backslash lost, and the injected
+           `boom()` ran twice.
      - **Still open:**
-       1. The dev applies Stage W: STEP 0 first, then the file, then STEP 2A
-          and STEP 2B.
-       2. Push, and confirm the live build id.
-       3. Device checks:
+       1. Push both commits, and confirm the live build id.
+       2. Device checks:
           - the pill on the phone's Admin tab and the desktop column title;
           - the dated list;
           - a mid-season add's toast, the next time an Official season is

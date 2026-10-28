@@ -1,4 +1,4 @@
-import { $, esc, footerHtml } from "../core/dom.js";
+import { $, esc, jsArg, footerHtml } from "../core/dom.js";
 import { db, rpc, edgeFn } from "../core/supabaseClient.js";
 import { state } from "../core/state.js";
 import { fetchShows, fetchShow } from "../core/leagueShows.js";
@@ -126,7 +126,7 @@ export async function globalCreateLeague(){
   if (!name){ $("#gc-league-err").textContent = "League needs a name"; return; }
   try{
     await rpc("global_create_league", { p_name:state.session.name, p_pin:state.session.pin, p_league_name:name });
-    toast(`${name} created`, "score");
+    toast(`${esc(name)} created`, "score");
     $("#gc-league-name").value = "";
     loadGlobalLeagues();
   }catch(e){ $("#gc-league-err").textContent = e.message; }
@@ -145,8 +145,8 @@ export async function globalSearchPlayers(kind){
       <div class="pickres">
         <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         <span class="pt">${kind === "appoint"
-          ? `<button class="btn ghost small" onclick="globalAppointAdmin('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Appoint</button>`
-          : `<button class="btn ghost small" onclick="globalResetPin('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Reset PIN</button>`}</span>
+          ? `<button class="btn ghost small" onclick="globalAppointAdmin('${p.player_id}', ${jsArg(p.name)})">Appoint</button>`
+          : `<button class="btn ghost small" onclick="globalResetPin('${p.player_id}', ${jsArg(p.name)})">Reset PIN</button>`}</span>
       </div>`).join("") || '<p class="muted">No matches.</p>';
   }catch(e){ $(resultsSel).innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
@@ -155,7 +155,7 @@ export async function globalAppointAdmin(id, name){
   if (!leagueId){ toast("Pick a league first"); return; }
   try{
     await rpc("global_appoint_league_admin", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:leagueId, p_player_id:id });
-    toast(`${name} appointed league admin`, "score");
+    toast(`${esc(name)} appointed league admin`, "score");
     $("#gc-appoint-search").value = ""; $("#gc-appoint-results").innerHTML = "";
   }catch(e){ toast(esc(e.message)); }
 }
@@ -546,7 +546,7 @@ export async function loadMembers(){
   // Reset PIN and Boot, right-aligned. The viewer's own row has no
   // buttons, so it carries "you" on line one and no line two at all.
   const rows = await rpc("admin_list_members", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId });
-  const args = p => "'" + p.player_id + "', '" + esc(p.name).replace(/'/g, "\\'") + "'";
+  const args = p => "'" + p.player_id + "', " + jsArg(p.name);
   $("#playerlist").innerHTML = (rows||[]).map(p => `
     <div class="pickres hit member-row">
       <div class="member-l1"><span class="member-mark">${p.is_league_admin ? "★" : "·"}</span><span class="mname" title="${esc(p.name)}">${esc(p.name)}</span>${
@@ -615,7 +615,7 @@ export async function loadUnaffiliated(){
         <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         ${p.created_at ? `<span class="reg" title="Registered">${esc(fmtRegistered(p.created_at))}</span>` : ""}
         ${isRecent(p.created_at, recent) ? '<span class="pill new-signup">new</span>' : ""}
-        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Add</button></span>
+        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button></span>
       </div>`).join("")}`;
 }
 // Session 4 step 4 — server-generates the new PIN (this admin never chooses
@@ -640,7 +640,7 @@ export async function searchMembers(){
     $("#member-results").innerHTML = (rows||[]).map(p => `
       <div class="pickres">
         <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
-        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Add</button></span>
+        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button></span>
       </div>`).join("") || '<p class="muted">No matches.</p>';
   }catch(e){ $("#member-results").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
@@ -721,7 +721,7 @@ async function renderRosterPanel(seasonId){
     panel.innerHTML = (members||[]).map(m => `
       <div class="pickres ${onRoster.has(m.player_id)?"hit":"miss"}">
         <span>${onRoster.has(m.player_id)?"✔":"—"}</span><span class="nm" title="${esc(m.name)}">${esc(m.name)}</span>
-        <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)}, '${esc(m.name).replace(/'/g,"\\'")}')">${onRoster.has(m.player_id)?"Remove":"Add"}</button></span>
+        <span class="pt"><button class="btn ghost small" onclick="setRosterMember(${seasonId}, '${m.player_id}', ${!onRoster.has(m.player_id)}, ${jsArg(m.name)})">${onRoster.has(m.player_id)?"Remove":"Add"}</button></span>
       </div>`).join("") || '<p class="muted">No members in this league yet.</p>';
   }catch(e){ panel.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
@@ -805,7 +805,7 @@ export async function toggleBans(){
     $("#banlist").innerHTML = (rows||[]).map(r => `
       <div class="pickres miss"><span>⛔</span><span class="nm" title="${esc(r.name)}">${esc(r.name)}</span>
         <span class="pt"><small class="muted">${new Date(r.banned_at).toLocaleDateString()}</small>
-          <button class="btn ghost small" onclick="unban('${esc(r.name).replace(/'/g,"\\'")}')">Unban</button></span>
+          <button class="btn ghost small" onclick="unban(${jsArg(r.name)})">Unban</button></span>
       </div>`).join("") || '<p class="muted">Nobody is banned. A peaceful kingdom.</p>';
   }catch(e){ $("#banlist").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
@@ -813,7 +813,7 @@ export async function unban(name){
   if (!confirm(`Unban "${name}"? The name becomes registerable again.`)) return;
   try{
     await rpc("admin_unban", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_banned:name });
-    toast(`${name} unbanned`, "score");
+    toast(`${esc(name)} unbanned`, "score");
     bansOpen = false; toggleBans();
   }catch(e){ toast(esc(e.message)); }
 }
@@ -864,7 +864,7 @@ export async function bootPlayer(id, name){
   const ban = confirm(`Also block the name "${name}" from rejoining this league?\n\nOK = remove + ban · Cancel = remove only`);
   try{
     await rpc("admin_league_boot", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_player_id:id, p_ban:ban });
-    toast(`${name} removed${ban ? " and banned" : ""}`, "score");
+    toast(`${esc(name)} removed${ban ? " and banned" : ""}`, "score");
     loadMembers(); loadRoster();
   }catch(e){ toast(esc(e.message)); }
 }
