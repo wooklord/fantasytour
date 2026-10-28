@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first BUILT, Stage W APPLIED)
+## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -30,8 +30,8 @@ live device checks AMENDED the same day (end of item 3 below). **Batch 4
 (join codes) is HELD as of 2026-10-27** (decision 7 below). Its replacement,
 the "vet-first fast path" batch, has its plan APPROVED 2026-10-27 (decision 7)
 and was BUILT the same day. Stage W (`sql/stage_w_vet_first_fast_path.sql`)
-was APPLIED and verified 2026-10-27, and the client push follows it
-(decision 7, "BUILT 2026-10-27").
+was APPLIED and verified 2026-10-27, and the client went LIVE the same day
+(decision 7, "BUILT 2026-10-27"). Device checks are still open.
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -621,13 +621,16 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
          - `jsArg()` put back to the old escaping: every leg failed, with
            the name cut short or its backslash lost, and the injected
            `boom()` ran twice.
-     - **Still open:**
-       1. Push both commits, and confirm the live build id.
-       2. Device checks:
-          - the pill on the phone's Admin tab and the desktop column title;
-          - the dated list;
-          - a mid-season add's toast, the next time an Official season is
-            running.
+     - **✅ LIVE 2026-10-27:** both commits pushed (`eaeb74f..b51ea22`;
+       Pages build 2026-10-28 01:09 UTC). The live `app.js` is
+       byte-identical to the committed bundle `79883fa-56e0833`. It carries
+       all four escaped toasts and `jsArg`, with no raw-name toast and no
+       old `onclick` escaping left.
+     - **Still open: device checks.**
+       - the pill on the phone's Admin tab and the desktop column title;
+       - the dated list;
+       - a mid-season add's toast, the next time an Official season is
+         running.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
