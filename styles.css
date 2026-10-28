@@ -661,10 +661,12 @@ html[data-theme="light"] .panel.live-halo{
    6.82:1 dark and 4.69:1 light (AA for the small number), and the fill is
    3.45:1 against the light chrome. The unaffiliated rows' date and "new"
    mark keep full --cream, as Batch 3 does: --cream-dim is under AA on the
-   light panel. */
+   light panel. The "has played" note (decision 8) keeps it for the same
+   reason. */
 .tabbadge{display:inline-block;min-width:1.5em;margin-left:5px;padding:0 5px;border-radius:999px;background:var(--coral);color:var(--badge-ink);font:700 .68rem/1.5 var(--mono);letter-spacing:0;text-transform:none;text-align:center;vertical-align:1px}
 .pickres.signup-row .reg{flex:none;font-family:var(--mono);font-size:.72rem;color:var(--cream)}
 .pill.new-signup{flex:none;border-color:var(--coral);color:var(--cream);font-size:.66rem;padding:1px 8px}
+.pickres.signup-row .played{flex:none;font-size:.72rem;font-style:italic;color:var(--cream)}
 
 /* ---------- settings / credits ---------- */
 .credits{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}

@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 APPROVED)
+## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 BUILT)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -34,7 +34,10 @@ was APPLIED and verified 2026-10-27, and the client went LIVE the same day
 (decision 7, "BUILT 2026-10-27"). Device checks PASSED 2026-10-27; the
 mid-season add toast is still open. **Decision 8** ("Clear all" and
 "Remove" on the sign-up list) is LOCKED 2026-10-27, with its plan APPROVED
-the same day, and is being built as Stage X.
+the same day, and was BUILT the same day as Stage X
+(`sql/stage_x_signup_clear_and_remove.sql`), committed locally and NOT
+pushed. Next: the dev runs STEP 0, applies Stage X, runs STEP 2A and 2B,
+and only then is the client pushed (decision 8, "BUILT 2026-10-27").
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -640,7 +643,8 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
 8. **"Clear all" and "Remove" on the new sign-up list: LOCKED 2026-10-27
    (the dev's picks, all four Chat recommendations).** Plan APPROVED
-   2026-10-27 (below), and being built as Stage X.
+   2026-10-27 (below); BUILT the same day as Stage X, not yet applied or
+   pushed.
    a. **"Clear all":** one tap clears the badge and every current "new"
       mark for 7 days (`SIGNUP_SNOOZE_DAYS` in `src/core/config.js`).
       - Anyone registering after the clear relights it immediately.
@@ -729,6 +733,63 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
      - an Add that loses the race shows a raw foreign-key error.
    - **Deploy order:** STEP 0, apply Stage X, STEP 2A, STEP 2B, then push
      the client. The live client ignores the new columns.
+   - **BUILT 2026-10-27, committed locally, NOT pushed:** the client needs
+     Stage X's columns. `sql/stage_x_signup_clear_and_remove.sql` is
+     written and NOT yet applied.
+     - **SQL:**
+       - two tables: `admin_signup_clears`, and `admin_audit_log`,
+         which has no foreign key at all;
+       - the internal helper `_account_has_played`;
+       - the list, now returning `has_played` and `cleared_at`;
+       - `admin_clear_new_signups` and
+         `admin_remove_unplayed_account`.
+       - The footer has STEP 0 (4 rows), STEP 2A (9 rows) and STEP 2B (26
+         smoke checks).
+     - **Client:**
+       - `SIGNUP_SNOOZE_DAYS = 7`, and `isSnoozed`/`isNew` in
+         `signups.js`.
+       - "Clear all" sits in the list heading only while the pill is lit,
+         through `signupBadgeLit()`, the pill's own gate.
+       - Remove (coral, like Boot) shows only when `has_played === false`,
+         and a "has played" note shows when it is `true`. Global alone
+         gets the second, ban confirm.
+       - Against Stage W's list, none of the three appears.
+     - **The "has played" note is full `--cream`, small and italic, not
+       `.muted`** (an implementation choice, not the dev's): the sign-up
+       rows already avoid `--cream-dim`, which is under AA on the light
+       panel. D3 said "muted".
+     - **Tests:**
+       - `test/stageX.test.mjs` (new, in `npm test`) recomputes every
+         footer md5 and return type from the files. It checks that STEP 0's
+         and 2A's foreign-key and uuid-column lists match `sql/`, and it
+         fails if a table holding a player id is missing from
+         `_account_has_played`. Exempt, each with its reason:
+         `league_members`, `admin_signup_clears`, and the log's
+         snapshot ids.
+       - `signups.test.mjs` has 7 snooze checks, and the scenario suite
+         11 checks per mode.
+       - The fakes now refuse what the SQL refuses, in its order (D11). The
+         list is admin-gated. `register_player` refuses a bad PIN and a
+         banned or taken name, and inserts the account. Fixture p4 carries
+         `is_global_admin`.
+     - **Mutations, all caught.** Each was reverted by an anchored edit and
+       confirmed with `cmp`, and each rebuilt bundle was byte-identical.
+       - M1, Remove on every row: the D3 and old-SQL checks, both modes.
+       - M2, the snooze ignored: 3 unit and 3 scenario checks, both modes.
+       - M3, the fake's history skipping picks: the D3 check, both modes.
+         At first it also failed the Remove check, because the scenario
+         held the live log array and a later step grew it. The scenario now
+         copies it.
+       - M4, one admin's clear applied to every admin: the per-admin
+         check, both modes.
+       - M5, the SQL helper forgetting sync-flag clears: `stageX.test`'s
+         md5 and coverage checks.
+     - **Precision on the CORRECTION above (found while building):**
+       `sync_flag_clears` (Stage U) already calls itself "the
+       allow-plus-log record of who cleared a flag", so "the project's
+       first audit table" overstates it. `admin_audit_log` is the first
+       *general* one. The correction's substance is unchanged: no PIN-reset
+       log exists, and resets and boots stay unlogged.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 

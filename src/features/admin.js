@@ -7,12 +7,12 @@ import { toast } from "../core/toast.js";
 import { loadConfig, loadSongs } from "../core/session.js";
 import { markTab } from "../core/layout.js";
 import { settingsPanelHtml, wireSettingsPanel } from "./settings.js";
-import { currentBracket, setSignupRows } from "../core/switcher.js";
-import { isRecent } from "../core/signups.js";
+import { currentBracket, setSignupRows, signupBadgeLit } from "../core/switcher.js";
+import { isNew } from "../core/signups.js";
 import { TIEBREAK_LABELS } from "../core/tiebreak.js";
 import { SLOT_LABELS, SLOT_TOOLTIPS, ONE_SET_EXCLUDED_TYPES, slotLabelFor } from "../core/slotTypes.js";
 import { venueLocalInputValue, venueLocalToUTC, venueLongName, hasDstTransition } from "../core/venueTime.js";
-import { RANKED_CHOICE_ENABLED, NEW_SIGNUP_DAYS } from "../core/config.js";
+import { RANKED_CHOICE_ENABLED, NEW_SIGNUP_DAYS, SIGNUP_SNOOZE_DAYS } from "../core/config.js";
 import { slotDefs } from "./picks.js";
 
 // Seasons only ever belong to a league's Official bracket, and the season
@@ -584,6 +584,14 @@ export async function loadMembers(){
 // NEW_SIGNUP_DAYS. These same rows set the Admin-tab badge, so the badge
 // and the marks on screen never disagree. Rows without created_at (the
 // pre-Stage-W function) render without a date and set no badge.
+//
+// Stage X (decision 8): each row also carries has_played and this admin's
+// cleared_at. "Clear all" shows exactly while the badge is lit (D8). Remove
+// shows only on a row the server says has never played, and a row that has
+// played gets a "has played" note instead (D3); the server checks again on
+// Remove. Against the Stage W function the rows carry neither column, so
+// none of the three appear: has_played is tested against true and false
+// exactly, and Clear all also needs a cleared_at key on some row.
 const fmtRegistered = iso => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -602,11 +610,13 @@ export async function loadUnaffiliated(){
     return;
   }
   setSignupRows(rows);
-  const recent = { nowMs: Date.now(), days: NEW_SIGNUP_DAYS };
+  const opts = { nowMs: Date.now(), days: NEW_SIGNUP_DAYS, snoozeDays: SIGNUP_SNOOZE_DAYS };
   const n = (rows||[]).length;
   if (!n){ box.innerHTML = ""; return; }
+  const canClear = rows.some(r => r && "cleared_at" in r) && signupBadgeLit();
   box.innerHTML = `
-    <p class="muted" style="margin-top:14px;font-weight:600">Registered, not in any league (${n})</p>
+    <p class="muted" style="margin-top:14px;font-weight:600">Registered, not in any league (${n})${canClear
+      ? ` <button class="btn ghost small" onclick="clearNewSignups()" title="Stop marking these as new for ${SIGNUP_SNOOZE_DAYS} days">Clear all</button>` : ""}</p>
     <p class="muted" style="font-size:.78rem">These people have accounts but no league.
       They may not have asked to join <b>this</b> one — add someone only if they
       contacted you.</p>
@@ -614,9 +624,38 @@ export async function loadUnaffiliated(){
       <div class="pickres signup-row">
         <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         ${p.created_at ? `<span class="reg" title="Registered">${esc(fmtRegistered(p.created_at))}</span>` : ""}
-        ${isRecent(p.created_at, recent) ? '<span class="pill new-signup">new</span>' : ""}
-        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button></span>
+        ${isNew(p, opts) ? '<span class="pill new-signup">new</span>' : ""}
+        ${p.has_played === true ? '<span class="played" title="Has picks, scores, a season roster or an admin action, so it cannot be removed here">has played</span>' : ""}
+        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button>${p.has_played === false
+          ? ` <button class="btn ghost small" onclick="removeAccount('${p.player_id}', ${jsArg(p.name)})" style="border-color:var(--coral);color:var(--coral)">Remove</button>` : ""}</span>
       </div>`).join("")}`;
+}
+// Decision 8a (D1, D10): snoozes this admin's badge and current "new" marks
+// for SIGNUP_SNOOZE_DAYS, stored on the server per admin, so another device
+// and another admin are unaffected. The list reload re-sets the badge.
+export async function clearNewSignups(){
+  try{
+    await rpc("admin_clear_new_signups", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId });
+    toast(`New sign-ups cleared for ${SIGNUP_SNOOZE_DAYS} days`, "score");
+  }catch(e){ toast(esc(e.message)); }
+  loadUnaffiliated();
+}
+// Decision 8c–8e (D3, D5, D6): deletes an account that is in no league and
+// has never played, which frees the name to register again. The server
+// checks all of it again and logs the removal. Only Global is asked about a
+// ban; the server refuses one from anyone else. The list reloads either
+// way, since a refusal usually means the row was stale (someone added them,
+// or they just played). confirm() is plain text, so the raw name is right
+// there; toast() renders HTML, so the name is escaped.
+export async function removeAccount(id, name){
+  if (!confirm(`Remove ${name}'s account?\n\nThey are in no league and have never played. The account is deleted and the name becomes free to register again. This can't be undone.`)) return;
+  const ban = !!state.session.is_global_admin
+    && confirm(`Also block the name "${name}" app-wide?\n\nOK = remove + ban · Cancel = remove only`);
+  try{
+    const r = await rpc("admin_remove_unplayed_account", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_player_id:id, p_ban_name:ban });
+    toast(`${esc(name)} removed${r?.name_banned ? " and banned" : ""}`, "score");
+  }catch(e){ toast(esc(e.message)); }
+  loadUnaffiliated();
 }
 // Session 4 step 4 — server-generates the new PIN (this admin never chooses
 // it), returned once for relay; the reset target is forced to set a real

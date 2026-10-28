@@ -37,3 +37,9 @@ export const NAME_MAX_LEN = 20;
 // many days. Long enough to span an admin who checks in weekly; short
 // enough that an account nobody vouches for stops lighting it on its own.
 export const NEW_SIGNUP_DAYS = 14;
+
+// Decision 8 (onboarding.md): "Clear all" on the sign-up list snoozes the
+// badge and every "new" mark it covers for this many days. Anyone who
+// registers after the clear relights it at once; a cleared account still in
+// no league and still inside NEW_SIGNUP_DAYS relights when the snooze ends.
+export const SIGNUP_SNOOZE_DAYS = 7;

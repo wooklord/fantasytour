@@ -37,8 +37,9 @@ export function makeFixtures(){
       { league_id: LEAGUE_ID, player_id: "p1", is_league_admin: true, official_opt_in: true },
       { league_id: LEAGUE_ID, player_id: "p2", is_league_admin: false, official_opt_in: false },
       // p4 is a genuine global admin (is_global_admin lives on the session
-      // object, not here — see makeFixtures' session below and
-      // runGlobalAdminScenario in harness.mjs), NOT a league admin — this
+      // object and, for the fakes that check it as the SQL does, on p4's
+      // players_public row below; never here — see runGlobalAdminScenario
+      // in harness.mjs), NOT a league admin — this
       // membership row exists only so resolveLeagues() doesn't render
       // renderNoLeague() for them; is_league_admin:false here is deliberate,
       // so the admin tab rendering for p4 proves isCurrentLeagueAdmin()'s
@@ -90,7 +91,10 @@ export function makeFixtures(){
       // admin_find_players should be able to surface for the "add a member"
       // search.
       { id: "p3", name: "Wanderer", created_at: "2026-01-03" },
-      { id: "p4", name: "GlobalAdmin", created_at: "2026-01-04" },
+      // players_public stands in for the players table in the fakes (the
+      // live view has only id, name and created_at). Stage X's fakes gate on
+      // is_global_admin, as the SQL gates on players.is_global_admin.
+      { id: "p4", name: "GlobalAdmin", created_at: "2026-01-04", is_global_admin: true },
     ],
     scores: [
       { player_id: "p1", bracket_id: CASUAL_ID, show_id: 2, points: 5, breakdown: [{ slot:"opener", songname:"Distraction", points:2, hit:true, reason:"hit" }] },

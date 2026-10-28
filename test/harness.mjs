@@ -41,6 +41,27 @@ function installGlobals(window, mode, tables, rpcHandlers, calls, dbHolder, env 
   }};
 }
 
+// Stage X fakes (sql/stage_x_signup_clear_and_remove.sql) share these, so
+// they refuse in the SQL's order: _auth_player (an unknown name, matched
+// case-insensitively since Stage E, or no PIN), then, for the two writes,
+// _reject_if_must_change_pin, then _is_league_admin_or_global. Here
+// players_public stands in for the players table, so the flags live on it.
+const fakeAuth = ({ p_name, p_pin }, tables) => {
+  const nm = String(p_name ?? "").toLowerCase();
+  const me = p_pin == null ? null : (tables.players_public || []).find(p => p.name.toLowerCase() === nm);
+  if (!me) throw new Error("Wrong name or PIN");
+  return me;
+};
+const fakeRejectMustChange = me => { if (me.must_change_pin === true) throw new Error("PIN change required before this action"); };
+const fakeIsAdmin = (me, leagueId, tables) => me.is_global_admin === true
+  || (tables.league_members || []).some(m => m.player_id === me.id && m.league_id === leagueId && m.is_league_admin === true);
+// _account_has_played: the same four tables, the same columns.
+const fakeHasPlayed = (id, tables) => (tables.picks || []).some(r => r.player_id === id)
+  || (tables.scores || []).some(r => r.player_id === id)
+  || (tables.season_rosters || []).some(r => r.player_id === id)
+  || (tables.sync_flag_clears || []).some(r => r.cleared_by === id);
+let fakeRegisterSeq = 0;
+
 // Handlers compute against the fixture's relational tables (passed as the
 // second argument by fakeSupabase.rpc) rather than returning fixed stubs, so
 // the scenario below is exercising real join/gating logic, not just proving
@@ -50,14 +71,23 @@ function installGlobals(window, mode, tables, rpcHandlers, calls, dbHolder, env 
 // function — a plain object would misrepresent the real shape.
 const RPC_HANDLERS = {
   login: async ({ p_name }) => ({ id: "p1", name: p_name, is_global_admin: false }),
-  // Mirrors the live RPC (stage_c1 + stage_t): trim, min 2, max 20, and the
-  // stored name is the TRIMMED one. The fake has to be at least as strict
-  // as the real thing, or a dropped client check would pass against it.
-  register_player: async ({ p_name }) => {
+  // Mirrors the live RPC (stage_c1 + stage_t), in its order: trim, min 2,
+  // max 20, a 4-8 digit PIN, the app-wide ban list, then the
+  // case-insensitive unique name (Stage E). The stored name is the TRIMMED
+  // one, and success adds the account, as the real call does, so a name
+  // freed by Remove or blocked by Global's ban is tested against the same
+  // rules. The fake has to be at least as strict as the real thing, or a
+  // dropped client check would pass against it.
+  register_player: async ({ p_name, p_pin }, tables) => {
     const nm = String(p_name ?? "").trim();
     if (nm.length < 2) throw new Error("Name too short");
     if (nm.length > 20) throw new Error("Name must be 20 characters or fewer");
-    return { id: "p3", name: nm, is_global_admin: false };
+    if (!/^\d{4,8}$/.test(String(p_pin ?? ""))) throw new Error("PIN must be 4-8 digits");
+    if ((tables.global_banned_names || []).some(b => b.name === nm.toLowerCase())) throw new Error("That name is not available");
+    if ((tables.players_public || []).some(p => p.name.toLowerCase() === nm.toLowerCase())) throw new Error("That name is taken");
+    const row = { id: `reg${++fakeRegisterSeq}`, name: nm, created_at: new Date().toISOString(), is_global_admin: false };
+    tables.players_public.push(row);
+    return { id: row.id, name: row.name, is_global_admin: false };
   },
   my_leagues: async ({ p_name }, tables) => {
     const player = tables.players_public.find(p => p.name === p_name);
@@ -235,13 +265,56 @@ const RPC_HANDLERS = {
   // "not in this league" the way admin_find_players is. A stub returning a
   // fixed list would pass whichever predicate the frontend used.
   // Stage W: created_at returned, newest first (then name), capped at 50,
-  // so the cap drops the OLDEST rows, as the SQL does.
-  admin_list_unaffiliated_players: async (_args, tables) =>
-    (tables.players_public || [])
+  // so the cap drops the OLDEST rows, as the SQL does. Stage X: refused to
+  // a caller who is not an admin of p_league_id (or Global), and every row
+  // carries has_played and the CALLER's own cleared_at (null if never).
+  admin_list_unaffiliated_players: async (args, tables) => {
+    const me = fakeAuth(args, tables);
+    if (!fakeIsAdmin(me, args.p_league_id, tables)) throw new Error("League admins only");
+    const cleared = (tables.admin_signup_clears || []).find(c => c.player_id === me.id)?.cleared_at ?? null;
+    return (tables.players_public || [])
       .filter(p => !(tables.league_members || []).some(lm => lm.player_id === p.id))
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || a.name.localeCompare(b.name))
       .slice(0, 50)
-      .map(p => ({ player_id: p.id, name: p.name, created_at: p.created_at })),
+      .map(p => ({ player_id: p.id, name: p.name, created_at: p.created_at, has_played: fakeHasPlayed(p.id, tables), cleared_at: cleared }));
+  },
+  // Stage X: one row per admin, upserted to now().
+  admin_clear_new_signups: async (args, tables) => {
+    const me = fakeAuth(args, tables);
+    fakeRejectMustChange(me);
+    if (!fakeIsAdmin(me, args.p_league_id, tables)) throw new Error("League admins only");
+    const at = new Date().toISOString();
+    const rows = (tables.admin_signup_clears ??= []);
+    const row = rows.find(c => c.player_id === me.id);
+    if (row) row.cleared_at = at; else rows.push({ player_id: me.id, cleared_at: at });
+    return { ok: true, cleared_at: at };
+  },
+  // Stage X: the SQL's refusals in the SQL's order, then the log row, the
+  // optional ban, and the delete. The refusals mean no picks, scores,
+  // roster or membership rows are left to cascade; the caller's own
+  // admin_signup_clears row is the one that would.
+  admin_remove_unplayed_account: async (args, tables) => {
+    const me = fakeAuth(args, tables);
+    fakeRejectMustChange(me);
+    if (!fakeIsAdmin(me, args.p_league_id, tables)) throw new Error("League admins only");
+    const ban = args.p_ban_name === true;
+    if (ban && me.is_global_admin !== true) throw new Error("Only Global can ban a name");
+    if (args.p_player_id === me.id) throw new Error("You cannot remove yourself");
+    const tgt = (tables.players_public || []).find(p => p.id === args.p_player_id);
+    if (!tgt) throw new Error("Player not found");
+    if (tgt.is_global_admin === true) throw new Error("Cannot remove a Global admin");
+    if ((tables.league_members || []).some(m => m.player_id === tgt.id)) throw new Error("This player is in a league");
+    if (fakeHasPlayed(tgt.id, tables)) throw new Error("This account has history (picks, scores, a season roster or an admin action). Only Global can remove it");
+    (tables.admin_audit_log ??= []).push({ action: "remove_account", actor_id: me.id, actor_name: me.name, league_id: args.p_league_id,
+      target_id: tgt.id, target_name: tgt.name, target_created_at: tgt.created_at, detail: { name_banned: ban } });
+    if (ban){
+      const banned = (tables.global_banned_names ??= []);
+      if (!banned.some(b => b.name === tgt.name.toLowerCase())) banned.push({ name: tgt.name.toLowerCase() });
+    }
+    tables.players_public.splice(tables.players_public.indexOf(tgt), 1);
+    if (tables.admin_signup_clears) tables.admin_signup_clears = tables.admin_signup_clears.filter(c => c.player_id !== tgt.id);
+    return { ok: true, removed: tgt.name, name_banned: ban };
+  },
   // Standings-facing counterpart to admin_list_season_roster — same
   // underlying table, membership-gated rather than admin-gated in real SQL,
   // but the fake doesn't model auth failures, only the real join.
@@ -3033,10 +3106,10 @@ export async function runVetFirstScenario({ html, scripts, mode }){
   const many = Array.from({ length: 55 }, (_, i) => ({ id: `m${i}`, name: `Many ${String(i).padStart(2, "0")}`, created_at: ago(0.5 + i * 0.1) }));
   out.cap = (await load({ players: many })).read();
 
-  // 8. The pre-Stage-W function (no created_at): no pill; the list still
-  //    renders, undated and unmarked.
+  // 8. The pre-Stage-W function (no created_at, and so none of Stage X's
+  //    columns either): no pill; the list still renders, undated and unmarked.
   const orig = RPC_HANDLERS.admin_list_unaffiliated_players;
-  RPC_HANDLERS.admin_list_unaffiliated_players = async (args, tables) => (await orig(args, tables)).map(({ created_at, ...rest }) => rest);
+  RPC_HANDLERS.admin_list_unaffiliated_players = async (args, tables) => (await orig(args, tables)).map(({ created_at, has_played, cleared_at, ...rest }) => rest);
   try {
     const o = await load();
     out.oldSql = { boot: o.read() };
@@ -3148,5 +3221,141 @@ export async function runNameEscapeScenario({ html, scripts, mode }){
   out.appointSlash = await click(await globalButton("appoint", SLASH.name), "global_appoint_league_admin");
   out.globalReset = await click(await globalButton("reset", SLASH.name), "admin_reset_player_pin");
   out.boomed = boomed;
+  return out;
+}
+
+// ---------- "Clear all" and "Remove" (docs/decisions/onboarding.md, decision 8) ----------
+// Through the Stage X fakes above, which refuse what the SQL refuses, in
+// its order; the SQL itself is proven by Stage X's smoke test. A load can
+// reuse an earlier load's tables, so one admin's clear can be read from
+// another admin's session. Buttons run their onclick attribute, as a
+// browser does. Invented names only (CLAUDE.md: no real nicknames).
+export async function runSignupClearRemoveScenario({ html, scripts, mode }){
+  const DAY = 864e5;
+  const ago = days => new Date(Date.now() - days * DAY).toISOString();
+  // Both inside NEW_SIGNUP_DAYS. Quiet Quail registered before a clear 6 or
+  // 8 days ago; Sunny Sprout registered after both.
+  const SPROUT = { id: "n1", name: "Sunny Sprout", created_at: ago(1) };
+  const QUAIL = { id: "n2", name: "Quiet Quail", created_at: ago(9) };
+  // In no league, outside the window, with one pick: a booted player.
+  const PINE = { id: "n3", name: "Played Pine", created_at: ago(30) };
+  async function load({ who = "p1", tables: shared = null, players = [SPROUT, QUAIL, PINE], clears = null, list = null } = {}){
+    const fx = makeFixtures();
+    const tables = shared ?? fx.tables, ids = fx.ids;
+    if (!shared){
+      tables.players_public.push(...players.map(p => ({ ...p })));
+      if (players.includes(PINE)) tables.picks.push({ player_id: PINE.id, bracket_id: ids.CASUAL_ID, show_id: 2, slot: "opener", songname: "Distraction" });
+      if (clears) tables.admin_signup_clears = clears.map(c => ({ ...c }));
+    }
+    const calls = [], confirms = [], answers = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, list ? { ...RPC_HANDLERS, admin_list_unaffiliated_players: list } : RPC_HANDLERS, calls, {});
+    w.confirm = m => { confirms.push(m); return answers.length ? answers.shift() : true; };
+    // The fakes resolve the caller by NAME, so the session uses the
+    // fixture's own row, read at run time rather than written out here.
+    const me = tables.players_public.find(p => p.id === who);
+    w.localStorage.setItem("ft_session", JSON.stringify({ id: who, name: me.name, pin: "1234", is_global_admin: me.is_global_admin === true }));
+    w.localStorage.setItem("ft_bracket_id", String(ids.CASUAL_ID));
+    for (const src of scripts) w.eval(src);
+    const d = w.document;
+    const settle = async () => { for (let i = 0; i < 8; i++) await tick(); };
+    await settle();
+    clickTab(w, "admin");
+    await settle();
+    const rowOf = name => [...d.querySelectorAll("#unaffiliated .signup-row")].find(r => r.querySelector(".nm")?.textContent === name);
+    const clearButton = () => d.querySelector('#unaffiliated button[onclick="clearNewSignups()"]');
+    const read = () => ({
+      badge: d.getElementById("admintab")?.querySelector(".tabbadge")?.textContent ?? null,
+      anyBadge: d.querySelectorAll(".tabbadge").length,
+      clearAll: !!clearButton(),
+      rows: [...d.querySelectorAll("#unaffiliated .signup-row")].map(r => ({
+        name: r.querySelector(".nm")?.textContent ?? null,
+        isNew: !!r.querySelector(".new-signup"),
+        played: r.querySelector(".played")?.textContent ?? null,
+        buttons: [...r.querySelectorAll("button")].map(b => b.textContent),
+      })),
+    });
+    // Runs a button's onclick (or a function), answering confirms in order,
+    // and reports the RPCs it made, the confirm texts and the toast it left.
+    const act = async (target, ...reply) => {
+      answers.length = 0; answers.push(...reply);
+      const before = { calls: calls.length, confirms: confirms.length, toasts: new Set(d.querySelectorAll("#toasts .toast")) };
+      let fired = "ran";
+      if (typeof target === "function") target();
+      else {
+        const code = target?.getAttribute("onclick");
+        if (!code) fired = "no button";
+        else try { new w.Function(code).call(target); } catch (e) { fired = e.name; }
+      }
+      await settle();
+      const rpcs = calls.slice(before.calls).filter(c => c.type === "rpc");
+      const t = [...d.querySelectorAll("#toasts .toast")].filter(x => !before.toasts.has(x)).at(-1);
+      return { fired, rpcs: rpcs.map(c => c.fn), args: rpcs.map(c => c.args), confirms: confirms.slice(before.confirms),
+               toast: t ? { text: t.textContent, elements: t.children.length } : null };
+    };
+    const removeButton = name => [...(rowOf(name)?.querySelectorAll("button") || [])].find(b => b.textContent === "Remove");
+    const foreground = async () => { d.dispatchEvent(new w.Event("visibilitychange")); await settle(); };
+    return { w, tables, ids, read, act, clearButton, removeButton, foreground };
+  }
+  const out = {};
+
+  // 1. Clear all, by a league admin.
+  const a = await load();
+  out.leagueId = a.ids.LEAGUE_ID;
+  out.clear = { before: a.read() };
+  Object.assign(out.clear, await a.act(a.clearButton()));
+  out.clear.after = a.read();
+  out.clear.stored = (a.tables.admin_signup_clears || []).map(c => c.player_id);
+  // 2. Another admin, same tables (Global, so the same league's list).
+  out.otherAdmin = (await load({ who: "p4", tables: a.tables })).read();
+  // 3. A registration after the clear, then a foreground.
+  const at = Date.parse(a.tables.admin_signup_clears?.[0]?.cleared_at ?? "");
+  a.tables.players_public.push({ id: "n7", name: "Later Lark", created_at: new Date((Number.isFinite(at) ? at : Date.now()) + 1000).toISOString() });
+  await a.foreground();
+  out.relight = a.read();
+  // 4. The snooze, 6 days in (still running) and 8 days in (expired).
+  out.snooze6 = (await load({ clears: [{ player_id: "p1", cleared_at: ago(6) }] })).read();
+  out.snooze8 = (await load({ clears: [{ player_id: "p1", cleared_at: ago(8) }] })).read();
+  // 5. Remove, by a league admin: cancel first, then confirm.
+  const r = await load();
+  out.cancel = await r.act(r.removeButton(SPROUT.name), false);
+  out.cancel.after = r.read();
+  out.remove = await r.act(r.removeButton(SPROUT.name), true);
+  out.remove.after = r.read();
+  // Copies, not the live arrays: a later step must not change what this one saw.
+  out.remove.log = (r.tables.admin_audit_log || []).map(x => ({ ...x }));
+  out.remove.gone = !r.tables.players_public.some(p => p.id === SPROUT.id);
+  out.remove.reregister = await RPC_HANDLERS.register_player({ p_name: SPROUT.name, p_pin: "1234" }, r.tables)
+    .then(j => ({ ok: true, id: j.id, name: j.name }), e => ({ ok: false, error: e.message }));
+  // 6. A row that has played, then removeAccount forced on it.
+  out.played = { row: r.read().rows.find(x => x.name === PINE.name) ?? null };
+  out.played.forced = await r.act(() => r.w.removeAccount(PINE.id, PINE.name), true);
+  out.played.intact = r.tables.players_public.some(p => p.id === PINE.id);
+  out.played.logRows = (r.tables.admin_audit_log || []).length;
+  // 7. Global, with the ban.
+  const g = await load({ who: "p4" });
+  Object.assign(out, { ban: await g.act(g.removeButton(QUAIL.name), true, true) });
+  out.ban.banned = (g.tables.global_banned_names || []).map(b => b.name);
+  out.ban.log = (g.tables.admin_audit_log || []).map(x => ({ ...x }));
+  out.ban.reregister = await RPC_HANDLERS.register_player({ p_name: QUAIL.name, p_pin: "1234" }, g.tables).then(() => "registered", e => e.message);
+  // 8. A league admin asking the server itself for a ban.
+  const fx = makeFixtures();
+  fx.tables.players_public.push({ ...QUAIL });
+  const p1 = fx.tables.players_public.find(p => p.id === "p1");
+  out.adminBan = {
+    error: await RPC_HANDLERS.admin_remove_unplayed_account({ p_name: p1.name, p_pin: "1234", p_league_id: fx.ids.LEAGUE_ID, p_player_id: QUAIL.id, p_ban_name: true }, fx.tables)
+      .then(() => "removed", e => e.message),
+    intact: fx.tables.players_public.some(p => p.id === QUAIL.id),
+    banned: (fx.tables.global_banned_names || []).length,
+  };
+  // 9. The Stage W function: no has_played, no cleared_at.
+  out.oldSql = (await load({ list: async (args, tables) => (await RPC_HANDLERS.admin_list_unaffiliated_players(args, tables)).map(({ has_played, cleared_at, ...rest }) => rest) })).read();
+  // 10. A quote and markup in a name, through the Remove button.
+  const QUOTE = { id: "n8", name: "O'Neil <b>Q</b>", created_at: ago(1) };
+  const q = await load({ players: [QUOTE] });
+  out.quote = { name: QUOTE.name, ...(await q.act(q.removeButton(QUOTE.name), true)) };
+  // 11. No registration inside the window.
+  out.unlit = (await load({ players: [PINE, { id: "n9", name: "Old Oak", created_at: ago(20) }] })).read();
   return out;
 }

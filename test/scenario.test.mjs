@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario, runVetFirstScenario, runNameEscapeScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario, runVetFirstScenario, runNameEscapeScenario, runSignupClearRemoveScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -1478,6 +1478,63 @@ async function runMode(mode){
       && ne.globalReset.fired === "ran" && ne.globalReset.sent === "x3" && ne.globalReset.confirm?.startsWith(`Reset ${ne.names.SLASH}'s PIN app-wide?`)
       && ne.boomed === 0,
     `nameEscape: ${J(ne)}`);
+
+  // Decision 8: "Clear all" and "Remove" on the sign-up list (Stage X).
+  const sc = await runSignupClearRemoveScenario({ html, scripts, mode });
+  const newNames = v => J((v?.rows || []).filter(r => r.isNew).map(r => r.name));
+  check("decision 8 'Clear all': shown while the pill is lit; one tap makes ONE clear call and ONE list reload, then the pill, every 'new' mark and the button itself are gone, and the one stored clear is this admin's",
+    sc.clear.before.badge === "2" && sc.clear.before.clearAll && newNames(sc.clear.before) === J(["Sunny Sprout", "Quiet Quail"])
+      && J(sc.clear.rpcs) === J(["admin_clear_new_signups", "admin_list_unaffiliated_players"])
+      && sc.clear.after.anyBadge === 0 && newNames(sc.clear.after) === "[]" && !sc.clear.after.clearAll
+      && sc.clear.toast?.text === "New sign-ups cleared for 7 days" && J(sc.clear.stored) === J(["p1"]),
+    `clear: ${J(sc.clear)}`);
+  check("decision 8: a clear is per admin; another admin of the same league (Global here, same tables) still sees both registrations as new",
+    sc.otherAdmin.badge === "2" && sc.otherAdmin.clearAll && newNames(sc.otherAdmin) === J(["Sunny Sprout", "Quiet Quail"]),
+    `otherAdmin: ${J(sc.otherAdmin)}`);
+  check("decision 8: someone registering after the clear relights the pill on the next foreground, counting only them",
+    sc.relight.badge === "1", `relight: ${J(sc.relight)}`);
+  check("decision 8 snooze: a clear 6 days ago still covers a registration from before it (9 days ago) but not one after it (1 day ago); a clear 8 days ago has expired, so both are new again",
+    sc.snooze6.badge === "1" && newNames(sc.snooze6) === J(["Sunny Sprout"]) && sc.snooze6.clearAll
+      && sc.snooze8.badge === "2" && newNames(sc.snooze8) === J(["Sunny Sprout", "Quiet Quail"]),
+    `snooze6: ${J(sc.snooze6)} snooze8: ${J(sc.snooze8)}`);
+  check("decision 8 Remove by a league admin: a cancelled confirm sends nothing; a confirmed one asks ONCE (never about a ban), sends ONE remove (p_ban_name false) and ONE list reload, the row and its pill count go, the toast names them, one log row records actor, league and target, and the freed name registers again",
+    sc.cancel.confirms.length === 1 && sc.cancel.rpcs.length === 0 && sc.cancel.after.rows.some(x => x.name === "Sunny Sprout")
+      && sc.remove.confirms.length === 1 && sc.remove.confirms[0].startsWith("Remove Sunny Sprout's account?")
+      && sc.remove.confirms[0].includes("never played") && sc.remove.confirms[0].includes("can't be undone")
+      && J(sc.remove.rpcs) === J(["admin_remove_unplayed_account", "admin_list_unaffiliated_players"])
+      && sc.remove.args[0].p_player_id === "n1" && sc.remove.args[0].p_ban_name === false
+      && !sc.remove.after.rows.some(x => x.name === "Sunny Sprout") && sc.remove.after.badge === "1" && sc.remove.gone
+      && sc.remove.toast?.text === "Sunny Sprout removed"
+      && sc.remove.log.length === 1 && sc.remove.log[0].actor_id === "p1" && sc.remove.log[0].league_id === sc.leagueId
+      && sc.remove.log[0].target_id === "n1" && sc.remove.log[0].target_name === "Sunny Sprout" && sc.remove.log[0].detail?.name_banned === false
+      && sc.remove.reregister.ok === true && sc.remove.reregister.name === "Sunny Sprout" && sc.remove.reregister.id !== "n1",
+    `cancel: ${J(sc.cancel)} remove: ${J(sc.remove)}`);
+  check("decision 8 (D3): a row that has played carries a 'has played' note and no Remove button; removeAccount forced on it is refused by the server with the history message, the account stays and nothing more is logged",
+    sc.played.row?.played === "has played" && J(sc.played.row?.buttons) === J(["Add"])
+      && sc.played.forced.rpcs[0] === "admin_remove_unplayed_account"
+      && sc.played.forced.toast?.text === "This account has history (picks, scores, a season roster or an admin action). Only Global can remove it"
+      && sc.played.intact && sc.played.logRows === 1,
+    `played: ${J(sc.played)}`);
+  check("decision 8 (D6) Global with the ban: a second confirm asks about blocking the name app-wide, one remove goes with p_ban_name true, the toast says banned, the name is in global_banned_names, the log row has Global as actor and name_banned true, and registering the name is refused",
+    sc.ban.confirms.length === 2 && sc.ban.confirms[1].startsWith('Also block the name "Quiet Quail" app-wide?')
+      && sc.ban.rpcs[0] === "admin_remove_unplayed_account" && sc.ban.args[0].p_ban_name === true && sc.ban.toast?.text === "Quiet Quail removed and banned"
+      && J(sc.ban.banned) === J(["quiet quail"]) && sc.ban.log.length === 1 && sc.ban.log[0].actor_id === "p4" && sc.ban.log[0].detail?.name_banned === true
+      && sc.ban.reregister === "That name is not available",
+    `ban: ${J(sc.ban)}`);
+  check("decision 8 (D6): a league admin asking the server for a ban is refused, the account stays and nothing is banned (no client path sends one)",
+    sc.adminBan.error === "Only Global can ban a name" && sc.adminBan.intact && sc.adminBan.banned === 0,
+    `adminBan: ${J(sc.adminBan)}`);
+  check("decision 8 against the Stage W function (no has_played, no cleared_at): no Remove, no 'has played' note and no Clear all, with the pill exactly as before",
+    sc.oldSql.badge === "2" && !sc.oldSql.clearAll && sc.oldSql.rows.length === 4
+      && sc.oldSql.rows.every(x => x.played === null && J(x.buttons) === J(["Add"])),
+    `oldSql: ${J(sc.oldSql)}`);
+  check("decision 8: a quote and markup in a name survive the Remove button: the handler runs, the confirm shows the name as typed, the right id is sent, and the toast holds the name as text",
+    sc.quote.fired === "ran" && sc.quote.confirms[0]?.startsWith(`Remove ${sc.quote.name}'s account?`) && sc.quote.args[0]?.p_player_id === "n8"
+      && sc.quote.toast?.text === `${sc.quote.name} removed` && sc.quote.toast?.elements === 0,
+    `quote: ${J(sc.quote)}`);
+  check("decision 8 (D8): with no registration inside the window the list renders with no pill and no Clear all",
+    sc.unlit.anyBadge === 0 && !sc.unlit.clearAll && sc.unlit.rows.length === 3,
+    `unlit: ${J(sc.unlit)}`);
 
   return failures.length;
 }

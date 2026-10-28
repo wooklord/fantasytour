@@ -16,7 +16,7 @@ import {
   addCustomRule, checkRuleCap, resetMemberPin,
   onModeChange, addRankRow, renumberRanks, saveMasterSwitch,
   globalCreateLeague, globalSearchPlayers, globalAppointAdmin, globalResetPin,
-  saveLeagueConfig, setRosterFilter, clearSyncFlag,
+  saveLeagueConfig, setRosterFilter, clearSyncFlag, clearNewSignups, removeAccount,
 } from "./features/admin.js";
 
 // Functions referenced from inline HTML onclick/onchange attributes must live
@@ -29,7 +29,7 @@ Object.assign(window, {
   addCustomRule, checkRuleCap, resetMemberPin,
   onModeChange, addRankRow, renumberRanks, saveMasterSwitch,
   globalCreateLeague, globalSearchPlayers, globalAppointAdmin, globalResetPin,
-  saveLeagueConfig, setRosterFilter, clearSyncFlag,
+  saveLeagueConfig, setRosterFilter, clearSyncFlag, clearNewSignups, removeAccount,
   switchToBracket, switchToLeague,
   promptInstall, dismissInstall, toggleInstallHow, setInstallTips, dismissWelcome,
 });

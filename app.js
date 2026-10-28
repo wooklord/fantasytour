@@ -45,6 +45,7 @@
   var CARTON_SITE_BASE = "https://thecarton.net/setlists";
   var NAME_MAX_LEN = 20;
   var NEW_SIGNUP_DAYS = 14;
+  var SIGNUP_SNOOZE_DAYS = 7;
 
   // src/core/theme.js
   var sysLight = matchMedia("(prefers-color-scheme: light)");
@@ -263,8 +264,15 @@
     const t = Date.parse(createdAt != null ? createdAt : "");
     return Number.isFinite(t) && t >= nowMs - days * DAY_MS;
   }
-  function countRecent(rows, { nowMs, days, cap = 50 }) {
-    const n = (rows || []).filter((r) => isRecent(r == null ? void 0 : r.created_at, { nowMs, days })).length;
+  function isSnoozed(createdAt, clearedAt, { nowMs, snoozeDays }) {
+    const t = Date.parse(createdAt != null ? createdAt : ""), c = Date.parse(clearedAt != null ? clearedAt : "");
+    return Number.isFinite(t) && Number.isFinite(c) && t <= c && nowMs < c + snoozeDays * DAY_MS;
+  }
+  function isNew(row, { nowMs, days, snoozeDays }) {
+    return isRecent(row == null ? void 0 : row.created_at, { nowMs, days }) && !isSnoozed(row == null ? void 0 : row.created_at, row == null ? void 0 : row.cleared_at, { nowMs, snoozeDays });
+  }
+  function countRecent(rows, { nowMs, days, snoozeDays, cap = 50 }) {
+    const n = (rows || []).filter((r) => isNew(r, { nowMs, days, snoozeDays })).length;
     return { n, saturated: n >= cap };
   }
   var badgeText = ({ n, saturated }) => saturated ? `${n}+` : String(n);
@@ -324,8 +332,12 @@
     if (title) title.innerHTML = label + badge;
   }
   var badgeApplies = () => isCurrentLeagueAdmin();
+  var signupBadgeLit = () => {
+    var _a;
+    return badgeApplies() && !!((_a = state.newSignups) == null ? void 0 : _a.n);
+  };
   function setSignupRows(rows) {
-    state.newSignups = countRecent(rows, { nowMs: Date.now(), days: NEW_SIGNUP_DAYS });
+    state.newSignups = countRecent(rows, { nowMs: Date.now(), days: NEW_SIGNUP_DAYS, snoozeDays: SIGNUP_SNOOZE_DAYS });
     renderHeaderChrome();
   }
   async function refreshSignupBadge() {
@@ -340,7 +352,7 @@
   }
   function signupBadgeHtml() {
     const c = state.newSignups;
-    if (!badgeApplies() || !(c == null ? void 0 : c.n)) return "";
+    if (!signupBadgeLit()) return "";
     const text = badgeText(c);
     const what = `${text} new registration${c.n === 1 ? "" : "s"} in the last ${NEW_SIGNUP_DAYS} days, not in any league`;
     return ` <span class="tabbadge" role="img" aria-label="${what}" title="${what}">${text}</span>`;
@@ -1690,7 +1702,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"79883fa-56e0833"}</p>
+      <p class="colophon buildid">build ${"3686344-e319949"}</p>
     </div>
   </div>`;
   }
@@ -2182,14 +2194,15 @@ Relay this to them now \u2014 it will not be shown again.`);
       return;
     }
     setSignupRows(rows);
-    const recent = { nowMs: Date.now(), days: NEW_SIGNUP_DAYS };
+    const opts = { nowMs: Date.now(), days: NEW_SIGNUP_DAYS, snoozeDays: SIGNUP_SNOOZE_DAYS };
     const n = (rows || []).length;
     if (!n) {
       box.innerHTML = "";
       return;
     }
+    const canClear = rows.some((r) => r && "cleared_at" in r) && signupBadgeLit();
     box.innerHTML = `
-    <p class="muted" style="margin-top:14px;font-weight:600">Registered, not in any league (${n})</p>
+    <p class="muted" style="margin-top:14px;font-weight:600">Registered, not in any league (${n})${canClear ? ` <button class="btn ghost small" onclick="clearNewSignups()" title="Stop marking these as new for ${SIGNUP_SNOOZE_DAYS} days">Clear all</button>` : ""}</p>
     <p class="muted" style="font-size:.78rem">These people have accounts but no league.
       They may not have asked to join <b>this</b> one \u2014 add someone only if they
       contacted you.</p>
@@ -2197,9 +2210,34 @@ Relay this to them now \u2014 it will not be shown again.`);
       <div class="pickres signup-row">
         <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
         ${p.created_at ? `<span class="reg" title="Registered">${esc(fmtRegistered(p.created_at))}</span>` : ""}
-        ${isRecent(p.created_at, recent) ? '<span class="pill new-signup">new</span>' : ""}
-        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button></span>
+        ${isNew(p, opts) ? '<span class="pill new-signup">new</span>' : ""}
+        ${p.has_played === true ? '<span class="played" title="Has picks, scores, a season roster or an admin action, so it cannot be removed here">has played</span>' : ""}
+        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button>${p.has_played === false ? ` <button class="btn ghost small" onclick="removeAccount('${p.player_id}', ${jsArg(p.name)})" style="border-color:var(--coral);color:var(--coral)">Remove</button>` : ""}</span>
       </div>`).join("")}`;
+  }
+  async function clearNewSignups() {
+    try {
+      await rpc("admin_clear_new_signups", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId });
+      toast(`New sign-ups cleared for ${SIGNUP_SNOOZE_DAYS} days`, "score");
+    } catch (e) {
+      toast(esc(e.message));
+    }
+    loadUnaffiliated();
+  }
+  async function removeAccount(id, name) {
+    if (!confirm(`Remove ${name}'s account?
+
+They are in no league and have never played. The account is deleted and the name becomes free to register again. This can't be undone.`)) return;
+    const ban = !!state.session.is_global_admin && confirm(`Also block the name "${name}" app-wide?
+
+OK = remove + ban \xB7 Cancel = remove only`);
+    try {
+      const r = await rpc("admin_remove_unplayed_account", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_player_id: id, p_ban_name: ban });
+      toast(`${esc(name)} removed${(r == null ? void 0 : r.name_banned) ? " and banned" : ""}`, "score");
+    } catch (e) {
+      toast(esc(e.message));
+    }
+    loadUnaffiliated();
   }
   async function resetMemberPin(id, name) {
     if (!confirm(`Reset ${name}'s PIN? They'll be forced to set a new one on next login. Relay the new PIN to them directly \u2014 it can't be recovered after this.`)) return;
@@ -3082,6 +3120,8 @@ Switch anyway?`
     saveLeagueConfig,
     setRosterFilter,
     clearSyncFlag,
+    clearNewSignups,
+    removeAccount,
     switchToBracket,
     switchToLeague,
     promptInstall,

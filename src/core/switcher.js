@@ -3,7 +3,7 @@ import { db, rpc } from "./supabaseClient.js";
 import { state } from "./state.js";
 import { subscribeRealtime } from "./realtime.js";
 import { renderAll } from "./layout.js";
-import { NEW_SIGNUP_DAYS } from "./config.js";
+import { NEW_SIGNUP_DAYS, SIGNUP_SNOOZE_DAYS } from "./config.js";
 import { countRecent, badgeText } from "./signups.js";
 
 // Derived, not stored — avoids a second source of truth that could drift
@@ -88,9 +88,13 @@ export function renderHeaderChrome(){
 // them: loadUnaffiliated() on every admin-panel render (no extra call), or
 // refreshSignupBadge() where no admin panel renders. One shared gate, so
 // the fetch and the pill cannot disagree about who is an admin.
+// Decision 8: rows this admin cleared within SIGNUP_SNOOZE_DAYS don't count
+// (signups.js), and the list's "Clear all" shows exactly while the pill
+// does, through signupBadgeLit().
 const badgeApplies = () => isCurrentLeagueAdmin();
+export const signupBadgeLit = () => badgeApplies() && !!state.newSignups?.n;
 export function setSignupRows(rows){
-  state.newSignups = countRecent(rows, { nowMs: Date.now(), days: NEW_SIGNUP_DAYS });
+  state.newSignups = countRecent(rows, { nowMs: Date.now(), days: NEW_SIGNUP_DAYS, snoozeDays: SIGNUP_SNOOZE_DAYS });
   renderHeaderChrome();
 }
 // A failure keeps the last count: the badge is supplementary.
@@ -108,7 +112,7 @@ export function refreshSignupBadgeOutsidePanel(){
 }
 function signupBadgeHtml(){
   const c = state.newSignups;
-  if (!badgeApplies() || !c?.n) return "";
+  if (!signupBadgeLit()) return "";
   const text = badgeText(c);
   const what = `${text} new registration${c.n === 1 ? "" : "s"} in the last ${NEW_SIGNUP_DAYS} days, not in any league`;
   return ` <span class="tabbadge" role="img" aria-label="${what}" title="${what}">${text}</span>`;
