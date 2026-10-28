@@ -4,6 +4,7 @@
   --cream:#FFF3DC; --cream-dim:#CFC5AC; --ink:#2B2140; --ink-soft:#5A4E78;
   --line:#2E2660; --line2:#3A3170; --dash:#322A63;
   --chrome:rgba(16,12,38,.88);
+  --badge-ink:#100C26; /* theme-INVARIANT: the vet-first badge's text on --coral, never redefined for light */
   --glow1:#2A2058; --glow2:rgba(255,107,94,.10);
   color-scheme:dark;
   --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
@@ -654,6 +655,16 @@ html[data-theme="light"] .panel.live-halo{
 .installhow .ih-step:first-child{margin-top:0}
 .tips-switch{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:.9rem;cursor:pointer}
 .tips-switch input{width:18px;height:18px;accent-color:var(--yolk);margin:0}
+
+/* Vet-first fast path (docs/decisions/onboarding.md, decision 7). The badge
+   on the Admin tab and the desktop column title: --badge-ink on --coral is
+   6.82:1 dark and 4.69:1 light (AA for the small number), and the fill is
+   3.45:1 against the light chrome. The unaffiliated rows' date and "new"
+   mark keep full --cream, as Batch 3 does: --cream-dim is under AA on the
+   light panel. */
+.tabbadge{display:inline-block;min-width:1.5em;margin-left:5px;padding:0 5px;border-radius:999px;background:var(--coral);color:var(--badge-ink);font:700 .68rem/1.5 var(--mono);letter-spacing:0;text-transform:none;text-align:center;vertical-align:1px}
+.pickres.signup-row .reg{flex:none;font-family:var(--mono);font-size:.72rem;color:var(--cream)}
+.pill.new-signup{flex:none;border-color:var(--coral);color:var(--cream);font-size:.66rem;padding:1px 8px}
 
 /* ---------- settings / credits ---------- */
 .credits{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}

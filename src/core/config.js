@@ -31,3 +31,9 @@ export const CARTON_SITE_BASE = "https://thecarton.net/setlists";
 // this is NOT a maxlength on the shared login/register input: login must
 // still accept those names. Record: docs/decisions/standings-ux.md (4).
 export const NAME_MAX_LEN = 20;
+
+// Vet-first fast path (docs/decisions/onboarding.md, decision 7): the
+// Admin-tab badge counts players in no league who registered within this
+// many days. Long enough to span an admin who checks in weekly; short
+// enough that an account nobody vouches for stops lighting it on its own.
+export const NEW_SIGNUP_DAYS = 14;

@@ -5,7 +5,7 @@ import { renderAuth, renderForceChangePin } from "../features/auth.js";
 import { subscribeRealtime } from "./realtime.js";
 import { renderAll, applyLayout } from "./layout.js";
 import { APP_NAME } from "./config.js";
-import { loadConfig, resolveLeagues, renderHeaderChrome } from "./switcher.js";
+import { loadConfig, resolveLeagues, renderHeaderChrome, refreshSignupBadgeOutsidePanel } from "./switcher.js";
 import { communityBlockHtml, fetchLeagueLinks } from "./community.js";
 
 export { loadConfig };
@@ -178,6 +178,7 @@ export async function boot(){
     await Promise.all([loadConfig(), loadSongs()]);
     subscribeRealtime();
     await renderAll();
+    refreshSignupBadgeOutsidePanel(); // vet-first badge, on load (admins only)
   }catch(e){
     console.error(e);
     $("#main").innerHTML = `<div class="panel" style="margin-top:30px;border-color:var(--coral)">

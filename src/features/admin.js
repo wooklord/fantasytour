@@ -7,11 +7,12 @@ import { toast } from "../core/toast.js";
 import { loadConfig, loadSongs } from "../core/session.js";
 import { markTab } from "../core/layout.js";
 import { settingsPanelHtml, wireSettingsPanel } from "./settings.js";
-import { currentBracket } from "../core/switcher.js";
+import { currentBracket, setSignupRows } from "../core/switcher.js";
+import { isRecent } from "../core/signups.js";
 import { TIEBREAK_LABELS } from "../core/tiebreak.js";
 import { SLOT_LABELS, SLOT_TOOLTIPS, ONE_SET_EXCLUDED_TYPES, slotLabelFor } from "../core/slotTypes.js";
 import { venueLocalInputValue, venueLocalToUTC, venueLongName, hasDstTransition } from "../core/venueTime.js";
-import { RANKED_CHOICE_ENABLED } from "../core/config.js";
+import { RANKED_CHOICE_ENABLED, NEW_SIGNUP_DAYS } from "../core/config.js";
 import { slotDefs } from "./picks.js";
 
 // Seasons only ever belong to a league's Official bracket, and the season
@@ -577,6 +578,19 @@ export async function loadMembers(){
 // Failures render inline rather than throwing: this is a supplementary
 // panel, and a lookup failure here must not take down the member list above
 // it, which is the section's actual job.
+//
+// Stage W (onboarding.md decision 7, decision 2): the list comes newest
+// first, each row with its registration date and a "new" mark inside
+// NEW_SIGNUP_DAYS. These same rows set the Admin-tab badge, so the badge
+// and the marks on screen never disagree. Rows without created_at (the
+// pre-Stage-W function) render without a date and set no badge.
+const fmtRegistered = iso => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const opts = { month: "short", day: "numeric" };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString(undefined, opts);
+};
 export async function loadUnaffiliated(){
   const box = $("#unaffiliated");
   if (!box) return;
@@ -587,6 +601,8 @@ export async function loadUnaffiliated(){
     box.innerHTML = `<p class="err">Couldn't load registered players: ${esc(e.message)}</p>`;
     return;
   }
+  setSignupRows(rows);
+  const recent = { nowMs: Date.now(), days: NEW_SIGNUP_DAYS };
   const n = (rows||[]).length;
   if (!n){ box.innerHTML = ""; return; }
   box.innerHTML = `
@@ -595,8 +611,10 @@ export async function loadUnaffiliated(){
       They may not have asked to join <b>this</b> one — add someone only if they
       contacted you.</p>
     ${(rows||[]).map(p => `
-      <div class="pickres">
+      <div class="pickres signup-row">
         <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
+        ${p.created_at ? `<span class="reg" title="Registered">${esc(fmtRegistered(p.created_at))}</span>` : ""}
+        ${isRecent(p.created_at, recent) ? '<span class="pill new-signup">new</span>' : ""}
         <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g,"\\'")}')">Add</button></span>
       </div>`).join("")}`;
 }
@@ -626,12 +644,22 @@ export async function searchMembers(){
       </div>`).join("") || '<p class="muted">No matches.</p>';
   }catch(e){ $("#member-results").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
+// Stage W (onboarding.md decision 7, Part B): when an Official season is
+// running (its roster already snapshotted), the same call puts the new
+// member on that season's roster, and rostered_seasons names it. The toast
+// says so, which keeps the roster change an explicit admin action, and an
+// open "manage roster" panel is redrawn. The name is escaped because toast()
+// renders HTML and a registrant chooses their own name.
 export async function addMember(id, name){
   try{
-    await rpc("admin_add_league_member", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_player_id:id });
-    toast(`${name} added`, "score");
+    const r = await rpc("admin_add_league_member", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId, p_player_id:id });
+    const seasons = Array.isArray(r?.rostered_seasons) ? r.rostered_seasons.map(s => esc(s.name)) : [];
+    toast(seasons.length
+      ? `${esc(name)} added, and to the ${seasons.join(" and ")} roster${seasons.length > 1 ? "s" : ""}`
+      : `${esc(name)} added`, "score");
     $("#member-search").value = ""; $("#member-results").innerHTML = "";
     loadMembers();
+    for (const sid of Object.keys(rosterOpen)) if (rosterOpen[sid]) renderRosterPanel(Number(sid));
   }catch(e){ toast(esc(e.message)); }
 }
 // Stage S — LEAGUE-scoped, not bracket-scoped: the links belong to the

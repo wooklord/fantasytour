@@ -13,10 +13,14 @@
     // raw my_leagues() rows for this session
     currentLeagueId: null,
     currentBracketId: null,
-    allLeagues: []
+    allLeagues: [],
     // Global console only — the flat app-wide league list
     // (distinct from `leagues` above, which is scoped to
     // this session's own memberships)
+    newSignups: null
+    // vet-first badge: countRecent()'s {n, saturated};
+    // null until fetched, and only ever fetched for
+    // an admin (core/switcher.js)
   };
 
   // src/core/dom.js
@@ -39,6 +43,7 @@
   var THEME_COLOR_DARK = "#171233";
   var CARTON_SITE_BASE = "https://thecarton.net/setlists";
   var NAME_MAX_LEN = 20;
+  var NEW_SIGNUP_DAYS = 14;
 
   // src/core/theme.js
   var sysLight = matchMedia("(prefers-color-scheme: light)");
@@ -251,6 +256,18 @@
     return s.status === "live" ? "live" : "locked";
   }
 
+  // src/core/signups.js
+  var DAY_MS = 864e5;
+  function isRecent(createdAt, { nowMs, days }) {
+    const t = Date.parse(createdAt != null ? createdAt : "");
+    return Number.isFinite(t) && t >= nowMs - days * DAY_MS;
+  }
+  function countRecent(rows, { nowMs, days, cap = 50 }) {
+    const n = (rows || []).filter((r) => isRecent(r == null ? void 0 : r.created_at, { nowMs, days })).length;
+    return { n, saturated: n >= cap };
+  }
+  var badgeText = ({ n, saturated }) => saturated ? `${n}+` : String(n);
+
   // src/core/switcher.js
   var currentBracket = () => state.leagues.find((l) => l.bracket_id === state.currentBracketId);
   var isCurrentLeagueAdmin = () => {
@@ -301,8 +318,31 @@
     const admintab = document.getElementById("admintab");
     const title = document.getElementById("col-admin-title");
     const label = isCurrentLeagueAdmin() ? "Admin" : "Settings";
-    if (admintab) admintab.textContent = label;
-    if (title) title.textContent = label;
+    const badge = signupBadgeHtml();
+    if (admintab) admintab.innerHTML = label + badge;
+    if (title) title.innerHTML = label + badge;
+  }
+  var badgeApplies = () => isCurrentLeagueAdmin();
+  function setSignupRows(rows) {
+    state.newSignups = countRecent(rows, { nowMs: Date.now(), days: NEW_SIGNUP_DAYS });
+    renderHeaderChrome();
+  }
+  async function refreshSignupBadge() {
+    if (!badgeApplies()) return;
+    try {
+      setSignupRows(await rpc("admin_list_unaffiliated_players", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId }));
+    } catch {
+    }
+  }
+  function refreshSignupBadgeOutsidePanel() {
+    if (!isDesktop() && state.tab !== "admin") refreshSignupBadge();
+  }
+  function signupBadgeHtml() {
+    const c = state.newSignups;
+    if (!badgeApplies() || !(c == null ? void 0 : c.n)) return "";
+    const text = badgeText(c);
+    const what = `${text} new registration${c.n === 1 ? "" : "s"} in the last ${NEW_SIGNUP_DAYS} days, not in any league`;
+    return ` <span class="tabbadge" role="img" aria-label="${what}" title="${what}">${text}</span>`;
   }
   function renderBracketToggle() {
     const el = document.getElementById("bracketToggle");
@@ -338,6 +378,7 @@
     subscribeRealtime();
     renderHeaderChrome();
     await renderAll();
+    refreshSignupBadgeOutsidePanel();
   }
   async function switchToLeague(leagueId) {
     var _a;
@@ -1648,7 +1689,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"5179756-416d858"}</p>
+      <p class="colophon buildid">build ${"8624351-eaeb74f"}</p>
     </div>
   </div>`;
   }
@@ -2122,6 +2163,13 @@ Relay this to them now \u2014 it will not be shown again.`);
     </div>`).join("") || '<p class="muted">Nobody here yet.</p>';
     loadUnaffiliated();
   }
+  var fmtRegistered = (iso) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const opts = { month: "short", day: "numeric" };
+    if (d.getFullYear() !== (/* @__PURE__ */ new Date()).getFullYear()) opts.year = "numeric";
+    return d.toLocaleDateString(void 0, opts);
+  };
   async function loadUnaffiliated() {
     const box = $("#unaffiliated");
     if (!box) return;
@@ -2132,6 +2180,8 @@ Relay this to them now \u2014 it will not be shown again.`);
       box.innerHTML = `<p class="err">Couldn't load registered players: ${esc(e.message)}</p>`;
       return;
     }
+    setSignupRows(rows);
+    const recent = { nowMs: Date.now(), days: NEW_SIGNUP_DAYS };
     const n = (rows || []).length;
     if (!n) {
       box.innerHTML = "";
@@ -2143,8 +2193,10 @@ Relay this to them now \u2014 it will not be shown again.`);
       They may not have asked to join <b>this</b> one \u2014 add someone only if they
       contacted you.</p>
     ${(rows || []).map((p) => `
-      <div class="pickres">
+      <div class="pickres signup-row">
         <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
+        ${p.created_at ? `<span class="reg" title="Registered">${esc(fmtRegistered(p.created_at))}</span>` : ""}
+        ${isRecent(p.created_at, recent) ? '<span class="pill new-signup">new</span>' : ""}
         <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', '${esc(p.name).replace(/'/g, "\\'")}')">Add</button></span>
       </div>`).join("")}`;
   }
@@ -2178,11 +2230,13 @@ Relay this to them now \u2014 it will not be shown again.`);
   }
   async function addMember(id, name) {
     try {
-      await rpc("admin_add_league_member", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_player_id: id });
-      toast(`${name} added`, "score");
+      const r = await rpc("admin_add_league_member", { p_name: state.session.name, p_pin: state.session.pin, p_league_id: state.currentLeagueId, p_player_id: id });
+      const seasons = Array.isArray(r == null ? void 0 : r.rostered_seasons) ? r.rostered_seasons.map((s) => esc(s.name)) : [];
+      toast(seasons.length ? `${esc(name)} added, and to the ${seasons.join(" and ")} roster${seasons.length > 1 ? "s" : ""}` : `${esc(name)} added`, "score");
       $("#member-search").value = "";
       $("#member-results").innerHTML = "";
       loadMembers();
+      for (const sid of Object.keys(rosterOpen)) if (rosterOpen[sid]) renderRosterPanel(Number(sid));
     } catch (e) {
       toast(esc(e.message));
     }
@@ -2839,20 +2893,24 @@ Switch anyway?`
     if (!visListenerAttached) {
       visListenerAttached = true;
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible" && state.session) refreshCurrent();
+        if (document.visibilityState !== "visible" || !state.session) return;
+        if (!refreshCurrent()) refreshSignupBadge();
       });
     }
   }
   function refreshCurrent() {
-    if (state.tab === "shows" && state.currentShow && showState(state.currentShow) === "open") return;
+    if (state.tab === "shows" && state.currentShow && showState(state.currentShow) === "open") return false;
     if (isDesktop()) {
       renderAll();
-      return;
+      return true;
     }
     if (state.tab === "board") renderBoard();
-    else if (state.tab === "admin") renderAdminOrSettings();
-    else if (state.currentShow) openShow(state.currentShow.id);
+    else if (state.tab === "admin") {
+      renderAdminOrSettings();
+      return true;
+    } else if (state.currentShow) openShow(state.currentShow.id);
     else renderShows();
+    return false;
   }
 
   // src/core/session.js
@@ -2963,6 +3021,7 @@ Switch anyway?`
       await Promise.all([loadConfig(), loadSongs()]);
       subscribeRealtime();
       await renderAll();
+      refreshSignupBadgeOutsidePanel();
     } catch (e) {
       console.error(e);
       $("#main").innerHTML = `<div class="panel" style="margin-top:30px;border-color:var(--coral)">

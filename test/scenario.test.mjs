@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario, runVetFirstScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -1422,6 +1422,48 @@ async function runMode(mode){
         && block.length > 200 && !/var\(--cream-dim\)/.test(block) && /#install-bar:empty\{display:none\}/.test(cssSrc),
       `block length ${block.length}`);
   }
+
+  // ---------- Vet-first fast path (docs/decisions/onboarding.md, decision 7) ----------
+  const vf = await runVetFirstScenario({ html, scripts, mode });
+  const vfNames = r => J(r.rows.map(x => x.name)), vfMarks = r => J(r.rows.map(x => x.isNew));
+  const hasToast = (list, text) => list.some(t => t.text === text);
+  check("load: an admin on the shows tab sees the pill on the Admin tab AND the desktop column title, counting only the two registrations inside 14 days, from exactly ONE list call",
+    vf.boot.tabBadge?.text === "2" && vf.boot.colBadge?.text === "2"
+      && vf.boot.tabBadge?.label === "2 new registrations in the last 14 days, not in any league" && vf.boot.calls === 1,
+    `boot: ${J({ tab: vf.boot.tabBadge, col: vf.boot.colBadge, calls: vf.boot.calls })}`);
+  check("admin-panel render (decision 2): the unaffiliated list newest first, every row dated, 'new' only inside the window; the panel's own call is the only one",
+    vfNames(vf.panel) === J(["Fresh Fern", "Early Elm", "Old Oak", "Wanderer"]) && vfMarks(vf.panel) === J([true, true, false, false])
+      && vf.panel.rows.every(r => r.reg) && vf.panel.calls === 1 && vf.panel.tabBadge?.text === "2",
+    `panel: ${J({ rows: vf.panel.rows, calls: vf.panel.calls, badge: vf.panel.tabBadge })}`);
+  check("Add from the list drops the count at once (the list reload sets the badge); no season running, so no roster row and a plain toast",
+    vf.addedOk && vf.afterAdd.tabBadge?.text === "1" && vf.afterAddRoster.length === 0 && hasToast(vf.afterAdd.toasts, "Fresh Fern added"),
+    `afterAdd: ${J({ ok: vf.addedOk, badge: vf.afterAdd.tabBadge, roster: vf.afterAddRoster, toasts: vf.afterAdd.toasts })}`);
+  check("foreground (decision 3): exactly ONE list call on the shows tab, on the admin tab, and over an open pick sheet (left on screen), each picking up a registration made meanwhile",
+    vf.fgShows.calls === 1 && vf.fgShows.badge?.text === "3" && vf.fgAdmin.calls === 1 && vf.fgAdmin.badge?.text === "3"
+      && vf.fgSheet.calls === 1 && vf.fgSheet.badge?.text === "3" && vf.fgSheet.sheet,
+    `fg: ${J({ shows: vf.fgShows, admin: vf.fgAdmin, sheet: vf.fgSheet })}`);
+  check("empty case: nobody inside the window → no pill anywhere and the label reads exactly 'Admin' (the list is still fetched once)",
+    vf.empty.anyBadge === 0 && vf.empty.tab === "Admin" && vf.empty.calls === 1,
+    `empty: ${J({ any: vf.empty.anyBadge, tab: vf.empty.tab, calls: vf.empty.calls })}`);
+  check("a non-admin never sees the pill and the client never calls the admin list: on load, on the Settings tab, after a foreground there, and after a foreground over an open pick sheet (the one path that reaches the gate on desktop)",
+    vf.nonAdmin.boot.tab === "Settings" && vf.nonAdmin.boot.anyBadge === 0 && vf.nonAdmin.settings.anyBadge === 0
+      && vf.nonAdmin.after.anyBadge === 0 && vf.nonAdmin.overSheet.sheet && vf.nonAdmin.overSheet.anyBadge === 0 && vf.nonAdmin.calls === 0,
+    `nonAdmin: ${J({ tab: vf.nonAdmin.boot.tab, any: [vf.nonAdmin.boot.anyBadge, vf.nonAdmin.settings.anyBadge, vf.nonAdmin.after.anyBadge, vf.nonAdmin.overSheet.anyBadge], sheet: vf.nonAdmin.overSheet.sheet, calls: vf.nonAdmin.calls })}`);
+  check("the cap: 55 registrations inside the window come back as 50, and the pill says '50+'",
+    vf.cap.tabBadge?.text === "50+",
+    `cap: ${J(vf.cap.tabBadge)}`);
+  check("deploy order: against the pre-Stage-W function (no created_at) there is no pill, and the list still renders, undated and unmarked",
+    vf.oldSql.boot.anyBadge === 0 && vf.oldSql.panel.rows.length === 4 && vf.oldSql.panel.rows.every(r => r.reg === null && !r.isNew),
+    `oldSql: ${J({ any: vf.oldSql.boot.anyBadge, rows: vf.oldSql.panel.rows })}`);
+  check("mid-season add (Part B): exactly one roster row, in the running season (not the ended or the not-yet-snapshotted one), stamped at add time; the toast names it; the open roster panel redraws with the new member on it",
+    J(vf.mid.roster) === J([{ season_id: 601, stamped: true }]) && hasToast(vf.mid.toasts, "Fresh Fern added, and to the Fall Run roster") && vf.mid.panelHit,
+    `mid: ${J(vf.mid)}`);
+  check("no running season (only ended or not-yet-snapshotted ones): the add writes no roster row and the toast is plain",
+    vf.noActive.roster.length === 0 && hasToast(vf.noActive.toasts, "Fresh Fern added") && !vf.noActive.toasts.some(t => /roster/.test(t.text)),
+    `noActive: ${J(vf.noActive)}`);
+  check("the Add toast escapes the registrant's name (toast() renders HTML; a registrant picks their own name)",
+    vf.escaped.some(t => t.text === "<b>Bold</b> added" && t.bold === false),
+    `escaped: ${J(vf.escaped)}`);
 
   return failures.length;
 }

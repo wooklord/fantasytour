@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD)
+## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first BUILT and awaiting Stage W)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -29,7 +29,9 @@ device checks listed there still open; install-help fixes from the dev's
 live device checks AMENDED the same day (end of item 3 below). **Batch 4
 (join codes) is HELD as of 2026-10-27** (decision 7 below). Its replacement,
 the "vet-first fast path" batch, has its plan APPROVED 2026-10-27 (decision 7)
-and is being built.
+and was BUILT the same day: committed locally, NOT pushed, because Stage W
+(`sql/stage_w_vet_first_fast_path.sql`) must be applied and verified in
+Supabase first (decision 7, "BUILT 2026-10-27").
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -502,6 +504,84 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
        - the roster add skipped, run against the fake only. That proves the
          checks read the roster, not that the SQL writes it; the smoke test
          is the SQL proof.
+
+     **BUILT 2026-10-27, committed locally, NOT pushed.** The client reads
+     `created_at`, so the push waits until Stage W is applied and verified
+     (deploy order above). Bundle `8624351-eaeb74f`.
+     - **Files:**
+       - **SQL:** `sql/stage_w_vet_first_fast_path.sql`. Its footer is one
+         block comment, so pasting the whole file runs only `begin … commit`.
+         The footer holds three steps:
+         - **STEP 0,** the read-only pre-apply check. It quotes the
+           whitespace-collapsed md5 that each live body has if it matches
+           `stage_n` / `stage_q`.
+         - **STEP 2A,** the same query after the apply, with Stage W's md5s.
+         - **STEP 2B,** the smoke test: 14 checks. It always raises, so it
+           rolls itself back; its only trace is a few skipped identity
+           numbers.
+       - **Client:**
+         - `src/core/signups.js` (new, pure);
+         - `config.js` (`NEW_SIGNUP_DAYS`) and `state.js` (`newSignups`);
+         - `switcher.js`: the badge and its one gate, `badgeApplies()`;
+         - `session.js`: load;
+         - `realtime.js`: foreground. `refreshCurrent()` now returns
+           whether its redraw already takes care of the badge.
+         - `admin.js`: list dates and marks, the season-naming toast, and
+           the roster-panel redraw;
+         - `styles.css`.
+       - **Tests:**
+         - `test/signups.test.mjs` and `test/stageW.test.mjs` (new, wired
+           into `npm test`);
+         - the `harness.mjs` fakes and the scenario.
+     - **One list call per load or foreground, verified by count.** Where
+       the admin panel renders (desktop always, or the phone's admin tab),
+       its own call sets the badge; otherwise the badge makes the call.
+     - **Tests:** the full suite passes in both modes.
+       - `signups.test.mjs`: 10 checks.
+       - `stageW.test.mjs`: 4 checks. It recomputes every md5 quoted in the
+         footer from the SQL files, so a body edited without its md5 fails.
+       - The scenario: 11 vet-first checks per mode, invented names only.
+     - **Mutations: both caught.** Each was reverted, then confirmed with
+       `cmp` against a backup, and the rebuilt bundle was byte-identical.
+       - **The badge shown to a non-admin** (`badgeApplies` changed to any
+         session):
+         - The first run caught it on the phone only. On desktop the gate
+           was never reached in that case: a non-admin has no admin column,
+           and a foreground redraws through `renderAll`.
+         - The one desktop path that reaches it is a foreground over an
+           open pick sheet, which skips the redraw.
+         - The non-admin case now opens one (from the Shows tab, as a phone
+           does) and requires the sheet to be up.
+         - Rerun: caught in both modes.
+       - **The roster add skipped, in the fake:** caught in both modes.
+         All three legs failed together: no row, a plain toast, no panel
+         redraw. So the toast and the panel follow the server's answer.
+     - **Contrast:** `--badge-ink` (theme-invariant) on `--coral` is 6.82:1
+       dark and 4.69:1 light; the fill is 3.45:1 against the light chrome.
+     - **Found while building, NOT FIXED (the dev's call): unescaped names
+       in admin toasts.** `toast()` renders HTML, and registration limits a
+       name only by length (2–20 characters, `stage_t`), not by character,
+       so a registrant can put markup in a name.
+       - **Fixed in this batch:** `addMember`'s toast escapes the name, with
+         a test.
+       - **Still raw,** in `src/features/admin.js`:
+         - line 158, appointed league admin (Global console);
+         - line 816, unbanned;
+         - line 867, removed or banned.
+       - Line 129 (league created) shows only the Global admin's own input.
+       - Only `admin.js` was checked. The fix is `esc(name)` at each site.
+       - **Weight:** real, because an admin's browser holds their PIN in
+         `ft_session` (gate #2). Limited, because 20 characters leave little
+         room for a payload. Names from before Stage T are uncapped.
+     - **Still open:**
+       1. The dev applies Stage W: STEP 0 first, then the file, then STEP 2A
+          and STEP 2B.
+       2. Push, and confirm the live build id.
+       3. Device checks:
+          - the pill on the phone's Admin tab and the desktop column title;
+          - the dated list;
+          - a mid-season add's toast, the next time an Official season is
+            running.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 

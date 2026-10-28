@@ -206,7 +206,27 @@ const RPC_HANDLERS = {
       .filter(p => p.name.toLowerCase().startsWith(q) && !memberIds.has(p.id))
       .map(p => ({ player_id: p.id, name: p.name }));
   },
-  admin_add_league_member: async () => ({ ok: true }),
+  // Mirrors Stage W's admin_add_league_member (sql/stage_w_vet_first_fast_path.sql):
+  // the membership insert (on conflict do nothing; official_opt_in from the
+  // column default, true since Stage F), then, ONLY when this call created
+  // the membership and it is opted in, a roster row in every season of the
+  // league's Official bracket that has taken its snapshot and has not ended
+  // (Eastern today). rostered_seasons reports the active seasons that have
+  // the player on the roster AFTER the call. No auth or ban modelling, like
+  // the other fakes; the SQL itself is proven by Stage W's smoke test.
+  admin_add_league_member: async ({ p_league_id, p_player_id }, tables) => {
+    const created = !tables.league_members.some(lm => lm.league_id === p_league_id && lm.player_id === p_player_id);
+    if (created) tables.league_members.push({ league_id: p_league_id, player_id: p_player_id, is_league_admin: false, official_opt_in: true });
+    const optedIn = tables.league_members.find(lm => lm.league_id === p_league_id && lm.player_id === p_player_id).official_opt_in;
+    const today = new Intl.DateTimeFormat("sv", { timeZone: "America/New_York" }).format(new Date());
+    const official = (tables.brackets || []).find(b => b.league_id === p_league_id && b.kind === "official");
+    const active = (tables.seasons || []).filter(s => official && s.bracket_id === official.id && s.roster_locked_at != null && s.end_date >= today);
+    const onRoster = s => tables.season_rosters.some(r => r.season_id === s.id && r.player_id === p_player_id);
+    if (created && optedIn) for (const s of active) if (!onRoster(s))
+      tables.season_rosters.push({ season_id: s.id, player_id: p_player_id, added_at: new Date().toISOString() });
+    const rostered = active.filter(onRoster).sort((a, b) => a.start_date.localeCompare(b.start_date) || a.id - b.id);
+    return { ok: true, rostered_seasons: rostered.map(s => ({ id: s.id, name: s.name })) };
+  },
   admin_list_season_roster: async ({ p_season_id }, tables) =>
     tables.season_rosters.filter(sr => sr.season_id === p_season_id),
   admin_set_season_roster: async () => ({ ok: true }),
@@ -214,10 +234,14 @@ const RPC_HANDLERS = {
   // point of the RPC and is deliberately UNSCOPED ("in no league"), not
   // "not in this league" the way admin_find_players is. A stub returning a
   // fixed list would pass whichever predicate the frontend used.
+  // Stage W: created_at returned, newest first (then name), capped at 50,
+  // so the cap drops the OLDEST rows, as the SQL does.
   admin_list_unaffiliated_players: async (_args, tables) =>
     (tables.players_public || [])
       .filter(p => !(tables.league_members || []).some(lm => lm.player_id === p.id))
-      .map(p => ({ player_id: p.id, name: p.name })),
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || a.name.localeCompare(b.name))
+      .slice(0, 50)
+      .map(p => ({ player_id: p.id, name: p.name, created_at: p.created_at })),
   // Standings-facing counterpart to admin_list_season_roster — same
   // underlying table, membership-gated rather than admin-gated in real SQL,
   // but the fake doesn't model auth failures, only the real join.
@@ -1097,9 +1121,8 @@ export async function runUnaffiliatedScenario({ html, scripts, mode }){
   const listed = { html: box()?.innerHTML || "" };
 
   // Adding one must re-fetch, so the row disappears without a manual reload.
-  // The fake admin_add_league_member does not mutate tables, so mutate here
-  // to model the server write the real RPC performs.
-  tables.league_members.push({ league_id: 1, player_id: "p3", is_league_admin: false, official_opt_in: true });
+  // The fake admin_add_league_member writes the membership itself now
+  // (Stage W mirror), the server write the real RPC performs.
   await window.addMember("p3", "Wanderer");
   await tick(); await tick(); await tick();
   const afterAdd = { html: box()?.innerHTML || "" };
@@ -2874,5 +2897,182 @@ export async function runOnboardingScenario({ html, scripts, mode }){
   out.relatedEmpty.settings = empty.read();
   out.relatedEmpty.picks = (await load({ who: "p1", relatedApps: [] })).read();
   out.relatedThrow = { shows: (await load({ who: "p2", relatedApps: "throw" })).read(), picks: (await load({ who: "p1", relatedApps: "throw" })).read() };
+  return out;
+}
+
+// ---------- Vet-first fast path (docs/decisions/onboarding.md, decision 7) ----------
+// The Admin-tab badge for recent registrations, the newest-first list with
+// its dates and "new" marks, the one-call refresh rule (load, admin-panel
+// render, foreground), and the mid-season roster add, all through the fakes
+// above, which mirror Stage W. The SQL itself is proven by Stage W's smoke
+// test, not here. Invented names only (CLAUDE.md: no real nicknames).
+export async function runVetFirstScenario({ html, scripts, mode }){
+  const DAY = 864e5;
+  const ago = days => new Date(Date.now() - days * DAY).toISOString();
+  const eastern = days => new Intl.DateTimeFormat("sv", { timeZone: "America/New_York" }).format(new Date(Date.now() + days * DAY));
+  const RECENT = [
+    { id: "n1", name: "Fresh Fern", created_at: ago(1) },
+    { id: "n2", name: "Early Elm", created_at: ago(13) },
+  ];
+  const OLD = [{ id: "n3", name: "Old Oak", created_at: ago(20) }];
+  // Official seasons: one running and snapshotted, one ended yesterday, one
+  // started but not yet snapshotted. Only the first may take a new member.
+  const SEASONS = ids => [
+    { id: 601, bracket_id: ids.OFFICIAL_ID, name: "Fall Run", start_date: eastern(-10), end_date: eastern(10), roster_locked_at: ago(10) },
+    { id: 602, bracket_id: ids.OFFICIAL_ID, name: "Spring Run", start_date: eastern(-90), end_date: eastern(-1), roster_locked_at: ago(90) },
+    { id: 603, bracket_id: ids.OFFICIAL_ID, name: "Next Run", start_date: eastern(-1), end_date: eastern(40), roster_locked_at: null },
+  ];
+  async function load({ who = "p1", players = [...RECENT, ...OLD], seasons = null } = {}){
+    const { tables, ids } = makeFixtures();
+    tables.players_public.push(...players.map(p => ({ ...p })));
+    if (seasons) tables.seasons.push(...seasons(ids));
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+    // The fake my_leagues resolves the player by NAME, so the session uses
+    // the fixture's own row (p1 is a league admin, p2 is not), read at run
+    // time rather than written out here.
+    const me = tables.players_public.find(p => p.id === who);
+    w.localStorage.setItem("ft_session", JSON.stringify({ id: who, name: me.name, pin: "1234", is_global_admin: false }));
+    w.localStorage.setItem("ft_bracket_id", String(ids.CASUAL_ID));
+    for (const src of scripts) w.eval(src);
+    const d = w.document;
+    const settle = async () => { for (let i = 0; i < 8; i++) await tick(); };
+    await settle();
+    const listCalls = () => calls.filter(c => c.type === "rpc" && c.fn === "admin_list_unaffiliated_players").length;
+    const pill = el => { const b = el?.querySelector(".tabbadge"); return b ? { text: b.textContent, label: b.getAttribute("aria-label") } : null; };
+    const read = () => ({
+      tab: d.getElementById("admintab")?.textContent ?? null,
+      tabBadge: pill(d.getElementById("admintab")),
+      colBadge: pill(d.getElementById("col-admin-title")),
+      anyBadge: d.querySelectorAll(".tabbadge").length,
+      rows: [...d.querySelectorAll("#unaffiliated .signup-row")].map(r => ({
+        name: r.querySelector(".nm")?.textContent ?? null,
+        reg: r.querySelector(".reg")?.textContent ?? null,
+        isNew: !!r.querySelector(".new-signup"),
+      })),
+      toasts: [...d.querySelectorAll("#toasts .toast")].map(t => ({ text: t.textContent, bold: !!t.querySelector("b") })),
+    });
+    // Runs an onclick attribute the way a browser does (see fire() in
+    // runOnboardingScenario): the attribute is the wiring under test.
+    const fire = el => { const code = el?.getAttribute("onclick"); if (!code) return false; new w.Function(code).call(el); return true; };
+    const addFromList = async name => {
+      const row = [...d.querySelectorAll("#unaffiliated .signup-row")].find(r => r.querySelector(".nm")?.textContent === name);
+      const ok = fire(row?.querySelector("button"));
+      await settle();
+      return ok;
+    };
+    const adminTab = async () => { clickTab(w, "admin"); await settle(); };
+    const foreground = async () => {
+      const before = listCalls();
+      d.dispatchEvent(new w.Event("visibilitychange"));
+      await settle();
+      return listCalls() - before;
+    };
+    return { w, d, tables, read, listCalls, adminTab, foreground, addFromList, settle };
+  }
+  const out = {};
+  const BIRCH = { id: "n9", name: "Brand New Birch", created_at: ago(0.01) };
+
+  // 1. Load: an admin on the shows tab gets the pill on the tab AND the
+  //    column title, from exactly one list call.
+  const a = await load();
+  out.boot = { ...a.read(), calls: a.listCalls() };
+  // 2. Admin-panel render: newest first, dated, "new" inside the window; the
+  //    panel's own call is the only one.
+  const before = a.listCalls();
+  await a.adminTab();
+  out.panel = { ...a.read(), calls: a.listCalls() - before };
+  // 3. Adding a recent registrant drops the count at once; no season is
+  //    running in the base fixture, so no roster row and a plain toast.
+  out.addedOk = await a.addFromList("Fresh Fern");
+  out.afterAdd = a.read();
+  out.afterAddRoster = a.tables.season_rosters.filter(r => r.player_id === "n1");
+
+  // 4. Foreground: exactly one list call on the shows tab, on the admin tab,
+  //    and over an open pick sheet (which is never redrawn), and each picks
+  //    up a registration made while the app was in the background.
+  const f1 = await load();
+  f1.tables.players_public.push({ ...BIRCH });
+  out.fgShows = { calls: await f1.foreground(), badge: f1.read().tabBadge };
+  const f2 = await load();
+  await f2.adminTab();
+  f2.tables.players_public.push({ ...BIRCH });
+  out.fgAdmin = { calls: await f2.foreground(), badge: f2.read().tabBadge };
+  const f3 = await load();
+  f3.w.openShow(1);
+  await f3.settle();
+  f3.tables.players_public.push({ ...BIRCH });
+  out.fgSheet = { calls: await f3.foreground(), badge: f3.read().tabBadge, sheet: !!f3.d.getElementById("save") };
+
+  // 5. Empty case: nobody inside the window, so no pill anywhere.
+  const e = await load({ players: OLD });
+  out.empty = { ...e.read(), calls: e.listCalls() };
+
+  // 6. A non-admin: no pill and no list call, on load, on the Settings tab,
+  //    or on a foreground, from the Settings tab and over an open pick sheet.
+  //    The sheet case matters on desktop: it is the only path there that
+  //    reaches the badge gate, since every other foreground redraws through
+  //    renderAll and the non-admin has no admin column.
+  const n = await load({ who: "p2" });
+  out.nonAdmin = { boot: n.read() };
+  await n.adminTab();
+  out.nonAdmin.settings = n.read();
+  await n.foreground();
+  out.nonAdmin.after = n.read();
+  clickTab(n.w, "shows"); // a phone opens a sheet from the Shows tab
+  await n.settle();
+  n.w.openShow(1);
+  await n.settle();
+  await n.foreground();
+  out.nonAdmin.overSheet = { ...n.read(), sheet: !!n.d.getElementById("save") };
+  out.nonAdmin.calls = n.listCalls();
+
+  // 7. The cap: 55 registrations inside the window come back as 50.
+  const many = Array.from({ length: 55 }, (_, i) => ({ id: `m${i}`, name: `Many ${String(i).padStart(2, "0")}`, created_at: ago(0.5 + i * 0.1) }));
+  out.cap = (await load({ players: many })).read();
+
+  // 8. The pre-Stage-W function (no created_at): no pill; the list still
+  //    renders, undated and unmarked.
+  const orig = RPC_HANDLERS.admin_list_unaffiliated_players;
+  RPC_HANDLERS.admin_list_unaffiliated_players = async (args, tables) => (await orig(args, tables)).map(({ created_at, ...rest }) => rest);
+  try {
+    const o = await load();
+    out.oldSql = { boot: o.read() };
+    await o.adminTab();
+    out.oldSql.panel = o.read();
+  } finally { RPC_HANDLERS.admin_list_unaffiliated_players = orig; }
+
+  // 9. Mid-season add: one roster row, in the running season only, stamped
+  //    at add time; the toast names the season; an open roster panel
+  //    redraws with the new member on it.
+  const m = await load({ seasons: SEASONS });
+  await m.adminTab();
+  m.w.toggleRoster(601);
+  await m.settle();
+  const t0 = Date.now();
+  out.midAdded = await m.addFromList("Fresh Fern");
+  const t1 = Date.now();
+  const panelRow = [...m.d.querySelectorAll("#roster-panel-601 .pickres")].find(r => r.querySelector(".nm")?.textContent === "Fresh Fern");
+  out.mid = {
+    roster: m.tables.season_rosters.filter(r => r.player_id === "n1")
+      .map(r => ({ season_id: r.season_id, stamped: Date.parse(r.added_at) >= t0 && Date.parse(r.added_at) <= t1 })),
+    toasts: m.read().toasts,
+    panelHit: !!panelRow && panelRow.classList.contains("hit"),
+  };
+
+  // 10. No running season (only ended or not-yet-snapshotted ones): no
+  //     roster row and a plain toast.
+  const q = await load({ seasons: ids => SEASONS(ids).filter(s => s.id !== 601) });
+  await q.adminTab();
+  await q.addFromList("Fresh Fern");
+  out.noActive = { roster: q.tables.season_rosters.filter(r => r.player_id === "n1"), toasts: q.read().toasts };
+
+  // 11. The Add toast escapes a registrant's name: toast() renders HTML.
+  const x = await load({ players: [{ id: "x1", name: "<b>Bold</b>", created_at: ago(1) }] });
+  await x.adminTab();
+  await x.addFromList("<b>Bold</b>");
+  out.escaped = x.read().toasts;
   return out;
 }

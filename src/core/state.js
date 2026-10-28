@@ -17,4 +17,7 @@ export const state = {
   allLeagues: [],        // Global console only — the flat app-wide league list
                           // (distinct from `leagues` above, which is scoped to
                           // this session's own memberships)
+  newSignups: null,      // vet-first badge: countRecent()'s {n, saturated};
+                          // null until fetched, and only ever fetched for
+                          // an admin (core/switcher.js)
 };

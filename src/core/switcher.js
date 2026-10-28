@@ -1,8 +1,10 @@
-import { $, esc } from "./dom.js";
+import { $, esc, isDesktop } from "./dom.js";
 import { db, rpc } from "./supabaseClient.js";
 import { state } from "./state.js";
 import { subscribeRealtime } from "./realtime.js";
 import { renderAll } from "./layout.js";
+import { NEW_SIGNUP_DAYS } from "./config.js";
+import { countRecent, badgeText } from "./signups.js";
 
 // Derived, not stored — avoids a second source of truth that could drift
 // from state.leagues after a switch.
@@ -71,8 +73,45 @@ export function renderHeaderChrome(){
   const admintab = document.getElementById("admintab");
   const title = document.getElementById("col-admin-title");
   const label = isCurrentLeagueAdmin() ? "Admin" : "Settings";
-  if (admintab) admintab.textContent = label;
-  if (title) title.textContent = label;
+  // innerHTML, for the badge: the label is a fixed string and the badge is
+  // built from numbers and a constant, so nothing a player typed lands here.
+  const badge = signupBadgeHtml();
+  if (admintab) admintab.innerHTML = label + badge;
+  if (title) title.innerHTML = label + badge;
+}
+
+// ---------- vet-first badge (docs/decisions/onboarding.md, decision 7, Part A) ----------
+// How many players in no league registered in the last NEW_SIGNUP_DAYS days,
+// as a pill on the Admin tab and the desktop column title. Admins only, both
+// ways: a non-admin never sees the pill, and the client never calls the
+// admin-gated list for one. The rows come from whichever caller fetched
+// them: loadUnaffiliated() on every admin-panel render (no extra call), or
+// refreshSignupBadge() where no admin panel renders. One shared gate, so
+// the fetch and the pill cannot disagree about who is an admin.
+const badgeApplies = () => isCurrentLeagueAdmin();
+export function setSignupRows(rows){
+  state.newSignups = countRecent(rows, { nowMs: Date.now(), days: NEW_SIGNUP_DAYS });
+  renderHeaderChrome();
+}
+// A failure keeps the last count: the badge is supplementary.
+export async function refreshSignupBadge(){
+  if (!badgeApplies()) return;
+  try{
+    setSignupRows(await rpc("admin_list_unaffiliated_players", { p_name:state.session.name, p_pin:state.session.pin, p_league_id:state.currentLeagueId }));
+  }catch{ /* keep the last count */ }
+}
+// The third column renders on desktop always and on mobile only on the
+// admin tab, and its list load sets the badge. Anywhere else (a mobile
+// load, a bracket switch) the badge makes its own single call.
+export function refreshSignupBadgeOutsidePanel(){
+  if (!isDesktop() && state.tab !== "admin") refreshSignupBadge();
+}
+function signupBadgeHtml(){
+  const c = state.newSignups;
+  if (!badgeApplies() || !c?.n) return "";
+  const text = badgeText(c);
+  const what = `${text} new registration${c.n === 1 ? "" : "s"} in the last ${NEW_SIGNUP_DAYS} days, not in any league`;
+  return ` <span class="tabbadge" role="img" aria-label="${what}" title="${what}">${text}</span>`;
 }
 
 // Settings-screen bracket toggle: current league's brackets only (switching
@@ -112,6 +151,7 @@ export async function switchToBracket(bracketId){
   subscribeRealtime();
   renderHeaderChrome();
   await renderAll();
+  refreshSignupBadgeOutsidePanel();
 }
 
 // Switch to another league entirely, preferring that league's bracket of

@@ -7,6 +7,7 @@ import { renderAll, renderAdminOrSettings } from "./layout.js";
 import { renderShows } from "../features/shows.js";
 import { openShow } from "../features/picks.js";
 import { renderBoard } from "../features/standings.js";
+import { refreshSignupBadge } from "./switcher.js";
 
 const myLastPts = {};
 let channel = null;
@@ -107,13 +108,19 @@ export function subscribeRealtime(){
   if (!visListenerAttached){
     visListenerAttached = true;
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible" && state.session) refreshCurrent();
+      if (document.visibilityState !== "visible" || !state.session) return;
+      // Vet-first badge (onboarding.md decision 7): one call per foreground.
+      // When this pass re-renders the third column, its admin list load sets
+      // the badge; otherwise the badge makes its own call.
+      if (!refreshCurrent()) refreshSignupBadge();
     });
   }
 }
+// Returns true when this pass re-rendered the third column (Admin or
+// Settings), whose admin list load also refreshes the sign-up badge.
 export function refreshCurrent(){
-  if (state.tab === "shows" && state.currentShow && showState(state.currentShow) === "open") return; // never wipe an in-progress pick sheet
-  if (isDesktop()){ renderAll(); return; }
+  if (state.tab === "shows" && state.currentShow && showState(state.currentShow) === "open") return false; // never wipe an in-progress pick sheet
+  if (isDesktop()){ renderAll(); return true; }
   if (state.tab === "board") renderBoard();
   // "admin" is the shared third-tab slot — Admin for league admins,
   // Settings for everyone else (same sentinel value either way, see
@@ -122,7 +129,8 @@ export function refreshCurrent(){
   // (and its admin-gated RPC calls) for a NON-admin on the Settings tab —
   // happened to look correct in every admin-tested session since
   // isCurrentLeagueAdmin() made the two calls equivalent for an admin.
-  else if (state.tab === "admin") renderAdminOrSettings();
+  else if (state.tab === "admin"){ renderAdminOrSettings(); return true; }
   else if (state.currentShow) openShow(state.currentShow.id);
   else renderShows();
+  return false;
 }
