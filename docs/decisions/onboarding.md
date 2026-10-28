@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 LOCKED)
+## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 APPROVED)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -33,8 +33,8 @@ and was BUILT the same day. Stage W (`sql/stage_w_vet_first_fast_path.sql`)
 was APPLIED and verified 2026-10-27, and the client went LIVE the same day
 (decision 7, "BUILT 2026-10-27"). Device checks PASSED 2026-10-27; the
 mid-season add toast is still open. **Decision 8** ("Clear all" and
-"Remove" on the sign-up list) is LOCKED 2026-10-27, and is not built: a
-read-only survey and plan come first, for approval.
+"Remove" on the sign-up list) is LOCKED 2026-10-27, with its plan APPROVED
+the same day, and is being built as Stage X.
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -639,9 +639,8 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
        season is running.
 
 8. **"Clear all" and "Remove" on the new sign-up list: LOCKED 2026-10-27
-   (the dev's picks, all four Chat recommendations).** Nothing is built.
-   A read-only survey and plan come next, and stop for approval before any
-   edit.
+   (the dev's picks, all four Chat recommendations).** Plan APPROVED
+   2026-10-27 (below), and being built as Stage X.
    a. **"Clear all":** one tap clears the badge and every current "new"
       mark for 7 days (`SIGNUP_SNOOZE_DAYS` in `src/core/config.js`).
       - Anyone registering after the clear relights it immediately.
@@ -659,6 +658,77 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
       league, who may have picks, scores or roster rows. The server refuses
       those accounts, and they stay Global-only, through the existing
       tools.
+
+   **CORRECTION, Chat's error (recorded 2026-10-27).** 8c said "the same
+   allow-plus-log rule as PIN resets", but no PIN-reset log exists.
+   `auth-security.md` records the accountability for resets as NONE, and
+   its log item (a) is still proposed, not approved. Remove's log is the
+   project's first audit table. Resets and boots stay unlogged, and this
+   batch does not change that.
+
+   **Plan APPROVED 2026-10-27: all eleven recommendations, D1–D11.**
+   - **Survey basis:**
+     - **`global_boot_player`** (`stage_n`) is Global-only. It optionally
+       adds the name to `global_banned_names`, then runs `delete from
+       players`, which cascades. Nothing in `src/` calls it, so for an
+       account that has played, Global's "existing tools" means the SQL
+       editor.
+     - **Tables that reference players** (from `sql/`):
+       - `league_members`, `season_rosters`, `picks` and `scores`, all
+         `on delete cascade`;
+       - `sync_flag_clears.cleared_by`, `on delete set null`.
+       `banned_names` and `global_banned_names` are keyed by name, with no
+       foreign key.
+     - **"Never played", exactly:** no `picks`, no `scores`, no
+       `season_rosters` row, and no `sync_flag_clears.cleared_by` row. One
+       SQL helper, `_account_has_played`, holds this. Remove also requires
+       no `league_members` row.
+   - **D1, snooze storage:** a separate `admin_signup_clears` table
+     (`player_id` → players `on delete cascade`, `cleared_at`). "Clear all"
+     stores `now()`.
+   - **D2, the predicate:** the list RPC returns the caller's `cleared_at`
+     on each row, and the client computes with `NEW_SIGNUP_DAYS` and
+     `SIGNUP_SNOOZE_DAYS` from `config.js`.
+     - **new** = `created ≥ now − 14 days`, and NOT (`cleared_at` is set,
+       `created ≤ cleared_at`, and `now < cleared_at + 7 days`).
+     - The badge and the list still come from one call.
+   - **D3, rows that have played:** no Remove button, and a muted "has
+     played" note. The list returns `has_played` per row; the server
+     re-checks.
+   - **D4, the log:** a general `admin_audit_log` with an `action` column,
+     written only by Remove in this batch, readable from the SQL editor
+     only.
+     - **Added requirement (dev, 2026-10-27):** the target's id and name,
+       and the actor's id and name, are plain snapshot columns with NO
+       foreign key to players, so neither deletion touches the log. The
+       smoke test checks that the log row survives the removal it records.
+     - `league_id` is a plain column too, for the same reason (an
+       implementation choice, not a decision of the dev's).
+   - **D5, the gate:** the caller is an admin of the league they are acting
+     from, or Global: the same gate as the list.
+   - **D6, the ban:** a flag on the same RPC, refused server-side for
+     non-Global callers, with a second confirm for Global only.
+   - **D7, accepted:** an account booted before its first pick counts as
+     never played, so a league admin can remove it. A sync-flag clear
+     counts as history.
+   - **D8:** Clear all shows only while the badge is lit.
+   - **D9:** Clear and Remove refuse a caller with a pending PIN change.
+   - **D10:** after Clear or Remove, the client reloads the list (one list
+     call).
+   - **D11:** the fixtures and fakes are tightened to the SQL,
+     `register_player` included (today its fake checks neither taken nor
+     banned names).
+   - **A race with an Add:** Remove locks the target's `players` row first,
+     then checks in later statements. An Add that got there first is seen
+     and refused; one that comes after fails its foreign key. This is
+     reviewed, not smoke-tested: one session cannot race itself.
+   - **Accepted as is (dev, 2026-10-27):**
+     - a removed account's open app fails with "Wrong name or PIN", and a
+       same-name re-registration leaves the old device's stored player id
+       stale until the player logs out and back in;
+     - an Add that loses the race shows a raw foreign-key error.
+   - **Deploy order:** STEP 0, apply Stage X, STEP 2A, STEP 2B, then push
+     the client. The live client ignores the new columns.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
