@@ -626,6 +626,10 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
        byte-identical to the committed bundle `79883fa-56e0833`. It carries
        all four escaped toasts and `jsArg`, with no raw-name toast and no
        old `onclick` escaping left.
+     - **Exposure check 2026-10-27** (dev, read-only SQL on live players):
+       no name contains '<' (toast payload) or an apostrophe (onclick
+       break-out). One name has parentheses and no quote (harmless). The
+       pre-fix holes were never exploited.
      - **Still open: device checks.**
        - the pill on the phone's Admin tab and the desktop column title;
        - the dated list;
