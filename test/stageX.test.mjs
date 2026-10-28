@@ -73,6 +73,22 @@ check("the smoke test's stated total matches its number of checks, and it always
   [Number(step2b.match(/STAGE X SMOKE: 0 of (\d+) FAILED/)?.[1]), (step2b.match(/^\s*lbl := lbl \|\|/gm) || []).length,
    /raise exception 'STAGE X SMOKE: % of % FAILED%/.test(step2b) && step2b.trimEnd().endsWith("end $smoke$;")],
   [(step2b.match(/^\s*lbl := lbl \|\|/gm) || []).length, 26, true]);
+// The catalogs' one-byte "char" columns. text || "char" has no unique
+// operator in Postgres (ERROR 42725), so wherever one of these meets || it
+// must carry ::text. This footer was first handed over without ever being
+// run (there is no local Postgres here), and the dev's STEP 0 caught exactly
+// this. The list is the "char" columns of the catalogs a footer is likely
+// to read; a "char" column missing from it is not covered.
+const CHAR_COLS = ["relkind", "relpersistence", "relreplident", "contype", "confupdtype", "confdeltype", "confmatchtype",
+  "prokind", "provolatile", "proparallel", "typtype", "typcategory", "typalign", "typstorage", "typdelim",
+  "attalign", "attstorage", "attidentity", "attgenerated", "attcompression", "polcmd", "tgenabled", "deptype"];
+const runnable = [head, step0, step2a, step2b].map(s => s.replace(/--[^\n]*/g, "")).join("\n");
+const charCol = `(?:\\b\\w+\\.)?\\b(?:${CHAR_COLS.join("|")})\\b`;
+check('no "char" catalog column meets || without ::text (text || "char" is ERROR 42725)',
+  [...runnable.matchAll(new RegExp(`\\|\\|\\s*${charCol}(?!::text)|${charCol}(?!::text)\\s*\\|\\|`, "g"))].map(m => m[0].replace(/\s+/g, " ")),
+  []);
+check('the check above can see the footer: it finds the "char" columns that ARE cast',
+  (runnable.match(new RegExp(`${charCol}::text`, "g")) || []).length > 0, true);
 
 // ---------- what sql/ says about player ids ----------
 // Every create table block in sql/ (not archive/; the footers' block

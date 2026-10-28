@@ -166,7 +166,10 @@ commit;
    so running the whole file never runs it. Copy one step at a time: the
    text between its BEGIN and END marker lines (the reply that shipped this
    file has a PowerShell line for each). STEP 0 and STEP 2A are each ONE
-   query: read its rows, and every row's "ok" must be true.
+   query: read its rows, and every row's "ok" must be true. Every "char"
+   catalog column (confdeltype, contype, ...) is cast ::text where it meets
+   text: text || "char" has no unique operator (ERROR 42725, caught by the
+   dev's first STEP 0 run).
 
 -- STEP 0 BEGIN
 -- Read-only. Run BEFORE Stage X. Four rows, every "ok" true:
@@ -189,13 +192,13 @@ lst as (
 ),
 fk as (
   select string_agg(case when ns.nspname = 'public' then cl.relname::text else ns.nspname || '.' || cl.relname end
-                    || '.' || a.attname || ':' || c.confdeltype, ', '
+                    || '.' || a.attname || ':' || c.confdeltype::text, ', '
                     order by ns.nspname collate "C", cl.relname collate "C", a.attname collate "C") as v
   from pg_constraint c
   join pg_class cl on cl.oid = c.conrelid
   join pg_namespace ns on ns.oid = cl.relnamespace
   join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any (c.conkey)
-  where c.contype = 'f' and c.confrelid = 'public.players'::regclass
+  where c.contype::text = 'f' and c.confrelid = 'public.players'::regclass
 ),
 uu as (
   select string_agg(col.table_name || '.' || col.column_name, ', '
@@ -244,13 +247,13 @@ f as (
 ),
 fk as (
   select string_agg(case when ns.nspname = 'public' then cl.relname::text else ns.nspname || '.' || cl.relname end
-                    || '.' || a.attname || ':' || c.confdeltype, ', '
+                    || '.' || a.attname || ':' || c.confdeltype::text, ', '
                     order by ns.nspname collate "C", cl.relname collate "C", a.attname collate "C") as v
   from pg_constraint c
   join pg_class cl on cl.oid = c.conrelid
   join pg_namespace ns on ns.oid = cl.relnamespace
   join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any (c.conkey)
-  where c.contype = 'f' and c.confrelid = 'public.players'::regclass
+  where c.contype::text = 'f' and c.confrelid = 'public.players'::regclass
 ),
 act as (select string_agg(proname || ' ' || n || ' ' || md5, '; ' order by proname collate "C") as v from f)
 select 'X2.1 list function: Stage X body, new return type' as check_name,
@@ -274,8 +277,8 @@ select 'X2.5 foreign keys to players: the five, plus admin_signup_clears (cascad
        coalesce((select v from fk), '(none)')
 union all
 select 'X2.6 admin_audit_log has no foreign key at all',
-       not exists (select 1 from pg_constraint where contype = 'f' and conrelid = 'public.admin_audit_log'::regclass),
-       (select count(*)::text || ' foreign key(s)' from pg_constraint where contype = 'f' and conrelid = 'public.admin_audit_log'::regclass)
+       not exists (select 1 from pg_constraint where contype::text = 'f' and conrelid = 'public.admin_audit_log'::regclass),
+       (select count(*)::text || ' foreign key(s)' from pg_constraint where contype::text = 'f' and conrelid = 'public.admin_audit_log'::regclass)
 union all
 select 'X2.7 both tables: RLS on, and anon/authenticated hold no privilege',
        (select bool_and(relrowsecurity) from pg_class where oid in ('public.admin_signup_clears'::regclass, 'public.admin_audit_log'::regclass))

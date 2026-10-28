@@ -36,7 +36,9 @@ mid-season add toast is still open. **Decision 8** ("Clear all" and
 "Remove" on the sign-up list) is LOCKED 2026-10-27, with its plan APPROVED
 the same day, and was BUILT the same day as Stage X
 (`sql/stage_x_signup_clear_and_remove.sql`), committed locally and NOT
-pushed. Next: the dev runs STEP 0, applies Stage X, runs STEP 2A and 2B,
+pushed. The dev's first STEP 0 run failed on a footer type error (nothing
+applied), fixed the same day. Next: the dev runs STEP 0, applies Stage X,
+runs STEP 2A and 2B,
 and only then is the client pushed (decision 8, "BUILT 2026-10-27").
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
@@ -790,6 +792,33 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
        first audit table" overstates it. `admin_audit_log` is the first
        *general* one. The correction's substance is unchanged: no PIN-reset
        log exists, and resets and boots stay unlogged.
+     - **MISS, caught by the dev 2026-10-27: the footer SQL was never run
+       before handoff, because there is no local Postgres here.** The dev's
+       STEP 0 failed before any check ran, and nothing was applied:
+       `ERROR 42725 operator is not unique: text || "char"`, at
+       `|| ':' || c.confdeltype`.
+       - **Fix, in the footer only.** Every "char" catalog column is now
+         cast `::text`:
+         - `confdeltype`, concatenated in STEP 0 and in STEP 2A. The 2A
+           one would have failed next.
+         - `contype`, compared with `'f'` four times. That form was
+           harmless; it is cast for uniformity.
+         The applied part is byte-identical to the first commit, and the
+         four function md5s are unchanged. STEP 2B reads no catalog column.
+       - **New check:** `stageX.test` fails when a "char" column from a
+         fixed list of 23 catalog columns meets `||` without `::text`.
+         A column missing from the list is not covered.
+         - Run against the pre-fix file, it flags both concatenations.
+         - M6 (STEP 0's cast removed) is caught, reverted, and confirmed
+           with `cmp`.
+       - **Still proven only by a live run:** the rest of the footer's type
+         resolution. STEP 0, 2A and 2B were re-read by hand for this class
+         of error, and nothing else was found:
+         - concatenations of name, text, boolean and bigint;
+         - regclass comparisons;
+         - plpgsql name conflicts with RETURNS TABLE columns.
+         A hand reading is exactly what missed this one, so it is a
+         weaker guarantee than the check above.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
