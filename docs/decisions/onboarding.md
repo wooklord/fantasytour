@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE)
+## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 LOCKED)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -31,7 +31,10 @@ live device checks AMENDED the same day (end of item 3 below). **Batch 4
 the "vet-first fast path" batch, has its plan APPROVED 2026-10-27 (decision 7)
 and was BUILT the same day. Stage W (`sql/stage_w_vet_first_fast_path.sql`)
 was APPLIED and verified 2026-10-27, and the client went LIVE the same day
-(decision 7, "BUILT 2026-10-27"). Device checks are still open.
+(decision 7, "BUILT 2026-10-27"). Device checks PASSED 2026-10-27; the
+mid-season add toast is still open. **Decision 8** ("Clear all" and
+"Remove" on the sign-up list) is LOCKED 2026-10-27, and is not built: a
+read-only survey and plan come first, for approval.
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -630,11 +633,32 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
        no name contains '<' (toast payload) or an apostrophe (onclick
        break-out). One name has parentheses and no quote (harmless). The
        pre-fix holes were never exploited.
-     - **Still open: device checks.**
-       - the pill on the phone's Admin tab and the desktop column title;
-       - the dated list;
-       - a mid-season add's toast, the next time an Official season is
-         running.
+     - **✅ Device checks PASSED 2026-10-27** on the dev's phone: the badge
+       pill and the dated sign-up list.
+     - **Still open:** the mid-season add toast, the next time an Official
+       season is running.
+
+8. **"Clear all" and "Remove" on the new sign-up list: LOCKED 2026-10-27
+   (the dev's picks, all four Chat recommendations).** Nothing is built.
+   A read-only survey and plan come next, and stop for approval before any
+   edit.
+   a. **"Clear all":** one tap clears the badge and every current "new"
+      mark for 7 days (`SIGNUP_SNOOZE_DAYS` in `src/core/config.js`).
+      - Anyone registering after the clear relights it immediately.
+      - Cleared rows that are still unaffiliated and still inside the
+        14-day window (`NEW_SIGNUP_DAYS`) relight when the 7 days end.
+   b. **Stored per admin, on the server,** so phone and desktop agree.
+      Clearing never affects another admin's badge.
+   c. **Any league admin (and Global) can remove an account that is in no
+      league.** Removal takes a confirm dialog, and a log records who
+      removed whom: the same allow-plus-log rule as PIN resets.
+   d. **Removing deletes the account** and leaves the nickname free to
+      re-register. Only Global can also ban the name.
+   e. **Hard rule, from Chat: Remove applies only to accounts that have
+      never played.** "In no league" includes players booted from a
+      league, who may have picks, scores or roster rows. The server refuses
+      those accounts, and they stay Global-only, through the existing
+      tools.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
