@@ -41,7 +41,10 @@ failed on a footer type error (nothing applied), fixed the same day.
 went **LIVE** the same day (decision 8, "Stage X APPLIED 2026-10-28" and
 "LIVE 2026-10-28"). Device checks PASSED 2026-10-28 on the dev's phone:
 "Clear all", and "Remove" on a never-played throwaway, with its audit log
-row.
+row. A layout fix for the sign-up rows (the Members panel's two lines, no
+name truncation) was APPROVED, BUILT and went LIVE 2026-10-28, bundle
+`9dbc014-9e7ecb1` (decision 8, "Layout fix"). Its device check on the
+dev's phone is still open.
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -917,6 +920,11 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
            Members panel's static CSS check passed, because it matches the
            text `.mname{`, which this rule never contains. Only the computed
            read catches this mutation.
+     - **✅ LIVE 2026-10-28:** pushed as `9517d0e..765eeb9`. Pages build
+       for `765eeb9`: `built`, 2026-10-29 02:40 UTC. The live `app.js` is
+       byte-identical to the committed bundle `9dbc014-9e7ecb1` (`cmp`,
+       198,506 bytes), and the live `styles.css` is byte-identical to the
+       committed one.
        - **Device check still open:** the dev's phone, the same list as in
          the screenshot.
 
