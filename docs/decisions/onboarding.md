@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-28 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 Stage X APPLIED)
+## RESUME HERE (updated 2026-10-28 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 LIVE)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -37,9 +37,9 @@ mid-season add toast is still open. **Decision 8** ("Clear all" and
 the same day, and was BUILT the same day as Stage X
 (`sql/stage_x_signup_clear_and_remove.sql`). The dev's first STEP 0 run
 failed on a footer type error (nothing applied), fixed the same day.
-**Stage X APPLIED 2026-10-28** with every check passing (decision 8,
-"Stage X APPLIED 2026-10-28"). Next: push the client and confirm it live.
-Device checks still open: "Clear all" on the dev's phone, and "Remove" on
+**Stage X APPLIED 2026-10-28** with every check passing, and the client
+went **LIVE** the same day (decision 8, "Stage X APPLIED 2026-10-28" and
+"LIVE 2026-10-28"). Device checks still open: "Clear all" on the dev's phone, and "Remove" on
 a never-played account.
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
@@ -647,7 +647,8 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 8. **"Clear all" and "Remove" on the new sign-up list: LOCKED 2026-10-27
    (the dev's picks, all four Chat recommendations).** Plan APPROVED
    2026-10-27 (below); BUILT the same day as Stage X. Stage X APPLIED
-   2026-10-28 (below); the client is not yet pushed.
+   2026-10-28 and the client LIVE the same day (below); device checks
+   still open.
    a. **"Clear all":** one tap clears the badge and every current "new"
       mark for 7 days (`SIGNUP_SNOOZE_DAYS` in `src/core/config.js`).
       - Anyone registering after the clear relights it immediately.
@@ -831,6 +832,16 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
        could only claim.
      - A follow-up candidate from this miss (not a decision): PGlite, in
        `testing-harness.md` → "CANDIDATE, not a decision: PGlite".
+   - **✅ LIVE 2026-10-28:** pushed after the apply as `e319949..0a9c084`
+     (`6fb4ca9`, `162bb70` and the APPLIED record). Pages build for
+     `0a9c084`: `built`, 2026-10-29 02:14 UTC. The live `app.js` is
+     byte-identical to the committed bundle `3686344-e319949` (`cmp`, 198,422
+     bytes each). It calls `admin_clear_new_signups` and
+     `admin_remove_unplayed_account`, reads `has_played` and `cleared_at`,
+     and has `SIGNUP_SNOOZE_DAYS = 7`.
+     - **Device checks still open:**
+       - "Clear all" on the dev's phone;
+       - "Remove" on a never-played account.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
