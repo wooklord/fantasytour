@@ -847,6 +847,31 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
        - "Remove" on the never-played throwaway asked for confirmation
          once, showed the removed toast and dropped the row;
        - the audit log row recorded the removal.
+   - **Layout fix, APPROVED in Chat 2026-10-28** from a screenshot of the
+     dev's phone. Long names truncated and pushed Remove onto its own line,
+     so the rows rendered inconsistently. That also broke the 2026-10-26
+     Members-panel rule that admin lists don't truncate names
+     (`admin-panel.md` → "Members panel cleanup", item 2).
+     - **The fix:** the "Registered, not in any league" rows take the
+       Members panel's two-line structure, on the phone and in the desktop
+       admin column.
+       - Line 1: the full name, with no ellipsis and `overflow-wrap:anywhere`,
+         so a name with no spaces (an email, a long run-on name) wraps
+         inside the row.
+       - Line 2: the registered date, plus the "new" mark or the "has
+         played" note, on the left. Add and Remove sit on the right, like
+         Members' Reset PIN and Boot.
+       - Reuse the Members row classes and CSS where they fit, rather than
+         new ones. `jsArg` and `esc` stay as they are.
+     - **Tests:**
+       - a 27-character name with no spaces renders in full, with no
+         truncation class and no `text-overflow` on the name;
+       - every row has the same line 1 / line 2 structure;
+       - the decision 7 and 8 checks still pass;
+       - a mutation that restores the ellipsis is caught.
+     - **Supersedes, for this one list:** `admin-panel.md` item 3, which
+       kept the unaffiliated panel single-line because it had one action.
+       Decision 8 gave it a second action (Remove).
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
