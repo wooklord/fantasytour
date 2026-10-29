@@ -263,3 +263,17 @@ before assuming a change is covered just because the suite is green:
   even adding the session wouldn't currently prove the real roster-based rejection
   path works; the fake handler needs the same real-join treatment `get_bracket_scores`
   and `admin_list_members` already get before that's actually covered.
+
+**CANDIDATE, not a decision: PGlite (in-process Postgres), recorded
+2026-10-28 at the dev's request.** The idea: run a stage file's footer
+queries and smoke tests locally before handing them off. **Not installed,
+not planned.**
+- **Motivation:** the 2026-10-27 STEP 0 miss (`onboarding.md` → decision
+  8, "MISS, caught by the dev"). Stage X's footer had never been run before
+  handoff, because there is no local Postgres here. The dev's run failed
+  with `42725` before any check ran.
+- **Unchecked, and only worth checking if this is picked up** (the
+  assistant's notes, not the dev's): does it load the `sql/` stages in
+  order, given `pg_cron`, the `extensions` schema for pgcrypto and
+  Supabase's roles and grants? Does it run the footers' catalog queries?
+  Does a local md5 match the live one?

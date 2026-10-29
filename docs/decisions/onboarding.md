@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-27 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 BUILT)
+## RESUME HERE (updated 2026-10-28 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 Stage X APPLIED)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -35,11 +35,12 @@ was APPLIED and verified 2026-10-27, and the client went LIVE the same day
 mid-season add toast is still open. **Decision 8** ("Clear all" and
 "Remove" on the sign-up list) is LOCKED 2026-10-27, with its plan APPROVED
 the same day, and was BUILT the same day as Stage X
-(`sql/stage_x_signup_clear_and_remove.sql`), committed locally and NOT
-pushed. The dev's first STEP 0 run failed on a footer type error (nothing
-applied), fixed the same day. Next: the dev runs STEP 0, applies Stage X,
-runs STEP 2A and 2B,
-and only then is the client pushed (decision 8, "BUILT 2026-10-27").
+(`sql/stage_x_signup_clear_and_remove.sql`). The dev's first STEP 0 run
+failed on a footer type error (nothing applied), fixed the same day.
+**Stage X APPLIED 2026-10-28** with every check passing (decision 8,
+"Stage X APPLIED 2026-10-28"). Next: push the client and confirm it live.
+Device checks still open: "Clear all" on the dev's phone, and "Remove" on
+a never-played account.
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -645,8 +646,8 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
 8. **"Clear all" and "Remove" on the new sign-up list: LOCKED 2026-10-27
    (the dev's picks, all four Chat recommendations).** Plan APPROVED
-   2026-10-27 (below); BUILT the same day as Stage X, not yet applied or
-   pushed.
+   2026-10-27 (below); BUILT the same day as Stage X. Stage X APPLIED
+   2026-10-28 (below); the client is not yet pushed.
    a. **"Clear all":** one tap clears the badge and every current "new"
       mark for 7 days (`SIGNUP_SNOOZE_DAYS` in `src/core/config.js`).
       - Anyone registering after the clear relights it immediately.
@@ -819,6 +820,17 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
          - plpgsql name conflicts with RETURNS TABLE columns.
          A hand reading is exactly what missed this one, so it is a
          weaker guarantee than the check above.
+   - **✅ Stage X APPLIED 2026-10-28 by the dev,** from the fixed file
+     (`162bb70`), with every check as expected:
+     - STEP 0: all 4 rows true, before the apply;
+     - the apply succeeded;
+     - STEP 2A: all 9 rows true;
+     - the STEP 2B smoke test read "0 of 26 FAILED | PASS".
+     - This live run is the proof the MISS above was waiting for: the
+       rest of the footer's type resolution held, which the hand reading
+       could only claim.
+     - A follow-up candidate from this miss (not a decision): PGlite, in
+       `testing-harness.md` → "CANDIDATE, not a decision: PGlite".
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
