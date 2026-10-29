@@ -39,8 +39,9 @@ the same day, and was BUILT the same day as Stage X
 failed on a footer type error (nothing applied), fixed the same day.
 **Stage X APPLIED 2026-10-28** with every check passing, and the client
 went **LIVE** the same day (decision 8, "Stage X APPLIED 2026-10-28" and
-"LIVE 2026-10-28"). Device checks still open: "Clear all" on the dev's phone, and "Remove" on
-a never-played account.
+"LIVE 2026-10-28"). Device checks PASSED 2026-10-28 on the dev's phone:
+"Clear all", and "Remove" on a never-played throwaway, with its audit log
+row.
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 
@@ -648,7 +649,7 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
    (the dev's picks, all four Chat recommendations).** Plan APPROVED
    2026-10-27 (below); BUILT the same day as Stage X. Stage X APPLIED
    2026-10-28 and the client LIVE the same day (below); device checks
-   still open.
+   PASSED the same day.
    a. **"Clear all":** one tap clears the badge and every current "new"
       mark for 7 days (`SIGNUP_SNOOZE_DAYS` in `src/core/config.js`).
       - Anyone registering after the clear relights it immediately.
@@ -839,9 +840,13 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
      bytes each). It calls `admin_clear_new_signups` and
      `admin_remove_unplayed_account`, reads `has_played` and `cleared_at`,
      and has `SIGNUP_SNOOZE_DAYS = 7`.
-     - **Device checks still open:**
-       - "Clear all" on the dev's phone;
-       - "Remove" on a never-played account.
+     - **✅ Device checks PASSED 2026-10-28** on the dev's phone, using a
+       throwaway account:
+       - the throwaway's registration lit the badge;
+       - "Clear all" cleared the badge, the "new" marks and its own button;
+       - "Remove" on the never-played throwaway asked for confirmation
+         once, showed the removed toast and dropped the row;
+       - the audit log row recorded the removal.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 
