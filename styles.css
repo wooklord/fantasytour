@@ -568,13 +568,16 @@ html[data-theme="light"] .panel.live-halo{
    net for something absurd). Line two holds the two actions, right-
    aligned. Padding and gap kept tight so two lines cost little more than
    the one line they replace; the dashed divider makes each two-line row
-   read as one unit. Every other .pickres list stays single-line. */
+   read as one unit. The sign-up list ("Registered, not in any league")
+   reuses these rows (onboarding.md decision 8, layout fix 2026-10-28),
+   adding only .signup-meta below. Every other .pickres list stays
+   single-line. */
 .pickres.member-row{flex-direction:column;align-items:stretch;gap:3px;padding:5px 0;border-bottom:1px dashed var(--dash)}
 .member-l1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .member-mark{flex:0 0 auto}
 .mname{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
 .member-l1 .pill.casual-only{font-size:.66rem;padding:1px 8px}
-.member-l2{display:flex;justify-content:flex-end;gap:6px}
+.member-l2{display:flex;justify-content:flex-end;align-items:center;gap:6px}
 
 /* ---------- forms / auth / admin ---------- */
 .field{margin:12px 0}
@@ -667,6 +670,10 @@ html[data-theme="light"] .panel.live-halo{
 .pickres.signup-row .reg{flex:none;font-family:var(--mono);font-size:.72rem;color:var(--cream)}
 .pill.new-signup{flex:none;border-color:var(--coral);color:var(--cream);font-size:.66rem;padding:1px 8px}
 .pickres.signup-row .played{flex:none;font-size:.72rem;font-style:italic;color:var(--cream)}
+/* Line two's left side (decision 8, layout fix): the date and the "new"
+   mark or "has played" note. margin-right:auto holds Add and Remove at
+   the right edge, as Members' Reset PIN and Boot sit. */
+.signup-meta{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;margin-right:auto;min-width:0}
 
 /* ---------- settings / credits ---------- */
 .credits{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}

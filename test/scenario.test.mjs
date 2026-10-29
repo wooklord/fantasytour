@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario, runVetFirstScenario, runNameEscapeScenario, runSignupClearRemoveScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario, runVetFirstScenario, runNameEscapeScenario, runSignupClearRemoveScenario, runSignupLayoutScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -1535,6 +1535,32 @@ async function runMode(mode){
   check("decision 8 (D8): with no registration inside the window the list renders with no pill and no Clear all",
     sc.unlit.anyBadge === 0 && !sc.unlit.clearAll && sc.unlit.rows.length === 3,
     `unlit: ${J(sc.unlit)}`);
+
+  // Decision 8 layout fix (2026-10-28): the sign-up rows take the Members
+  // panel's two lines. Computed styles come from the real styles.css.
+  const lay = await runSignupLayoutScenario({ html, scripts, mode, css: readFileSync(join(root, "styles.css"), "utf8") });
+  const layRow = name => lay.rows.find(r => r.name === name);
+  const layLong = layRow(lay.LONG);
+  check("decision 8 layout fix: a 27-character name with no spaces renders in full in .mname (title too), no row uses .nm, and neither the name nor its line nor its row computes text-overflow:ellipsis, white-space:nowrap or overflow:hidden; the name computes overflow-wrap:anywhere",
+    lay.LONG.length === 27 && !/\s/.test(lay.LONG) && layLong?.name === lay.LONG && layLong?.title === lay.LONG && layLong?.nameClass === "mname"
+      && lay.rows.length === 4 && lay.rows.every(r => r.usesNm === false)
+      && layLong.chain.length === 3 && layLong.chain.every(s => s.textOverflow !== "ellipsis" && s.whiteSpace !== "nowrap" && s.overflow !== "hidden")
+      && layLong.overflowWrap === "anywhere",
+    `layLong: ${J(layLong)} usesNm: ${J(lay.rows.map(r => r.usesNm))}`);
+  check("decision 8 layout fix: every row has the same two lines, as Members does: line one is the name alone; line two is the .signup-meta span, then the buttons; the date, 'new' mark and 'has played' note sit only in that span",
+    lay.rows.length === 4 && lay.rows.every(r => /\bpickres\b/.test(r.rowClass) && /\bmember-row\b/.test(r.rowClass) && /\bsignup-row\b/.test(r.rowClass)
+        && J(r.children) === J(["member-l1", "member-l2"]) && J(r.l1Children) === J(["mname"])
+        && r.l2Children?.[0] === "signup-meta" && r.l2Children.slice(1).length >= 1 && r.l2Children.slice(1).every(c => c.startsWith("button:"))
+        && r.meta?.buttons === 0 && r.strays === 0),
+    `rows: ${J(lay.rows.map(r => ({ name: r.name, rowClass: r.rowClass, children: r.children, l1: r.l1Children, l2: r.l2Children, meta: r.meta, strays: r.strays })))}`);
+  check("decision 8 layout fix: line two per row: new and never played → date, 'new', then Add and Remove; played → date and 'has played', Add only; no created_at → an empty meta span, then Add and Remove",
+    J(layLong?.l2Children) === J(["signup-meta", "button:Add", "button:Remove"]) && J(layLong?.meta) === J({ reg: true, isNew: true, played: null, buttons: 0 })
+      && J(layRow(lay.PLAYED)?.l2Children) === J(["signup-meta", "button:Add"]) && J(layRow(lay.PLAYED)?.meta) === J({ reg: true, isNew: false, played: "has played", buttons: 0 })
+      && J(layRow(lay.UNDATED)?.l2Children) === J(["signup-meta", "button:Add", "button:Remove"]) && J(layRow(lay.UNDATED)?.meta) === J({ reg: false, isNew: false, played: null, buttons: 0 }),
+    `rows: ${J([layLong, layRow(lay.PLAYED), layRow(lay.UNDATED)].map(r => r && { name: r.name, l2: r.l2Children, meta: r.meta }))}`);
+  check(`decision 8 layout fix: the list renders once, ${mode === "desktop" ? "in the desktop admin column" : "in the main view"}`,
+    lay.lists === 1 && (mode === "desktop" ? lay.inAdminColumn && !lay.inMain : lay.inMain && !lay.inAdminColumn),
+    `lists: ${lay.lists} col: ${lay.inAdminColumn} main: ${lay.inMain}`);
 
   return failures.length;
 }

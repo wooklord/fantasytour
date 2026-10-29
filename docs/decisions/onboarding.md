@@ -872,6 +872,53 @@ is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
      - **Supersedes, for this one list:** `admin-panel.md` item 3, which
        kept the unaffiliated panel single-line because it had one action.
        Decision 8 gave it a second action (Remove).
+     - **BUILT 2026-10-28, bundle `9dbc014-9e7ecb1`.**
+       - **Markup (`loadUnaffiliated`, `admin.js`):** each row is
+         `.pickres.member-row.signup-row`.
+         - `.member-l1` holds `.mname` alone.
+         - `.member-l2` holds a `.signup-meta` span (the date, then the
+           "new" mark or the "has played" note), then Add, then Remove.
+         - Every row renders both lines and the span, even when the span
+           is empty (an undated row), so no two rows differ in shape.
+         - `jsArg` and `esc` are unchanged.
+       - **CSS:** the members rules are reused as they are. Two changes:
+         - one new rule, `.signup-meta`, whose `margin-right:auto` holds
+           the buttons at the right edge;
+         - `align-items:center` added to the shared `.member-l2`, so the
+           date lines up with the buttons. Members' line two holds only
+           its two buttons, which are the same height, so it renders the
+           same.
+         Nothing is desktop-only: the admin column runs the same render
+         and the same rules.
+       - **Tests:** `runSignupLayoutScenario` (new) and four scenario
+         checks in each mode.
+         - jsdom applies a stylesheet's cascade, so the real `styles.css`
+           is injected. The computed `text-overflow`, `white-space` and
+           `overflow` are read for the name, its line and its row, instead
+           of matching CSS text.
+         - The fixture has a 27-character invented name with no spaces,
+           a row that has played and an undated row.
+         - The checks: the name renders in full with no `.nm` and no
+           truncating style, and computes `overflow-wrap:anywhere`; every
+           row has the same two lines; each kind of row gets the right
+           line two; and the list renders exactly once, in the desktop
+           admin column or the phone's main view.
+         - The decision 7 and 8 readers now find a row's name by `.mname`
+           first, then `.nm`. A restored ellipsis therefore fails only the
+           new checks. All decision 7 and 8 checks pass unchanged.
+       - **Mutations, both caught in both modes.** Each was reverted by an
+         anchored edit and confirmed with `cmp`, and the rebuilt bundle
+         was byte-identical.
+         - M7, the name back on `.nm`: both of the name and structure
+           checks failed, computing `ellipsis`, `nowrap` and `hidden` on
+           the name. No decision 7 or 8 check failed.
+         - M8, the ellipsis restored by a rule on
+           `.signup-row .member-l1 > span`: the name check failed. The
+           Members panel's static CSS check passed, because it matches the
+           text `.mname{`, which this rule never contains. Only the computed
+           read catches this mutation.
+       - **Device check still open:** the dev's phone, the same list as in
+         the screenshot.
 
 ## Conflict found while writing this record (durability rule 3) — RESOLVED same day
 

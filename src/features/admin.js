@@ -592,6 +592,14 @@ export async function loadMembers(){
 // Remove. Against the Stage W function the rows carry neither column, so
 // none of the three appear: has_played is tested against true and false
 // exactly, and Clear all also needs a cleared_at key on some row.
+//
+// Row shape (decision 8, layout fix 2026-10-28): the Members panel's two
+// lines, its classes reused. Line one is the name alone, in full (.mname,
+// never .nm: admin lists never truncate, and a name with no spaces wraps).
+// Line two holds the date and the "new" mark or "has played" note on the
+// left (.signup-meta), and Add and Remove on the right. Every row renders
+// both lines and the meta span, even empty, so the rows never differ in
+// shape. The old single line ellipsised long names and wrapped Remove.
 const fmtRegistered = iso => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -621,13 +629,15 @@ export async function loadUnaffiliated(){
       They may not have asked to join <b>this</b> one — add someone only if they
       contacted you.</p>
     ${(rows||[]).map(p => `
-      <div class="pickres signup-row">
-        <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
-        ${p.created_at ? `<span class="reg" title="Registered">${esc(fmtRegistered(p.created_at))}</span>` : ""}
-        ${isNew(p, opts) ? '<span class="pill new-signup">new</span>' : ""}
-        ${p.has_played === true ? '<span class="played" title="Has picks, scores, a season roster or an admin action, so it cannot be removed here">has played</span>' : ""}
-        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button>${p.has_played === false
-          ? ` <button class="btn ghost small" onclick="removeAccount('${p.player_id}', ${jsArg(p.name)})" style="border-color:var(--coral);color:var(--coral)">Remove</button>` : ""}</span>
+      <div class="pickres member-row signup-row">
+        <div class="member-l1"><span class="mname" title="${esc(p.name)}">${esc(p.name)}</span></div>
+        <div class="member-l2">
+          <span class="signup-meta">${p.created_at ? `<span class="reg" title="Registered">${esc(fmtRegistered(p.created_at))}</span>` : ""}${
+            isNew(p, opts) ? '<span class="pill new-signup">new</span>' : ""}${
+            p.has_played === true ? '<span class="played" title="Has picks, scores, a season roster or an admin action, so it cannot be removed here">has played</span>' : ""}</span>
+          <button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button>${p.has_played === false
+            ? `<button class="btn ghost small" onclick="removeAccount('${p.player_id}', ${jsArg(p.name)})" style="border-color:var(--coral);color:var(--coral)">Remove</button>` : ""}
+        </div>
       </div>`).join("")}`;
 }
 // Decision 8a (D1, D10): snoozes this admin's badge and current "new" marks

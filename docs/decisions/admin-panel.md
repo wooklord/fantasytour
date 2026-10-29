@@ -277,6 +277,10 @@ and the live look).** Three parts:
    the ban list) have a single action and stay single-line; they pick up
    the Official-label change only if they show it. Survey 2026-10-26:
    none of them renders the label — only the members list did.
+   **SUPERSEDED 2026-10-28 for the unaffiliated panel only:** decision 8
+   gave it a second action (Remove), and it now uses the members rows'
+   two lines and full-width name (`onboarding.md` → decision 8, "Layout
+   fix"). The other lists here are unchanged.
 Scope: the members-list render (`loadMembers`, `admin.js`), its CSS, and
 the harness readers/assertions for the members panel. Asserted: no
 "Official" text on any member row; "casual only" only for a false flag

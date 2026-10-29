@@ -117,7 +117,9 @@
      survey finds), with the full name in a `title` attribute so it is
      recoverable on long-press / hover. *(Admin Members list: SUPERSEDED
      2026-10-26 — member rows went two-line with the name at full width
-     and no truncation; `admin-panel.md` → "Members panel cleanup". Every
+     and no truncation; `admin-panel.md` → "Members panel cleanup". The
+     admin sign-up list ("Registered, not in any league") went the same
+     way 2026-10-28; `onboarding.md` → decision 8, "Layout fix". Every
      other cell above keeps the ellipsis.)*
    - **`register_player` rejects names over 20 characters after trim, for
      NEW registrations only**, with a clear error message. Server cap is

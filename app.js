@@ -1702,7 +1702,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"3686344-e319949"}</p>
+      <p class="colophon buildid">build ${"9dbc014-9e7ecb1"}</p>
     </div>
   </div>`;
   }
@@ -2207,12 +2207,12 @@ Relay this to them now \u2014 it will not be shown again.`);
       They may not have asked to join <b>this</b> one \u2014 add someone only if they
       contacted you.</p>
     ${(rows || []).map((p) => `
-      <div class="pickres signup-row">
-        <span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>
-        ${p.created_at ? `<span class="reg" title="Registered">${esc(fmtRegistered(p.created_at))}</span>` : ""}
-        ${isNew(p, opts) ? '<span class="pill new-signup">new</span>' : ""}
-        ${p.has_played === true ? '<span class="played" title="Has picks, scores, a season roster or an admin action, so it cannot be removed here">has played</span>' : ""}
-        <span class="pt"><button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button>${p.has_played === false ? ` <button class="btn ghost small" onclick="removeAccount('${p.player_id}', ${jsArg(p.name)})" style="border-color:var(--coral);color:var(--coral)">Remove</button>` : ""}</span>
+      <div class="pickres member-row signup-row">
+        <div class="member-l1"><span class="mname" title="${esc(p.name)}">${esc(p.name)}</span></div>
+        <div class="member-l2">
+          <span class="signup-meta">${p.created_at ? `<span class="reg" title="Registered">${esc(fmtRegistered(p.created_at))}</span>` : ""}${isNew(p, opts) ? '<span class="pill new-signup">new</span>' : ""}${p.has_played === true ? '<span class="played" title="Has picks, scores, a season roster or an admin action, so it cannot be removed here">has played</span>' : ""}</span>
+          <button class="btn ghost small" onclick="addMember('${p.player_id}', ${jsArg(p.name)})">Add</button>${p.has_played === false ? `<button class="btn ghost small" onclick="removeAccount('${p.player_id}', ${jsArg(p.name)})" style="border-color:var(--coral);color:var(--coral)">Remove</button>` : ""}
+        </div>
       </div>`).join("")}`;
   }
   async function clearNewSignups() {

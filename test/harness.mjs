@@ -2979,6 +2979,12 @@ export async function runOnboardingScenario({ html, scripts, mode }){
 // render, foreground), and the mid-season roster add, all through the fakes
 // above, which mirror Stage W. The SQL itself is proven by Stage W's smoke
 // test, not here. Invented names only (CLAUDE.md: no real nicknames).
+//
+// A sign-up row's name has been .mname since decision 8's layout fix
+// (2026-10-28), .nm before it. These readers accept either, so a restored
+// ellipsis is caught by runSignupLayoutScenario's own check and not by
+// every reader at once.
+const signupName = r => (r.querySelector(".mname") || r.querySelector(".nm"))?.textContent ?? null;
 export async function runVetFirstScenario({ html, scripts, mode }){
   const DAY = 864e5;
   const ago = days => new Date(Date.now() - days * DAY).toISOString();
@@ -3021,7 +3027,7 @@ export async function runVetFirstScenario({ html, scripts, mode }){
       colBadge: pill(d.getElementById("col-admin-title")),
       anyBadge: d.querySelectorAll(".tabbadge").length,
       rows: [...d.querySelectorAll("#unaffiliated .signup-row")].map(r => ({
-        name: r.querySelector(".nm")?.textContent ?? null,
+        name: signupName(r),
         reg: r.querySelector(".reg")?.textContent ?? null,
         isNew: !!r.querySelector(".new-signup"),
       })),
@@ -3031,7 +3037,7 @@ export async function runVetFirstScenario({ html, scripts, mode }){
     // runOnboardingScenario): the attribute is the wiring under test.
     const fire = el => { const code = el?.getAttribute("onclick"); if (!code) return false; new w.Function(code).call(el); return true; };
     const addFromList = async name => {
-      const row = [...d.querySelectorAll("#unaffiliated .signup-row")].find(r => r.querySelector(".nm")?.textContent === name);
+      const row = [...d.querySelectorAll("#unaffiliated .signup-row")].find(r => signupName(r) === name);
       const ok = fire(row?.querySelector("button"));
       await settle();
       return ok;
@@ -3263,14 +3269,14 @@ export async function runSignupClearRemoveScenario({ html, scripts, mode }){
     await settle();
     clickTab(w, "admin");
     await settle();
-    const rowOf = name => [...d.querySelectorAll("#unaffiliated .signup-row")].find(r => r.querySelector(".nm")?.textContent === name);
+    const rowOf = name => [...d.querySelectorAll("#unaffiliated .signup-row")].find(r => signupName(r) === name);
     const clearButton = () => d.querySelector('#unaffiliated button[onclick="clearNewSignups()"]');
     const read = () => ({
       badge: d.getElementById("admintab")?.querySelector(".tabbadge")?.textContent ?? null,
       anyBadge: d.querySelectorAll(".tabbadge").length,
       clearAll: !!clearButton(),
       rows: [...d.querySelectorAll("#unaffiliated .signup-row")].map(r => ({
-        name: r.querySelector(".nm")?.textContent ?? null,
+        name: signupName(r),
         isNew: !!r.querySelector(".new-signup"),
         played: r.querySelector(".played")?.textContent ?? null,
         buttons: [...r.querySelectorAll("button")].map(b => b.textContent),
@@ -3358,4 +3364,72 @@ export async function runSignupClearRemoveScenario({ html, scripts, mode }){
   // 11. No registration inside the window.
   out.unlit = (await load({ players: [PINE, { id: "n9", name: "Old Oak", created_at: ago(20) }] })).read();
   return out;
+}
+
+// ---------- Sign-up list layout (onboarding.md decision 8, layout fix 2026-10-28) ----------
+// The rows take the Members panel's two lines. jsdom cannot measure width,
+// but it does apply a stylesheet's cascade, so the real styles.css (`css`,
+// read by the caller) is injected and the computed text-overflow,
+// white-space and overflow are read for the name, its line and its row,
+// rather than matching CSS text. Any of the three could truncate the name.
+// Invented names only (CLAUDE.md: no real nicknames).
+export async function runSignupLayoutScenario({ html, scripts, mode, css }){
+  const DAY = 864e5;
+  const ago = days => new Date(Date.now() - days * DAY).toISOString();
+  // 27 characters, no spaces; new and never played, so Add and Remove.
+  const LONG = { id: "n1", name: "Scrambledeggsontoastforever", created_at: ago(1) };
+  // Outside the window, with one pick: no mark, the note, Add only.
+  const PLAYED = { id: "n2", name: "Played Pine", created_at: ago(30) };
+  // No created_at (the pre-Stage-W row shape): line two's left side is empty.
+  const UNDATED = { id: "n3", name: "Undated Umber" };
+  const { tables, ids } = makeFixtures();
+  tables.players_public.push(...[LONG, PLAYED, UNDATED].map(p => ({ ...p })));
+  tables.picks.push({ player_id: PLAYED.id, bracket_id: ids.CASUAL_ID, show_id: 2, slot: "opener", songname: "Distraction" });
+  const calls = [];
+  const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+  const w = dom.window;
+  const d = w.document;
+  const style = d.createElement("style");
+  style.textContent = css;
+  d.head.appendChild(style);
+  installGlobals(w, mode, tables, RPC_HANDLERS, calls, {});
+  const me = tables.players_public.find(p => p.id === "p1");
+  w.localStorage.setItem("ft_session", JSON.stringify({ id: "p1", name: me.name, pin: "1234", is_global_admin: false }));
+  w.localStorage.setItem("ft_bracket_id", String(ids.CASUAL_ID));
+  for (const src of scripts) w.eval(src);
+  const settle = async () => { for (let i = 0; i < 8; i++) await tick(); };
+  await settle();
+  clickTab(w, "admin");
+  await settle();
+  const cls = el => el ? el.className : null;
+  const child = (el, c) => [...(el?.children || [])].find(x => x.classList.contains(c)) ?? null;
+  const truncation = el => { const s = w.getComputedStyle(el); return { textOverflow: s.textOverflow, whiteSpace: s.whiteSpace, overflow: s.overflow }; };
+  const list = d.getElementById("unaffiliated");
+  return {
+    LONG: LONG.name, PLAYED: PLAYED.name, UNDATED: UNDATED.name,
+    lists: d.querySelectorAll("#unaffiliated").length,
+    inAdminColumn: !!list?.closest("#col-admin"),
+    inMain: !!list?.closest("#main"),
+    rows: [...(list?.querySelectorAll(".signup-row") || [])].map(r => {
+      const l1 = child(r, "member-l1"), l2 = child(r, "member-l2");
+      const nameEl = r.querySelector(".mname") || r.querySelector(".nm");
+      const meta = l2?.firstElementChild?.classList.contains("signup-meta") ? l2.firstElementChild : null;
+      return {
+        rowClass: r.className,
+        children: [...r.children].map(cls),
+        l1Children: l1 ? [...l1.children].map(cls) : null,
+        l2Children: l2 ? [...l2.children].map(c => c.tagName === "BUTTON" ? `button:${c.textContent}` : cls(c)) : null,
+        name: nameEl?.textContent ?? null,
+        title: nameEl?.getAttribute("title") ?? null,
+        nameClass: cls(nameEl),
+        usesNm: !!r.querySelector(".nm"),
+        chain: nameEl ? [nameEl, l1, r].filter(Boolean).map(truncation) : [],
+        overflowWrap: nameEl ? w.getComputedStyle(nameEl).overflowWrap : null,
+        meta: meta ? { reg: !!meta.querySelector(".reg"), isNew: !!meta.querySelector(".new-signup"),
+                       played: meta.querySelector(".played")?.textContent ?? null, buttons: meta.querySelectorAll("button").length } : null,
+        // A date, mark or note anywhere outside line two's left side.
+        strays: [...r.querySelectorAll(".reg, .new-signup, .played")].filter(x => !x.closest(".signup-meta")).length,
+      };
+    }),
+  };
 }
