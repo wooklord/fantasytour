@@ -143,14 +143,21 @@
        (`DISCORD_WEBHOOK_GREEN_EGGS`, set 2026-10-14, see the "🔔 ENABLED"
        sub-bullet below), but its VALUE is the Ambassadors channel's
        webhook URL, so today both leagues' names resolve to one Discord
-       channel (league 1 to nothing, league 2 to Ambassadors'). (f) now
+       channel (league 1 to nothing, league 2 to Ambassadors'). **⚠️
+       CORRECTED 2026-10-28 (dev's information; `discord-routing.md` →
+       top): the webhook built for Ambassadors was reused for Green Eggs,
+       and Green Eggs' posts reach Green Eggs' Discord, which works.
+       Ambassadors has no working channel, so no channel is shared today,
+       and (i) below now reads the other way round: it is Ambassadors that
+       has no webhook.** (f) now
        covers: **(i) give each league its OWN Discord-side webhook** —
        create a webhook in the Green Eggs channel, put its URL in
        `DISCORD_WEBHOOK_GREEN_EGGS`; **(ii) a per-league Ambassadors
        secret** (`DISCORD_WEBHOOK_AMBASSADORS`; the global `DISCORD_WEBHOOK`
        is NOT to be restored); **(iii) the league-name prefix** on every
        `notifyLeague` message — which DOES still matter for Green Eggs
-       while its posts share the Ambassadors channel (the earlier
+       while its posts share the Ambassadors channel [⚠️ not shared
+       today, CORRECTION 2026-10-28 above] (the earlier
        "no longer blocking" reading assumed a single-league channel, which
        is not the current state). **ORDER FOR (i): replace the secret's
        value FIRST, and only THEN delete any Discord-side webhook.** A

@@ -91,7 +91,10 @@ The shape of the fix is settled; only the implementation is outstanding.
      admin Shows section and cleared by an admin; a Discord post only
      where a league hook exists. Known, separate: Green Eggs posts
      currently route to the Ambassadors channel (`discord-routing.md`), so
-     Ambassadors itself hears nothing until that item is done.
+     Ambassadors itself hears nothing until that item is done. **⚠️
+     CORRECTED 2026-10-28 (dev's information): Green Eggs' posts reach
+     Green Eggs' Discord, through the webhook built for Ambassadors.
+     Ambassadors still hears nothing; it has no working channel.**
   6. **Recorded, NOT in scope of this batch:** `scoreShow`'s fallback to
      every setlist row for that date when the show id matches nothing;
      `cutoffChanged()` having no dedupe stamp.

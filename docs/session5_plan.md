@@ -64,6 +64,9 @@ league's creation.
   - **🔇 SILENCED 2026-10-14 (dev's call) — supersedes the PAUSED bullet.
     ALL Discord posts for BOTH leagues are off: the global
     `DISCORD_WEBHOOK` secret was deleted. Config only, no code, no deploy.**
+    **⚠️ OUT OF DATE (CORRECTION 2026-10-28, dev's information;
+    `docs/decisions/discord-routing.md` → top): only Ambassadors is
+    silent. Green Eggs posts, and its Discord works.**
     Verified by name only the same day: platform defaults only, no
     `DISCORD_WEBHOOK`, no `DISCORD_WEBHOOK_*`. **Reason:** nobody reads
     either channel yet, and the message templates carry no league name
@@ -82,7 +85,11 @@ league's creation.
     sub-bullet.
   - **🔔 ENABLED 2026-10-14 (later the same day) — GREEN EGGS POSTS AGAIN
     via its own secret, BUT INTO THE AMBASSADORS CHANNEL; AMBASSADORS
-    REMAINS SILENCED.** The dev set `DISCORD_WEBHOOK_GREEN_EGGS` in the
+    REMAINS SILENCED.** **⚠️ CORRECTED 2026-10-28 (dev's information;
+    `docs/decisions/discord-routing.md` → top): Green Eggs' posts reach
+    Green Eggs' Discord, through the webhook built for Ambassadors, and
+    have fired through the 2026-10-23 show. Ambassadors has no working
+    channel.** The dev set `DISCORD_WEBHOOK_GREEN_EGGS` in the
     dashboard. Config only, no code, no deploy. Verified by name only
     (`supabase secrets list -o json`, names extracted, nothing else
     printed): 8 names = seven platform defaults +
@@ -100,7 +107,8 @@ league's creation.
     and song-by-song posts land in the Ambassadors channel for now, once
     each, not doubled. Dev's call — nobody reads that channel yet. The
     league-name prefix in (f) therefore DOES still matter for Green Eggs
-    while the channel is shared. **The 2026-10-15 21:00Z reminder for show
+    while the channel is shared [⚠️ not shared today, CORRECTION
+    2026-10-28 above]. **The 2026-10-15 21:00Z reminder for show
     1786387666 is a TWO-SIDED test observed in ONE channel: EXACTLY ONE
     reminder post there (Green Eggs'), BOTH rows stamp `remind_sent`. Two
     posts = league 1's hook is live (deletion did not propagate); zero =
@@ -147,7 +155,11 @@ effect on season 11 (roster locked; the gate reads `season_rosters`).
 (`DISCORD_WEBHOOK_GREEN_EGGS`, set 2026-10-14, verified by name — see the
 🔔 ENABLED bullet under item A), but its value is the Ambassadors
 channel's webhook URL, so both leagues currently resolve to one Discord
-channel (league 1 to nothing, league 2 to Ambassadors'). (f) now covers:
+channel (league 1 to nothing, league 2 to Ambassadors'). **⚠️ CORRECTED
+2026-10-28 (dev's information): the webhook built for Ambassadors was
+reused for Green Eggs, whose posts reach Green Eggs' Discord. Ambassadors
+has no working channel, so no channel is shared today, and (i) now reads
+the other way round: it is Ambassadors that has no webhook.** (f) now covers:
 **(i) a separate Discord-side webhook per league** — create one in the
 Green Eggs channel and put its URL in `DISCORD_WEBHOOK_GREEN_EGGS`,
 **replacing the secret's value BEFORE deleting any Discord-side webhook**:
@@ -157,7 +169,8 @@ order drops every post with nothing to replay; **(ii) a per-league
 Ambassadors secret** (`DISCORD_WEBHOOK_AMBASSADORS`; the global fallback is
 not to be restored); **(iii) the league-name prefix** on every
 `notifyLeague` message — which DOES still matter for Green Eggs while its
-posts share the Ambassadors channel (the earlier "no longer blocking"
+posts share the Ambassadors channel [⚠️ not shared today, CORRECTION
+2026-10-28 above] (the earlier "no longer blocking"
 reading assumed a single-league channel, which is not the current state).
 Needs an edge-function deploy for the prefix; the secrets are config.
 Nothing in it ships before then. `src/` and the bundle untouched this
@@ -225,6 +238,10 @@ the re-enable plan are in the 🔇 SILENCED bullet under item A above.
 secret stays deleted and Ambassadors stays silent. **Its value is the
 Ambassadors channel's webhook URL (dev's statement), so Green Eggs' posts
 land there for now.** See the 🔔 ENABLED bullet under item A.
+**⚠️ CORRECTED 2026-10-28 (dev's information): "silenced" holds only for
+Ambassadors, which has no working channel. Green Eggs' posts reach Green
+Eggs' Discord through the webhook built for Ambassadors, and fired through
+the 2026-10-23 show.**
 **Correction recorded the same day:** a `leagues.discord_webhook` column
 was referred to in conversation as if an earlier plan note described one.
 No tracked file mentions such a column (grepped CLAUDE.md and `docs/`), and
@@ -237,7 +254,8 @@ rows and locks. The cron is every minute (`cron.job` schedule `* * * * *`).
 **CHECK FOR FRIDAY 2026-10-16's POST-SHOW PROMPT (updated 2026-10-14 for
 the Green Eggs enable, then corrected the same day: the new secret points
 at the AMBASSADORS channel's webhook, so everything is observed in that one
-channel):** (1) EXACTLY ONE reminder, ONE lock and ONE winner post for show
+channel) [⚠️ CORRECTED 2026-10-28: that webhook now delivers to Green Eggs'
+Discord]:** (1) EXACTLY ONE reminder, ONE lock and ONE winner post for show
 1786387666 in the Ambassadors channel, all Green Eggs' (the reminder's
 non-voter list is league 2's; song-by-song posts once each, not doubled),
 NONE Ambassadors'; (2) `remind_sent`, `lock_sent`, `winner_sent` advanced
@@ -566,7 +584,9 @@ the fallback above no longer posts anything.** See the 🔇 SILENCED bullet
 under work-plan item A. **Later the same day, Green Eggs got its own
 secret** — `DISCORD_WEBHOOK_GREEN_EGGS`, verified by name only — **whose
 value, per the dev, is the same webhook URL the deleted global secret
-used**, so league 2 posts into the Ambassadors channel (once per event, not
+used**, so league 2 posts into the Ambassadors channel [⚠️ CORRECTED
+2026-10-28, dev's information: into Green Eggs' Discord, through the
+webhook built for Ambassadors; Ambassadors has no working channel] (once per event, not
 doubled) and league 1 (no per-league secret, no global) stays silent. See
 the 🔔 ENABLED bullet under item A. Batch item (f) now covers a separate
 Discord-side webhook for Green Eggs (re-point the secret BEFORE deleting

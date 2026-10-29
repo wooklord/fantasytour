@@ -133,7 +133,10 @@ confirm an earlier one.
      overlays_created, cutoffs_defaulted`.
 - Discord delivery is unchanged: `notifyLeague` posts only where the
   league's env hook exists. Known, separate: Green Eggs posts currently
-  land in the Ambassadors channel (`discord-routing.md`).
+  land in the Ambassadors channel (`discord-routing.md`). **⚠️ CORRECTED
+  2026-10-28 (dev's information): they land in Green Eggs' Discord,
+  through the webhook built for Ambassadors. Ambassadors has no working
+  channel.**
 
 ### Stage U — `sql/stage_u_show_sync.sql`
 
