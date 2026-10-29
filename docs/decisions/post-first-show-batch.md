@@ -154,7 +154,9 @@
        create a webhook in the Green Eggs channel, put its URL in
        `DISCORD_WEBHOOK_GREEN_EGGS`; **(ii) a per-league Ambassadors
        secret** (`DISCORD_WEBHOOK_AMBASSADORS`; the global `DISCORD_WEBHOOK`
-       is NOT to be restored); **(iii) the league-name prefix** on every
+       is NOT to be restored); **(iii) the league-name prefix**
+       [⚠️ SUPERSEDED 2026-10-28 by a per-league author name; (f) is
+       replaced by `discord-routing.md` → "Per-league split"] on every
        `notifyLeague` message — which DOES still matter for Green Eggs
        while its posts share the Ambassadors channel [⚠️ not shared
        today, CORRECTION 2026-10-28 above] (the earlier

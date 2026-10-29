@@ -31,7 +31,9 @@ dev's attestation, not a reading.
   - Ambassadors (league 1) resolves to no hook, so it posts nothing.
   - Nothing replays on restore.
   - The split decided on 2026-10-14 stands: a per-league secret, no
-    global fallback, and a league-name prefix.
+    global fallback, and a league-name prefix. **[Prefix SUPERSEDED
+    later on 2026-10-28 by a per-league author name: "Per-league split"
+    below, D2.]**
   - Item (f)(i) below, "a separate Discord-side webhook for Green Eggs",
     now reads the other way round: it is Ambassadors that has no webhook.
     That is for the split's plan to settle, not this correction.
@@ -40,6 +42,197 @@ dev's attestation, not a reading.
   dev's statement). The dev did not say how many reminders appeared, so
   the two-sided result is still unrecorded, and `CLAUDE.md`'s DATED
   DEADLINES row stays open.
+
+## Per-league split: LOCKED 2026-10-28 (the dev's picks), with the build plan
+
+A fresh session builds from this section: **Part 1 first, then Part 2.**
+Nothing here is built yet. The survey it rests on was read-only and is
+summarised under "Survey basis" below.
+
+### Decisions
+
+- **D1, how the app knows a league's Discord is live: server-side, in
+  Stage Y.**
+  - The edge function checks each league's webhook once a day. A GET on a
+    webhook posts nothing: 200 means live, 404 means deleted.
+  - It also records the result of every post.
+  - `my_leagues` returns `discord_live`, and the hint shows only in
+    leagues where it is true.
+  - Stage Y stores no webhook URL. Routing stays on env vars (roadmap
+    decision 2).
+- **D2, the label: a per-league author name, "Fantasy Eggy · <League>",**
+  set through the webhook's `username` override on every post.
+  - **It SUPERSEDES the locked 2026-10-14 text-prefix decision** (item
+    (f)(iii)), by the dev's pick: it labels every post, and it hides the
+    reused webhook's old name.
+  - There is no text prefix. "Fantasy Eggy" is a top-of-file constant in
+    the edge code (Conventions: instance values in named constants).
+- **D3, notifications: a plain-text tip,** "set this channel to All
+  Messages", in the hint's "How?" expander.
+  - The role ping is DEFERRED. Revisit if players ask for a ping on the
+    reminder only. It would need a self-assigned role per league and a
+    test post.
+- **D4, as recommended:** the hint shows everywhere, desktop included.
+- **D5, as recommended:** dismissal is per league, with the flag keyed by
+  league id.
+  - A Join tap counts as a permanent dismissal.
+  - The Settings switch restores the hint for the current league.
+  - The install flag stays per device.
+- **D6, as recommended: one hint at a time.** The Discord hint never shows
+  while the install bar or the welcome card is on screen.
+- **D7, Ambassadors gets its own webhook.** The dev creates it and sets
+  `DISCORD_WEBHOOK_AMBASSADORS` in the dashboard, **only after Part 1 is
+  live**, so its first posts already carry the author name and the
+  mention block. Verified by name, and by a digest comparison with Green
+  Eggs' that reports same or different only (practice below).
+- **D8, as recommended:** the mention block and the fallback removal ship
+  first, as Part 1.
+
+### Survey basis (2026-10-28, read-only)
+
+- **Secrets:** 8 names, the seven platform defaults plus
+  `DISCORD_WEBHOOK_GREEN_EGGS`. There is no `DISCORD_WEBHOOK` and no
+  `DISCORD_WEBHOOK_AMBASSADORS`.
+- **The deployed function is the committed source.** It was downloaded to
+  a scratch folder, and `index.ts`, `scoring.js` and `showSync.js` compared
+  equal with `cmp`.
+- **Keys from the live names:**
+  - league 1, `Ambassadors` → `DISCORD_WEBHOOK_AMBASSADORS`;
+  - league 2, `Green Eggs` → `DISCORD_WEBHOOK_GREEN_EGGS`.
+- **Routing today:** `notifyLeague` reads the league's own key, then
+  `DISCORD_WEBHOOK`, on every call.
+  - Every caller passes the name of the league the event belongs to.
+  - So Ambassadors' posts resolve to nothing and are dropped.
+  - Green Eggs gets its own copy of the song posts for a show on both
+    schedules.
+- **The posts** (none names its league):
+  - the 1-hour reminder, naming members who haven't picked;
+  - the lock;
+  - the show winner, per bracket;
+  - the season champion;
+  - song-by-song, once per league;
+  - cutoff changed, from the daily sync or an admin;
+  - the show-sync flag, sent to every league;
+  - scores reopened.
+- **Delivery:** the body is `{content}` only, with no `allowed_mentions`.
+  The HTTP status is ignored (`.catch(() => {})`), so a dead webhook is
+  silent.
+
+### Part 1: edge function only (no SQL, no client)
+
+- **New `supabase/functions/carton-sync/discord.js`,** pure and testable
+  in Node like `scoring.js` and `showSync.js`:
+  - `webhookEnvKey(name)`, the same derivation as today;
+  - `resolveHook(name, getEnv)`: the league's own key only, with **no
+    global fallback**, and null for an empty or missing name;
+  - `discordBody(leagueName, msg)`: `content` capped at 1900, `username`
+    "Fantasy Eggy · <League>" (Discord caps it at 80 characters), and
+    `allowed_mentions: { parse: [] }`.
+- **`index.ts`:**
+  - `notifyLeague` uses `discord.js`;
+  - fix the stale comments at 101–106 (the global fallback "keeps
+    Ambassadors working") and 357–359 ("points at the Ambassadors
+    channel").
+  - Part 1 still ignores the HTTP status. Recording it is Part 2.
+- **`test/discord.test.mjs` (new, in `npm test`):**
+  - both live keys;
+  - only `DISCORD_WEBHOOK` set gives null;
+  - an empty name gives null;
+  - every body carries `parse: []` and the league's author name;
+  - the 1900 cap.
+- **Mutations:**
+  - M1, the global fallback restored;
+  - M2, the mention block dropped;
+  - M3, the author name dropped or naming the wrong league.
+- **The dev's steps for Part 1, in order:**
+  1. Deploy: `supabase functions deploy carton-sync --project-ref
+     zdfhglvjxquvkjyvophz`.
+  2. Claude verifies the deploy by download and `cmp`.
+  3. Check the next Green Eggs post: its author line reads "Fantasy Eggy
+     · Green Eggs".
+  4. Then (D7): create the Ambassadors webhook, and set
+     `DISCORD_WEBHOOK_AMBASSADORS` in the dashboard, never on a command
+     line.
+  5. Claude verifies it by name, and by a digest comparison with Green
+     Eggs' (must be "different").
+
+### Part 2: Stage Y and the hint
+
+- **`sql/stage_y_discord_status.sql`:**
+  - `leagues` gets `discord_status` (`ok`, `no_key`, `http_<code>` or
+    `error`), `discord_checked_at` and `discord_ok_at`. The columns are
+    public through "pub leagues", and they hold no URL.
+  - `my_leagues` is dropped and recreated, adding `discord_live` (status
+    ok, checked within about 2 days).
+  - The footer has STEP 0, 2A and 2B, and `test/stageY.test.mjs` checks
+    it the way `stageX.test` does.
+- **`index.ts`:**
+  - the daily webhook check runs inside the existing daily gate
+    (`dailyGateDue`);
+  - every post records its result.
+- **Client:**
+  - `src/core/discordHint.js`: the rule, the bar and the per-league flag.
+    It reuses `.installbar`/`.installhow` and the "How?" toggle, which
+    holds the All Messages tip.
+  - a `#discord-bar` slot in `shows.js`, after `#install-bar`;
+  - a "Show Discord tip" switch in `settings.js`, for the current league;
+  - window exports in `main.js`, and the flag prefix in `config.js`.
+- **Scenario checks, both modes:**
+  - the bar shows only with `discord_live` and an https `discord_url`;
+  - never with the install bar or the welcome card;
+  - Join opens the link and sets the flag, and the bar stays gone after a
+    reload;
+  - ✕ dismisses the same way, and the Settings switch restores it;
+  - the other league is unaffected;
+  - the old `my_leagues` (no column) or a `javascript:` URL never shows it.
+- **Mutations:**
+  - M4, the hint ignores the install bar;
+  - M5, Join doesn't set the flag;
+  - M6, the hint ignores `discord_live`;
+  - M7, the flag is device-wide;
+  - M8, `discord_live` ignores a stale check.
+- **Residual:** a footer still can't run locally (the PGlite candidate in
+  `testing-harness.md`), so the dev's STEP 0 is its first run.
+- **The dev's steps for Part 2, in order:**
+  1. STEP 0, apply, STEP 2A, STEP 2B.
+  2. Deploy; Claude verifies by download and `cmp`.
+  3. Claude pushes the client and confirms the build id.
+  4. After the next daily gate:
+     `select id, discord_status, discord_checked_at from leagues;` reads
+     `ok` for both leagues.
+  5. Device checks: the bar in each live league, never alongside the
+     install bar or the welcome card; Join, and it never returns.
+- **Swapping a league's webhook later, with no gap:**
+  1. create the new webhook;
+  2. replace the secret's value;
+  3. a digest comparison reports "different";
+  4. wait for `discord_status` to read `ok`;
+  5. only then delete the old webhook.
+
+### Corrections to Chat (recorded 2026-10-28)
+
+1. **Chat said an Ambassadors show would post into Green Eggs' channel.
+   That is wrong.** The lookup is per league, Ambassadors has no key, and
+   no global secret exists, so its posts are dropped. It would become true
+   only if `DISCORD_WEBHOOK` came back holding Green Eggs' URL, and Part 1
+   removes that fallback.
+2. **Chat's survey prompt asked for secret digests, against the repo rule**
+   (`CLAUDE.md`: never print a secret's value or its digest). This session
+   followed the prompt and printed the one Discord digest in the terminal.
+   It is in no file and no commit.
+   - **New practice:** compare digests inside a script and report only
+     "same" or "different". Never print them.
+
+### Mention hazard: CHECKED AND CLEAN 2026-10-28, still UNFIXED in code
+
+- **The hazard:** posts don't block mentions. A member named `@everyone`
+  or `@here`, or a name holding a raw `<@…>` mention, would ping through
+  the reminder, winner or podium posts. Registration limits a name's
+  length, not its characters.
+- **The dev's read-only check, 2026-10-28:** names containing `@everyone`,
+  `@here` or `<@` returned **0**. No live name can ping today.
+- **Still unfixed in code until Part 1 ships** the mention block
+  (`allowed_mentions: { parse: [] }`).
 
 - **The one production-behaviour change the data fix UNLOCKS — Discord
   routing. DECIDED 2026-10-11: provision `DISCORD_WEBHOOK_GREEN_EGGS`
@@ -104,7 +297,9 @@ dev's attestation, not a reading.
     - **Re-enabling AMBASSADORS is item (f) of the post-first-show
       batch** (above), narrowed 2026-10-14: a per-league Ambassadors
       secret and the league-name prefix. Green Eggs is no longer part
-      of (f).
+      of (f). **[⚠️ The prefix is SUPERSEDED 2026-10-28 by a per-league
+      author name, and (f) is replaced by the plan in "Per-league split"
+      at the top of this file.]**
     - **🔔 ENABLED 2026-10-14 — GREEN EGGS (league 2) POSTS AGAIN,
       PER-LEAGUE SECRET, BUT INTO THE AMBASSADORS CHANNEL. AMBASSADORS
       (league 1) REMAINS SILENCED.** **⚠️ CORRECTED 2026-10-28 (top of

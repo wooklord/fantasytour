@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-28 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 LIVE)
+## RESUME HERE (updated 2026-10-28 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 LIVE; NEXT: Discord split Part 1)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of
@@ -45,6 +45,16 @@ row. A layout fix for the sign-up rows (the Members panel's two lines, no
 name truncation) was APPROVED, BUILT and went LIVE 2026-10-28, bundle
 `9dbc014-9e7ecb1` (decision 8, "Layout fix"). Its device check on the
 dev's phone is still open.
+
+**NEXT (parked 2026-10-28): Discord split, Part 1** (edge function only:
+`discord.js`, the mention block, no global fallback, the per-league author
+name, the stale comments, M1–M3). Decisions D1–D8 LOCKED 2026-10-28, with
+the full build plan and the dev's steps in order:
+`docs/decisions/discord-routing.md` → "Per-league split". Part 2 (Stage Y,
+the daily webhook check, the Discord hint) follows. The mention hazard was
+checked clean 2026-10-28 (0 names), but it stays unfixed in code until
+Part 1 ships.
+
 Standings/Settings/Who's Picked UX (a separate batch, LOCKED 2026-10-25)
 is in `standings-ux.md` and `admin-panel.md` → "Who's Picked".
 

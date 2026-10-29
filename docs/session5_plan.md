@@ -106,7 +106,8 @@ league's creation.
     not: Green Eggs' reminder (naming league 2's non-voters), lock, winner
     and song-by-song posts land in the Ambassadors channel for now, once
     each, not doubled. Dev's call — nobody reads that channel yet. The
-    league-name prefix in (f) therefore DOES still matter for Green Eggs
+    league-name prefix [SUPERSEDED 2026-10-28 by a per-league author
+    name] in (f) therefore DOES still matter for Green Eggs
     while the channel is shared [⚠️ not shared today, CORRECTION
     2026-10-28 above]. **The 2026-10-15 21:00Z reminder for show
     1786387666 is a TWO-SIDED test observed in ONE channel: EXACTLY ONE
@@ -167,7 +168,9 @@ a dead URL fails silently (`notifyLeague`'s fetch is `.catch(() => {})`,
 `index.ts:103-107`, and the stamps are written regardless), so the wrong
 order drops every post with nothing to replay; **(ii) a per-league
 Ambassadors secret** (`DISCORD_WEBHOOK_AMBASSADORS`; the global fallback is
-not to be restored); **(iii) the league-name prefix** on every
+not to be restored); **(iii) the league-name prefix** [⚠️ SUPERSEDED
+2026-10-28 by a per-league author name; (f) is replaced by
+`docs/decisions/discord-routing.md` → "Per-league split"] on every
 `notifyLeague` message — which DOES still matter for Green Eggs while its
 posts share the Ambassadors channel [⚠️ not shared today, CORRECTION
 2026-10-28 above] (the earlier "no longer blocking"
@@ -592,7 +595,9 @@ the 🔔 ENABLED bullet under item A. Batch item (f) now covers a separate
 Discord-side webhook for Green Eggs (re-point the secret BEFORE deleting
 any Discord-side webhook — a dead URL fails silently, `index.ts:103-107`),
 a per-league Ambassadors secret, and the league-name prefix; the global
-fallback is not to be restored.
+fallback is not to be restored. **[⚠️ The prefix is SUPERSEDED 2026-10-28 by
+a per-league author name, and (f) is replaced by
+`docs/decisions/discord-routing.md` → "Per-league split".]**
 **Correction:** there is no `leagues.discord_webhook` column and never was
 — the live table is `id`, `name`, `created_at` (read 2026-10-14); routing
 is the env-var lookup above and nothing else.

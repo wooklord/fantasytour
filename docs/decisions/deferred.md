@@ -23,7 +23,10 @@ said "never existed," which was itself an over-correction:
 stats (revisit past 2-3 leagues); the per-league webhook DB+UI (revisit if
 env-var management gets painful, or the Global console expands); the
 notification-preference toggle (no strong trigger, pick up whenever wanted);
-game numbering past 12 shows (revisit only if a season actually gets there).
+game numbering past 12 shows (revisit only if a season actually gets there);
+the Discord role ping on the 1-hour reminder (deferred 2026-10-28, D3 in
+`discord-routing.md` → "Per-league split"; revisit if players ask for a
+ping on the reminder only).
 
 ---
 
