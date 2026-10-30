@@ -158,6 +158,10 @@ summarised under "Survey basis" below.
 
 ### Part 2: Stage Y and the hint
 
+- **Stage Y is RESERVED for this Part 2 (the dev's call, recorded
+  2026-10-30).** Any other feature needing a schema change takes the next
+  free letter. Files on disk run through `stage_x`, so that is Z as of this
+  writing.
 - **`sql/stage_y_discord_status.sql`:**
   - `leagues` gets `discord_status` (`ok`, `no_key`, `http_<code>` or
     `error`), `discord_checked_at` and `discord_ok_at`. The columns are
