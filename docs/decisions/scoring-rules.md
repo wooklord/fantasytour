@@ -372,11 +372,13 @@ wasted-ping and lost-history bug, not a scoring bug.
 
 ## Open items — found 2026-10-30
 
-**OPEN, no decision made: the stored 2026-08-14 setlist is one song short of
-The Carton, and one pick's score is short because of it.** Found 2026-10-30
-during a read-only check: the stored setlist for that show has 15 songs and The
-Carton has 16, with "Rampage" missing at position 3. Investigated in a second
-read-only check on 2026-10-31. No score or setlist row has been changed.
+**DECIDED-DEFERRED, not resolved: the stored 2026-08-14 setlist is one song
+short of The Carton, and one pick's score is short because of it.** Decision
+(1) is deferred by the dev's call below; decision (2) stays OPEN. Found
+2026-10-30 during a read-only check: the stored setlist for that show has 15
+songs and The Carton has 16, with "Rampage" missing at position 3. Investigated
+in a second read-only check on 2026-10-31. No score or setlist row has been
+changed.
 - **CORRECTION 2026-10-31: the earlier "scores are likely unaffected" was
   wrong.** It rested on the scorer reading The Carton live, but that read stops
   once a show goes final, and the song arrived after that. **The failed-write
@@ -409,14 +411,21 @@ read-only check on 2026-10-31. No score or setlist row has been changed.
   (10-15 to 10-21), so an edit in that gap reaches only one league, and a
   stored-vs-Carton comparison can't detect it: the stored rows are shared, so
   they still end up matching The Carton.
-- **Pending decisions (the dev's, not yet made):** (1) whether to correct this
-  pick's score; (2) whether to add a guard, such as a daily flag-only
-  re-derivation of frozen verdicts.
+- **DECISION 2026-10-31 (dev's call) on decision (1), whether to correct this
+  pick's score: do NOT correct the Ambassadors Casual pick now.** It's a
+  Casual-bracket score and not worth the effort unprompted. If the player raises
+  it, correct it then. This is deferred, not resolved: the score stays short.
+- **Method if raised:** a targeted adjustment to that player's rows only, never
+  reopen/finalize (which would re-score the three Official `cover1` rows from 5
+  to 3). Any fix SQL contains a player ID, so run it ad hoc and never commit it.
 - **Bearing on (1):** reopen wipes every Ambassadors bracket's scores on this
   show (`:909`) and finalize re-scores them under today's config, so three
-  Official `cover1` rows would drop from 5 to 3 (first item below). So any
-  correction must be a targeted adjustment to that one score, not
+  Official `cover1` rows would drop from 5 to 3 (see "Official `cover1` value"
+  below). So any correction must be a targeted adjustment to that one score, not
   reopen/finalize.
+- **Decision (2) stays OPEN (the dev's, not yet made):** whether to add a guard
+  against late Carton edits after final, such as a daily flag-only re-derivation
+  of frozen verdicts.
 
 **Other open items found 2026-10-31 (unverified, no action yet):**
 - **Official `cover1` value.** Ambassadors Official's `cover1` paid 5 on

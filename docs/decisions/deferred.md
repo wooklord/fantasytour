@@ -70,6 +70,8 @@ Fix shapes are there; neither is scheduled.
 found 2026-10-30":** The Carton added a song to the 2026-08-14 show after its
 final pass (confirmed 2026-10-31, correcting the earlier "likely unaffected"),
 so one pick is 2 points short. A final show is never re-read by the scoring
-cron, so all final shows with picks are exposed. Still open: correcting the
-score and adding a guard are the dev's decisions, not yet made. Four smaller
-unverified items sit beside it, with no action yet.
+cron, so all final shows with picks are exposed. **Decided-deferred, not
+resolved (dev's call, 2026-10-31):** the pick is not corrected now; revisit if
+the player raises it, by targeted adjustment only, never reopen/finalize, with
+the fix SQL never committed. Still open: a guard against late Carton edits after
+final. Four smaller unverified items sit beside it, with no action yet.
