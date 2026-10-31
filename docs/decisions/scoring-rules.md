@@ -372,23 +372,55 @@ wasted-ping and lost-history bug, not a scoring bug.
 
 ## Open items — found 2026-10-30
 
-**OPEN, not a decision: the stored 2026-08-14 setlist is one song short of The
-Carton.** Found 2026-10-30 during a read-only check: the stored setlist for
-that show has 15 songs and The Carton has 16, with "Rampage" missing at
-position 3.
-- **Impact unverified.** The scorer is believed to read The Carton live rather
-  than stored rows, so scores are likely unaffected, but this has NOT been
-  checked for this show.
-- **Unknown:** why the stored row didn't pick up the insert (possibly because
-  the stored row is only rewritten when song order changes), and whether other
-  shows have the same drift.
-- **Next action:** a read-only comparison of stored vs Carton setlists for
-  every 2026 show, plus a check of that show's scores. Not yet scheduled.
-- **Code read while recording (2026-10-31), not checked against data:** the
-  live read at `index.ts:734` only runs until a show goes final
-  (`eligibleLeagueShows`, `:537`), and the diff compares song names by position
-  (`:767-770`), so a pass that saw the insert should have rewritten the rows.
-  If The Carton added the song after the last pass, the final scores were
-  computed without it too, and the live read would not protect them. If a
-  write failed instead (the upsert at `:772` checks no error), the scores could
-  be right with only the stored rows stale.
+**OPEN, no decision made: the stored 2026-08-14 setlist is one song short of
+The Carton, and one pick's score is short because of it.** Found 2026-10-30
+during a read-only check: the stored setlist for that show has 15 songs and The
+Carton has 16, with "Rampage" missing at position 3. Investigated in a second
+read-only check on 2026-10-31. No score or setlist row has been changed.
+- **CORRECTION 2026-10-31: the earlier "scores are likely unaffected" was
+  wrong.** It rested on the scorer reading The Carton live, but that read stops
+  once a show goes final, and the song arrived after that. **The failed-write
+  branch is ruled out:** this entry had left open that a write failed and only
+  the stored rows were stale.
+- **Cause (confirmed 2026-10-31):** The Carton added "Rampage" after the
+  2026-08-15 12:00:04Z final pass, sometime before the 2026-09-04 show was
+  entered. Evidence: the final pass scored the pick "not played", and the
+  setlist write and scorer input come from the same fetch (`index.ts:734-760`,
+  `:884`), so a fetch containing the song would have scored a hit even if the
+  write had failed. The window's far end is inferred from The Carton's
+  `uniqueid` sequence, since its API exposes no timestamps: this row is 46813,
+  the rest of the show is 46356–46473, and the 09-04 show starts at 46891. A
+  stale API response at that moment can't be excluded; the effect is the same.
+- **Impact:** 1 pick (Ambassadors Casual, rank 5) is 2 points short. Show score
+  14→16 (already the show winner, no perfect-sheet bonus). Casual all-time:
+  sole 2nd → tied 1st (no Casual tiebreakers). Official and seasons are
+  unaffected. All 1,657 frozen verdicts on the 17 shows with a stored setlist
+  were re-derived against The Carton (hit and reason, not points, since configs
+  have moved) and only this one changes, as of 2026-10-31.
+- **Systemic flaw:** once a show is final the scoring cron never re-reads it
+  (`index.ts:537`), and reopen alone doesn't rescore a show dated before
+  yesterday (`:541-543`); only the follow-up finalize does (`:960`). All final
+  shows with picks are exposed, and late Carton edits are real (07-30 name fix,
+  10-15 segue change). Green Eggs finalized 3–9h before Ambassadors on six shows
+  (10-15 to 10-21), so an edit in that gap reaches only one league, and a
+  stored-vs-Carton comparison can't detect it: the stored rows are shared, so
+  they still end up matching The Carton.
+- **Pending decisions (the dev's, not yet made):** (1) whether to correct this
+  pick's score; (2) whether to add a guard, such as a daily flag-only
+  re-derivation of frozen verdicts.
+- **Bearing on (1):** reopen wipes every Ambassadors bracket's scores on this
+  show (`:909`) and finalize re-scores them under today's config, so three
+  Official `cover1` rows would drop from 5 to 3 (first item below).
+
+**Other open items found 2026-10-31 (unverified, no action yet):**
+- **Official `cover1` value.** Ambassadors Official's `cover1` paid 5 on
+  2026-08-14 and pays 3 today. Was the change deliberate and recorded?
+- **Missing show.** The Carton's second 2026-09-18 show (`1789753018`, 9 songs)
+  is missing from `shows` and was never playable.
+- **Ambassadors 2026-10-23 row.** It went final before the show was played
+  (10-22 cutoff); the date likely moved after the row was created. There were
+  no picks, so there's no score effect.
+- **Stored drift with no scoring effect.** Stored segue flags differ from The
+  Carton on 10-15 ("Paper Bed"), and 07-30 has a trailing-space name. Segue
+  differences on 07-30 to 08-07 are expected: those shows went final before the
+  `segue` column was committed on 2026-08-08.

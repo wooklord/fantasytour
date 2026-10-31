@@ -66,6 +66,10 @@ a debut the scorer no longer credits), and the score-write change check
 never matches (every pass rewrites every row, `updated_at` is meaningless).
 Fix shapes are there; neither is scheduled.
 
-**One open item found 2026-10-30, same file under "Open items — found
-2026-10-30":** the stored 2026-08-14 setlist is one song short of The Carton.
-Impact unverified; the read-only check is not yet scheduled.
+**Open items found 2026-10-30 and 2026-10-31, same file under "Open items —
+found 2026-10-30":** The Carton added a song to the 2026-08-14 show after its
+final pass (confirmed 2026-10-31, correcting the earlier "likely unaffected"),
+so one pick is 2 points short. A final show is never re-read by the scoring
+cron, so all final shows with picks are exposed. Still open: correcting the
+score and adding a guard are the dev's decisions, not yet made. Four smaller
+unverified items sit beside it, with no action yet.
