@@ -46,8 +46,9 @@ dev's attestation, not a reading.
 ## Per-league split: LOCKED 2026-10-28 (the dev's picks), with the build plan
 
 A fresh session builds from this section: **Part 1 first, then Part 2.**
-Nothing here is built yet. The survey it rests on was read-only and is
-summarised under "Survey basis" below.
+**Part 1 is BUILT 2026-10-31** ("Part 1 status" below holds the build and
+deploy record); Part 2 is not built. The survey it rests on was read-only
+and is summarised under "Survey basis" below.
 
 ### Decisions
 
@@ -155,6 +156,47 @@ summarised under "Survey basis" below.
      line.
   5. Claude verifies it by name, and by a digest comparison with Green
      Eggs' (must be "different").
+
+### Part 1 status: BUILT 2026-10-31, deploy PENDING (this block is updated in place)
+
+- **Pre-build checks, 2026-10-31, read-only:** tree clean on `main` at
+  `a949ba3`, equal to `origin/main`. At 18:35 UTC no `league_shows` row of
+  either league had a cutoff or a live/unfinalized status within 12 hours;
+  the next show is 2026-11-06 (cutoff 23:00 UTC), so the deploy is NOT held.
+  The deployed function was downloaded to a scratch folder BEFORE the build
+  (`supabase functions download carton-sync --workdir <scratch>`, which
+  never touches the repo copy) and `index.ts`, `scoring.js`, `showSync.js`
+  compared identical to HEAD with `cmp`: the deploy replaces exactly the
+  committed source.
+- **Built, as planned:** `supabase/functions/carton-sync/discord.js` —
+  `webhookEnvKey` (the same derivation as before), `resolveHook` (the
+  league's own key only, NO global fallback, null for a name that derives to
+  no key, and no env read at all in that case), `authorName` ("Fantasy Eggy
+  · <League>", capped at Discord's 80 counting the WHOLE label), `discordBody`
+  (`content` capped at 1900, the author name, `allowed_mentions: { parse: []
+  }`, nothing else) and `postOutcome` (the HTTP status sorted into `ok`,
+  `http_<code>` or `error` — Part 2's `discord_status` vocabulary). `index.ts`:
+  `notifyLeague` uses the three, the two stale comments (the global-fallback
+  rationale, "points at the Ambassadors channel") are fixed, and the header
+  has a v9 note. `test/discord.test.mjs` is in `npm test`; the full suite is
+  green.
+- **One small extension of the plan, stated plainly:** the plan said Part 1
+  "still ignores the HTTP status". It now sorts the status and writes a
+  failed post to the function log with `console.error`. Nothing is stored,
+  there is no column, and a successful post behaves exactly as before.
+- **Mutations, each KILLED, each revert `cmp`-identical to a pristine copy
+  taken after the suite passed:** M1 (global fallback restored) failed 4
+  checks, among them "exactly ONE key is consulted, the league's own"; M2
+  (mention block dropped) failed 4; M3 (label dropped) failed 4. Each was
+  applied and reverted by an exact-text anchor that must occur exactly once
+  (discipline item 6), never by line number.
+- **Unchanged:** the secret names, every message text, the stamps and the
+  dedupe. Ambassadors still resolves to no hook until D7. No `?wait`, no
+  avatar: the Discord avatar is set per webhook in Discord
+  (`frontend-css.md`, brand assets).
+- **Deploy:** by the assistant on the dev's instruction of 2026-10-31
+  (CLAUDE.md's deploy command), to be verified by download and `cmp`
+  against HEAD, then recorded LIVE here.
 
 ### Part 2: Stage Y and the hint
 

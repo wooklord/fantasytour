@@ -47,11 +47,19 @@
 //     (posting the existing cutoff-changed message) and flags an admin-set
 //     one. The decisions are pure functions in showSync.js; this file
 //     fetches, calls them, and applies the writes they return.
+// v9 (Discord per-league split, Part 1, LOCKED 2026-10-28 — see
+//     docs/decisions/discord-routing.md): notifyLeague resolves ONLY the
+//     league's own DISCORD_WEBHOOK_<LEAGUE NAME> secret (the global
+//     DISCORD_WEBHOOK fallback is gone), every post carries the author name
+//     "Fantasy Eggy · <League>" and allowed_mentions { parse: [] }, and
+//     Discord's answer is sorted into ok/failed and logged. The pure parts
+//     live in discord.js (unit-tested under Node, like scoring/showSync).
 // ============================================================
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { norm, deriveSlotFacts, scorePicks } from "./scoring.js";
 import { dailyGateDue, diffShows, cutoffPlan, appendFlag } from "./showSync.js";
+import { resolveHook, discordBody, postOutcome } from "./discord.js";
 
 // Instance constant: setlist data source.
 const CARTON = "https://thecarton.net/api/v2";
@@ -98,24 +106,26 @@ function decodeEntities<T extends string | null | undefined>(s: T): T {
     .replace(/&amp;/g, "&") as T;
 }
 
-// Discord is broadcast per league, never personal/DMed. There's no DB column
-// for a per-league webhook yet, so this reads DISCORD_WEBHOOK_<LEAGUE NAME>
-// first (e.g. DISCORD_WEBHOOK_AMBASSADORS) and falls back to the single
-// DISCORD_WEBHOOK secret that already exists — keeps Ambassadors working
-// with no new secret, and a future league just needs one more env var, no
-// schema change, until that stops scaling.
-function leagueWebhookEnvKey(leagueName: string) {
-  return "DISCORD_WEBHOOK_" + leagueName.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-}
+// Discord is broadcast per league, never personal/DMed. Routing is the
+// league's OWN secret, DISCORD_WEBHOOK_<LEAGUE NAME> (e.g.
+// DISCORD_WEBHOOK_GREEN_EGGS), read per call through discord.js with NO
+// global fallback — a league with no secret posts nothing, by design, rather
+// than into another league's channel (Part 1 of the per-league split,
+// docs/decisions/discord-routing.md, LOCKED 2026-10-28). Routing stays on
+// env vars (roadmap decision 2); no DB column holds a URL. Every post carries
+// the per-league author name and blocks every mention; Discord's answer is
+// sorted into ok/failed and logged, not stored (storing it is Part 2).
 async function notifyLeague(leagueName: string, msg: string) {
   if (!msg) return;
-  const hook = Deno.env.get(leagueWebhookEnvKey(leagueName || "")) || Deno.env.get("DISCORD_WEBHOOK");
+  const hook = resolveHook(leagueName, (k: string) => Deno.env.get(k));
   if (!hook) return;
-  await fetch(hook, {
+  const res = await fetch(hook, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content: msg.slice(0, 1900) }),
-  }).catch(() => {});
+    body: JSON.stringify(discordBody(leagueName, msg)),
+  }).catch(() => null);
+  const outcome = postOutcome(res?.status ?? null);
+  if (!outcome.ok) console.error(`notifyLeague: Discord post failed for league "${leagueName}": ${outcome.status}`);
 }
 
 // scores/league_shows have zero public RLS SELECT policies by design (see
@@ -355,8 +365,8 @@ async function syncShows() {
 
   // Flags: one write per show. Posted to every league on first record only
   // (shows are global; any league's admin may clear). notifyLeague no-ops
-  // where a league has no hook — known: Green Eggs' hook currently points
-  // at the Ambassadors channel (docs/decisions/discord-routing.md).
+  // where a league has no per-league secret — Ambassadors, until
+  // DISCORD_WEBHOOK_AMBASSADORS is set (docs/decisions/discord-routing.md, D7).
   for (const [id, text] of flagText) {
     const { error } = await supa.from("shows").update({ sync_flag: text }).eq("id", id);
     if (error) console.error(`syncShows: flag write failed for show ${id}:`, error);
