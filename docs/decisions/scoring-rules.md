@@ -391,12 +391,16 @@ read-only check on 2026-10-31. No score or setlist row has been changed.
   `uniqueid` sequence, since its API exposes no timestamps: this row is 46813,
   the rest of the show is 46356–46473, and the 09-04 show starts at 46891. A
   stale API response at that moment can't be excluded; the effect is the same.
-- **Impact:** 1 pick (Ambassadors Casual, rank 5) is 2 points short. Show score
-  14→16 (already the show winner, no perfect-sheet bonus). Casual all-time:
-  sole 2nd → tied 1st (no Casual tiebreakers). Official and seasons are
-  unaffected. All 1,657 frozen verdicts on the 17 shows with a stored setlist
-  were re-derived against The Carton (hit and reason, not points, since configs
-  have moved) and only this one changes, as of 2026-10-31.
+- **Impact:** 1 pick in Ambassadors Casual scored 'not played' and is 2 points
+  short; it changes the Casual all-time standing at the top. Official and
+  seasons are unaffected. Player-identifying details (rank, scores, standing
+  positions) are deliberately not recorded in this public repo. All 1,657 frozen
+  verdicts on the 17 shows with a stored setlist were re-derived against The
+  Carton (hit and reason, not points) and only this one changes, as of
+  2026-10-31.
+- **CORRECTION 2026-10-31:** 038264f recorded rank, score and standing details
+  that identify the player; redacted here. Git history still contains them; the
+  dev chose not to rewrite history on a public Pages-deployed repo.
 - **Systemic flaw:** once a show is final the scoring cron never re-reads it
   (`index.ts:537`), and reopen alone doesn't rescore a show dated before
   yesterday (`:541-543`); only the follow-up finalize does (`:960`). All final
@@ -410,7 +414,9 @@ read-only check on 2026-10-31. No score or setlist row has been changed.
   re-derivation of frozen verdicts.
 - **Bearing on (1):** reopen wipes every Ambassadors bracket's scores on this
   show (`:909`) and finalize re-scores them under today's config, so three
-  Official `cover1` rows would drop from 5 to 3 (first item below).
+  Official `cover1` rows would drop from 5 to 3 (first item below). So any
+  correction must be a targeted adjustment to that one score, not
+  reopen/finalize.
 
 **Other open items found 2026-10-31 (unverified, no action yet):**
 - **Official `cover1` value.** Ambassadors Official's `cover1` paid 5 on
