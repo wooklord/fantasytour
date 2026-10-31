@@ -209,10 +209,11 @@ in the file each one names.
   on 2026-10-11. LOCKED list, Stage R (written, NOT applied) and THE
   POST-FIRST-SHOW BATCH (a)–(f): `docs/decisions/post-first-show-batch.md`.
   Pre-sync check, verification, findings: `docs/history/2026-10-green-eggs-overlay.md`.
-- **Discord routing, CORRECTED 2026-10-28:** global `DISCORD_WEBHOOK`
-  deleted, Ambassadors has no working channel; `DISCORD_WEBHOOK_GREEN_EGGS`
-  reuses the webhook built for Ambassadors. Nothing replays on restore. Full
-  record; the split LOCKED 2026-10-28, Part 1 next: `docs/decisions/discord-routing.md`.
+- **Discord routing — Part 1 LIVE 2026-10-31 (`bb2dea4`):** the league's own
+  secret only, NO global fallback; author name "Fantasy Eggy · <League>" and
+  `allowed_mentions: {parse: []}` on every post. Ambassadors has no secret yet,
+  so it posts nothing. NEXT: D7 (`DISCORD_WEBHOOK_AMBASSADORS`, verified by name
+  and same/different digest only), then Part 2: `docs/decisions/discord-routing.md`.
 - **Short Postgres rules — `docs/decisions/postgres-rules.md`:** pgcrypto is
   in `extensions`; finalized `breakdown` text is frozen; `shows.timezone` null
   means unmapped, and a new `shows` column needs its own backfill; `banned` is

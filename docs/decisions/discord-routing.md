@@ -157,7 +157,7 @@ and is summarised under "Survey basis" below.
   5. Claude verifies it by name, and by a digest comparison with Green
      Eggs' (must be "different").
 
-### Part 1 status: BUILT 2026-10-31, deploy PENDING (this block is updated in place)
+### Part 1 status: ✅ LIVE 2026-10-31 (commit `bb2dea4`, deployed and verified the same day)
 
 - **Pre-build checks, 2026-10-31, read-only:** tree clean on `main` at
   `a949ba3`, equal to `origin/main`. At 18:35 UTC no `league_shows` row of
@@ -194,9 +194,22 @@ and is summarised under "Survey basis" below.
   dedupe. Ambassadors still resolves to no hook until D7. No `?wait`, no
   avatar: the Discord avatar is set per webhook in Discord
   (`frontend-css.md`, brand assets).
-- **Deploy:** by the assistant on the dev's instruction of 2026-10-31
-  (CLAUDE.md's deploy command), to be verified by download and `cmp`
-  against HEAD, then recorded LIVE here.
+- **Deploy, 2026-10-31 (by the assistant on the dev's instruction, with
+  CLAUDE.md's deploy command), VERIFIED:** committed as `bb2dea4` and pushed
+  (`main` = `origin/main`) first, then deployed ("Deployed Functions.", the
+  four assets uploaded), then downloaded to a fresh scratch folder and all
+  four files — `index.ts`, `discord.js`, `scoring.js`, `showSync.js` —
+  compared identical to HEAD `bb2dea4` with `cmp`. The literal
+  `"DISCORD_WEBHOOK"` occurs zero times in the deployed `index.ts`.
+- **What to watch next:** the first post after this deploy is the 2026-11-06
+  show's 1-hour reminder at 22:00 UTC (Green Eggs' channel): its author line
+  must read "Fantasy Eggy · Green Eggs" (the dev's step 3). A failed post now
+  leaves a `notifyLeague: Discord post failed` line in the function log.
+- **Next: D7.** The dev creates the Ambassadors webhook in Discord and sets
+  `DISCORD_WEBHOOK_AMBASSADORS` in the Supabase dashboard (never on a
+  command line); the assistant then verifies it by NAME and reports only
+  whether its digest is the same as or different from Green Eggs' (must be
+  "different"). Then Part 2.
 
 ### Part 2: Stage Y and the hint
 
