@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-31 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 LIVE, Discord split Part 1 LIVE `bb2dea4`; NEXT: D7 — the dev creates the Ambassadors webhook and sets `DISCORD_WEBHOOK_AMBASSADORS` in the dashboard, verified by name and a same/different digest comparison — then Discord Part 2 (Stage Y); all in `discord-routing.md`)
+## RESUME HERE (updated 2026-10-31 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 LIVE, Discord split Part 1 LIVE `bb2dea4`, D7 DONE 2026-10-31 (`DISCORD_WEBHOOK_AMBASSADORS` set, verified by name, digest differs from Green Eggs'); NEXT: Discord Part 2 (Stage Y); all in `discord-routing.md`)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of

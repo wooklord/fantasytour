@@ -29,6 +29,8 @@ dev's attestation, not a reading.
   Eggs' Discord.
 - **Unchanged:**
   - Ambassadors (league 1) resolves to no hook, so it posts nothing.
+    **[No longer true since D7, 2026-10-31: `DISCORD_WEBHOOK_AMBASSADORS`
+    is set; the D7 record under "Part 1 status" below.]**
   - Nothing replays on restore.
   - The split decided on 2026-10-14 stands: a per-league secret, no
     global fallback, and a league-name prefix. **[Prefix SUPERSEDED
@@ -47,7 +49,8 @@ dev's attestation, not a reading.
 
 A fresh session builds from this section: **Part 1 first, then Part 2.**
 **Part 1 is BUILT 2026-10-31** ("Part 1 status" below holds the build and
-deploy record); Part 2 is not built. The survey it rests on was read-only
+deploy record) **and D7 is DONE 2026-10-31** (the "D7" record at the end of
+"Part 1 status"); Part 2 is not built. The survey it rests on was read-only
 and is summarised under "Survey basis" below.
 
 ### Decisions
@@ -81,7 +84,8 @@ and is summarised under "Survey basis" below.
   - The install flag stays per device.
 - **D6, as recommended: one hint at a time.** The Discord hint never shows
   while the install bar or the welcome card is on screen.
-- **D7, Ambassadors gets its own webhook.** The dev creates it and sets
+- **D7, Ambassadors gets its own webhook. ✅ DONE 2026-10-31** (record at
+  the end of "Part 1 status"). The dev creates it and sets
   `DISCORD_WEBHOOK_AMBASSADORS` in the dashboard, **only after Part 1 is
   live**, so its first posts already carry the author name and the
   mention block. Verified by name, and by a digest comparison with Green
@@ -153,9 +157,9 @@ and is summarised under "Survey basis" below.
      · Green Eggs".
   4. Then (D7): create the Ambassadors webhook, and set
      `DISCORD_WEBHOOK_AMBASSADORS` in the dashboard, never on a command
-     line.
+     line. **✅ Done by the dev 2026-10-31.**
   5. Claude verifies it by name, and by a digest comparison with Green
-     Eggs' (must be "different").
+     Eggs' (must be "different"). **✅ Done 2026-10-31: "different".**
 
 ### Part 1 status: ✅ LIVE 2026-10-31 (commit `bb2dea4`, deployed and verified the same day)
 
@@ -191,7 +195,8 @@ and is summarised under "Survey basis" below.
   applied and reverted by an exact-text anchor that must occur exactly once
   (discipline item 6), never by line number.
 - **Unchanged:** the secret names, every message text, the stamps and the
-  dedupe. Ambassadors still resolves to no hook until D7. No `?wait`, no
+  dedupe. Ambassadors still resolves to no hook until D7 [done the same
+  evening, below]. No `?wait`, no
   avatar: the Discord avatar is set per webhook in Discord
   (`frontend-css.md`, brand assets).
 - **Deploy, 2026-10-31 (by the assistant on the dev's instruction, with
@@ -207,13 +212,43 @@ and is summarised under "Survey basis" below.
   byte-identical download alone would not show a Deno import failure.
 - **What to watch next:** the first post after this deploy is the 2026-11-06
   show's 1-hour reminder at 22:00 UTC (Green Eggs' channel): its author line
-  must read "Fantasy Eggy · Green Eggs" (the dev's step 3). A failed post now
+  must read "Fantasy Eggy · Green Eggs" (the dev's step 3). **[Since D7, the
+  same reminder should also be Ambassadors' first post ever, in its own
+  channel: the D7 record below.]** A failed post now
   leaves a `notifyLeague: Discord post failed` line in the function log.
-- **Next: D7.** The dev creates the Ambassadors webhook in Discord and sets
+- **D7 ✅ DONE 2026-10-31 (the dev's action, verified the same evening).**
+  The dev created the Ambassadors webhook in Discord and set
   `DISCORD_WEBHOOK_AMBASSADORS` in the Supabase dashboard (never on a
-  command line); the assistant then verifies it by NAME and reports only
-  whether its digest is the same as or different from Green Eggs' (must be
-  "different"). Then Part 2.
+  command line; the platform stamps it 20:36 UTC). Verified by NAME:
+  `supabase secrets list` holds 9 names, the seven platform defaults plus
+  `DISCORD_WEBHOOK_GREEN_EGGS` and `DISCORD_WEBHOOK_AMBASSADORS`; there is
+  still no `DISCORD_WEBHOOK`. **Digest comparison: DIFFERENT**, done inside
+  a script that reads both digests and prints only the names and the
+  verdict (the practice under "Corrections to Chat"). Neither value nor
+  digest is in any file or commit.
+  - **Stated plainly:** a first names-only attempt filtered the CLI output
+    as a table, but the default output is JSON (the gotcha at the bottom of
+    this file), so both digests passed through to the assistant's tool
+    output before the script-based comparison ran. Same shape as the
+    2026-10-28 correction; in no file, no commit and no message to the dev.
+  - **The avatar:** the dev re-uploaded the new `discord-icon.png`
+    (`frontend-css.md`, brand assets) as the avatar on BOTH webhooks in
+    Discord's settings. The function still sends no `avatar_url`.
+  - **What follows from D7, in code already deployed:** league 1's posts now
+    resolve to its own hook (the key is derived from the live name
+    `Ambassadors`, "Survey basis" above), so the 2026-11-06 reminder should
+    appear ONCE in EACH channel, each under its own author name ("Fantasy
+    Eggy · Ambassadors", "Fantasy Eggy · Green Eggs"), provided both
+    leagues' rows for that show carry a cutoff (not re-checked tonight).
+    Two posts in one channel = both webhooks deliver to the same channel
+    (the digests differ, so they are two webhooks, not one URL twice); a
+    league's post in the other league's channel = the values are swapped; a
+    missing Ambassadors post with `remind_sent` set = the key was not read
+    (check the exact name first).
+  - **No gap and no replay:** stamps always advanced while Ambassadors had
+    no hook, so its first post is simply the next event, not a backlog.
+- **Next: Part 2 (Stage Y).** It starts in a later session, from the "Part
+  2" section below.
 
 ### Part 2: Stage Y and the hint
 
