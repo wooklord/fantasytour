@@ -65,3 +65,7 @@ the sync diff ignores `footnote`/`is_cover` (stale `setlist_songs`, UI shows
 a debut the scorer no longer credits), and the score-write change check
 never matches (every pass rewrites every row, `updated_at` is meaningless).
 Fix shapes are there; neither is scheduled.
+
+**One open item found 2026-10-30, same file under "Open items — found
+2026-10-30":** the stored 2026-08-14 setlist is one song short of The Carton.
+Impact unverified; the read-only check is not yet scheduled.

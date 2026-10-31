@@ -369,3 +369,26 @@ sides) or compare field-by-field per breakdown row (`slot`, `songname`,
 scores the same picks twice against the same setlist and asserts zero
 writes on the second pass. Points were never wrong — this is a wasted-write,
 wasted-ping and lost-history bug, not a scoring bug.
+
+## Open items — found 2026-10-30
+
+**OPEN, not a decision: the stored 2026-08-14 setlist is one song short of The
+Carton.** Found 2026-10-30 during a read-only check: the stored setlist for
+that show has 15 songs and The Carton has 16, with "Rampage" missing at
+position 3.
+- **Impact unverified.** The scorer is believed to read The Carton live rather
+  than stored rows, so scores are likely unaffected, but this has NOT been
+  checked for this show.
+- **Unknown:** why the stored row didn't pick up the insert (possibly because
+  the stored row is only rewritten when song order changes), and whether other
+  shows have the same drift.
+- **Next action:** a read-only comparison of stored vs Carton setlists for
+  every 2026 show, plus a check of that show's scores. Not yet scheduled.
+- **Code read while recording (2026-10-31), not checked against data:** the
+  live read at `index.ts:734` only runs until a show goes final
+  (`eligibleLeagueShows`, `:537`), and the diff compares song names by position
+  (`:767-770`), so a pass that saw the insert should have rewritten the rows.
+  If The Carton added the song after the last pass, the final scores were
+  computed without it too, and the live read would not protect them. If a
+  write failed instead (the upsert at `:772` checks no error), the scores could
+  be right with only the stored rows stale.
