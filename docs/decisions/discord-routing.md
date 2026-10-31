@@ -201,6 +201,10 @@ and is summarised under "Survey basis" below.
   four files — `index.ts`, `discord.js`, `scoring.js`, `showSync.js` —
   compared identical to HEAD `bb2dea4` with `cmp`. The literal
   `"DISCORD_WEBHOOK"` occurs zero times in the deployed `index.ts`.
+  **And the deployed function boots with the new import:** every cron
+  response in `net._http_response` from 18:44 UTC on (the first tick after
+  the deploy) is 200 with `{"ok":true,…,"note":"no eligible shows"}` — a
+  byte-identical download alone would not show a Deno import failure.
 - **What to watch next:** the first post after this deploy is the 2026-11-06
   show's 1-hour reminder at 22:00 UTC (Green Eggs' channel): its author line
   must read "Fantasy Eggy · Green Eggs" (the dev's step 3). A failed post now
