@@ -512,6 +512,11 @@ Instance-specific values (name, branding, default slots, data source) live in
 named constants (`src/core/config.js` for frontend; a top-of-file constant in
 the edge function/SQL seed) rather than hardcoded inline.
 
+**Decision docs cite code by function name plus "as of <sha>", never a bare
+line number** (2026-11-01): bare numbers in `scoring-rules.md` rotted twice
+within two weeks, the 2026-10-18 anchors at Stage U and the 2026-10-30 ones
+at `bb2dea4`.
+
 ## Deploy model
 
 - Frontend: `node build.mjs` (or `npm run build`) to rebuild `app.js`/`app.js.map`
@@ -585,7 +590,8 @@ matches — full text in `scoring-rules`) · `deploy-cache` ·
 `multi-league-switcher` · `official-opt-in-default` · `onboarding` ·
 `post-first-show-batch` (the 🚨 overlay entry, LOCKED list, batch (a)–(f),
 DST bug) · `postgres-rules` · `realtime` · `scoring-modes` ·
-`scoring-rules` · `standings-ux` · `testing-harness` · `tooling`.
+`scoring-rules` · `setlist-check` (decision (2), the daily setlist check:
+LOCKED 2026-10-31, not built) · `standings-ux` · `testing-harness` · `tooling`.
 
 `docs/history/` (resolved, dated): `2026-08-14-format-toggle-orphans` ·
 `2026-08-15-nickname-redaction` · `2026-08-16-stage-p` (gate #7) ·

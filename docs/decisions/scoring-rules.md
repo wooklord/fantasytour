@@ -274,38 +274,57 @@ Recorded from a read-only trace during the Wild Mountain Honey incident
 (`docs/history/2026-10-15-wild-mountain-honey-footnote.md`).
 
 - **There is no stored debut flag.** Every consumer runs `/debut/i` over the
-  Carton footnote text at the moment it needs it: `scoring.js:47` (the
-  `debut_call` slot), `:56` (`debut_call` impossible), `:83` (`anyDebut`,
-  which drives the Any Debut wildcard), `:272` (the `+debut` bonus on a hit
-  pick); and outside the scorer, `index.ts:633` (the Discord song post),
-  `src/features/picks.js:447` (the setlist view's DEBUT tag) and
-  `src/core/realtime.js:74` (the live toast).
+  Carton footnote text at the moment it needs it: in `deriveSlotFacts`
+  (`scoring.js:47` the `debut_call` slot, `:56` `debut_call` impossible, `:83`
+  `anyDebut`, which drives the Any Debut wildcard) and `scorePicks` (`:272`,
+  the `+debut` bonus on a hit pick), as of 65e989c; and outside the scorer,
+  `announcements`' live song post (`index.ts:811` as of bb2dea4),
+  `renderShowDetailHtml` (`src/features/picks.js:508` as of 2c88aec, the
+  setlist view's DEBUT tag) and `subscribeRealtime` (`src/core/realtime.js:75`
+  as of 56e0833, the live toast).
+  - Corrected 2026-11-01 (anchor re-check): `index.ts:633`, `picks.js:447`
+    and `realtime.js:74` were 2026-10-18 numbers; the `scoring.js` ones were
+    still exact. Function names and "as of" shas added.
 - **"FTP" has never matched anything.** The regex is the only pattern; a
   footnote of `FTP, Steve Miller Band cover` contains no "debut", so a
   cover's first performance is not a debut today — by accident of the regex,
   not by decision.
-- **`is_cover` comes from `isoriginal`** (`index.ts:578`: `!Number(r.isoriginal)`),
-  independent of the footnote. The same Carton edit that removed "Debut"
-  also flipped `isoriginal` to 0.
+- **`is_cover` comes from `isoriginal`** (`scoreShow`'s song mapping,
+  `index.ts:756` as of bb2dea4: `!Number(r.isoriginal)`), independent of the
+  footnote. The same Carton edit that removed "Debut" also flipped
+  `isoriginal` to 0.
+  - Corrected 2026-11-01 (anchor re-check): `:578` was a 2026-10-18 number.
 - **Scoring reads the live Carton fetch, never `setlist_songs`.** Every pass
-  refetches `/setlists/showdate/<date>.json` (`index.ts:566`), rebuilds
-  `songs` from the response (`:572-590`, footnote joined and entity-decoded at
-  `:579`), and passes that array to `deriveSlotFacts(songs, isFinal)` (`:613`)
-  and `scoreBracket({... songs ...})` (`:664`). The stored table is written for
-  the UI and the song-by-song diff only; the scorer does not read it back.
+  of `scoreShow` (as of bb2dea4) refetches `/setlists/showdate/<date>.json`
+  (`index.ts:744`), rebuilds `songs` from the response (`:750-770`, footnote
+  joined and entity-decoded at `:757-758`), and passes that array to
+  `deriveSlotFacts(songs, isFinal)` (`:791`) and `scoreBracket({... songs ...})`
+  (`:842`). The stored table is written for the UI and the song-by-song diff
+  only; the scorer does not read it back.
+  - Corrected 2026-11-01 (anchor re-check): `:566`, `:572-590`, `:579`,
+    `:613` and `:664` were 2026-10-18 numbers.
 - **Finalized shows are never rescored.** The cron scores only
-  `eligibleLeagueShows()` (`index.ts:372-376`): `status != 'final'`, cutoff
-  not null and passed, showdate within the last day. `status` becomes `final`
-  per league, either by the manual `finalize` action (`:779-790`) or by
-  `autoFinalize` at 8 AM Eastern the next morning (`:398-408`); each runs one
-  last pass with `isFinal = true` first. Until that moment scores float with
-  every Carton edit; after it they are frozen.
-- **Reopen is the only path back** (`index.ts:732-749`): it deletes that
-  league's `scores` for the show, sets status to `live` and `winner_sent`
-  null, and the next cron tick rescores the whole league against current
-  Carton data. There is no per-player or per-song correction.
+  `eligibleLeagueShows()` (`index.ts:545-557` as of bb2dea4; the
+  `status != 'final'` filter is `:547`): cutoff not null and passed, showdate
+  within the last day. `status` becomes `final` per league, either by the
+  manual `finalize` action (`finalizeShow`, `:963-975`) or by `autoFinalize`
+  at 8 AM Eastern the next morning (`:571-583`); each runs one last pass with
+  `isFinal = true` first. Until that moment scores float with every Carton
+  edit; after it they are frozen.
+  - Corrected 2026-11-01 (anchor re-check): `:372-376`, `:779-790` and
+    `:398-408` were 2026-10-18 numbers.
+- **Reopen is the only path back** (`reopenShow`, `index.ts:910-931` as of
+  bb2dea4): it deletes that league's `scores` for the show, sets status to
+  `live` and `winner_sent` null, and the next cron tick rescores the whole
+  league against current Carton data, provided the show is dated within the
+  cron's 24-hour UTC-date floor; an older show is rescored only by the
+  follow-up finalize (see "Open items — found 2026-10-30"). There is no
+  per-player or per-song correction.
+  - Corrected 2026-11-01 (anchor re-check): `:732-749` was a 2026-10-18
+    number; the floor qualifier was added, since "the next cron tick
+    rescores" is false for a show older than a day.
 
-### OPEN RULES DECISIONS — undecided 2026-10-18, admins to weigh in
+### OPEN RULES DECISIONS — (a) undecided 2026-10-18, admins to weigh in; (b) decided 2026-10-31
 
 **(a) Does a cover's first performance (Carton "FTP") count as a debut for
 the wildcard and bonus?** Options on the table:
@@ -333,26 +352,37 @@ if an admin reopens. Undecided — the Rules card copy is not written and the
 question of whether a Carton correction *should* trigger a reopen is the
 admins' call, not the code's.
 
+**DECIDED 2026-10-31 on (b)** (`docs/decisions/setlist-check.md`, item 8):
+finalized scores do not change when The Carton corrects data unless a player
+raises it; then the fix is targeted and logged, never reopen/finalize.
+Precedent: the 2026-08-14 case. The Rules-card copy saying that scores float
+until finalize is still unwritten. (a) stays open: whether a cover's first
+performance ("FTP") counts as a debut is not decided.
+
 ## Known bugs — found 2026-10-18
 
 **(i) The sync diff ignores `footnote` and `is_cover`, so `setlist_songs`
-goes stale while the scorer uses live data.** `index.ts:597` selects only
-`position, songname, setnumber, is_encore, segue` from the stored rows and
-`:599-601` compares only those five fields, so a Carton edit that changes
-only the footnote or the cover flag is never written back. The scorer does
-not care (it reads the live fetch, above), but the UI does: after the
-2026-10-15 edit the setlist view (`picks.js:447`) still showed a DEBUT tag on
-Wild Mountain Honey while the scorer had stopped crediting it, and the stored
-row still reads `footnote = "Debut", is_cover = false` against a live
+goes stale while the scorer uses live data.** `scoreShow`'s stored-row diff
+(as of bb2dea4) selects only `position, songname, setnumber, is_encore,
+segue` from the stored rows (`index.ts:774-775`) and compares only those five
+fields (`:777-780`), so a Carton edit that changes only the footnote or the
+cover flag is never written back. The scorer does not care (it reads the live
+fetch, above), but the UI does: after the 2026-10-15 edit the setlist view
+(`renderShowDetailHtml`, `picks.js:508` as of 2c88aec) still showed a DEBUT
+tag on Wild Mountain Honey while the scorer had stopped crediting it, and the
+stored row still reads `footnote = "Debut", is_cover = false` against a live
 `FTP, Steve Miller Band cover` / `isoriginal = 0`. Three other footnotes on
 the same show are stale the same way. **Fix shape:** add `is_cover` and
-`footnote` to both the `select` at `:597` and the comparison at `:601`.
+`footnote` to both the `select` (`:775`) and the comparison (`:779`).
 Cosmetic until the debut rule above is decided, because scoring is
 unaffected; worth doing in the same change as that decision.
+Corrected 2026-11-01 (anchor re-check): `:597`, `:599-601`, `:601` and
+`picks.js:447` were 2026-10-18 numbers.
 
 **(ii) The score-write change check never matches, so every pass rewrites
-every row and pings realtime; `updated_at` is meaningless.** `index.ts:720`
-compares `JSON.stringify(prev.breakdown)` against `JSON.stringify(breakdown)`.
+every row and pings realtime; `updated_at` is meaningless.** `scoreBracket`'s
+write check (`index.ts:898` as of bb2dea4) compares
+`JSON.stringify(prev.breakdown)` against `JSON.stringify(breakdown)`.
 `prev.breakdown` comes back from Postgres `jsonb`, which stores object keys
 in its own order (shortest first, then bytewise: `hit, slot, points, reason,
 songname`), while the fresh object is built in insertion order (`slot,
@@ -369,12 +399,14 @@ sides) or compare field-by-field per breakdown row (`slot`, `songname`,
 scores the same picks twice against the same setlist and asserts zero
 writes on the second pass. Points were never wrong — this is a wasted-write,
 wasted-ping and lost-history bug, not a scoring bug.
+Corrected 2026-11-01 (anchor re-check): `:720` was a 2026-10-18 number.
 
 ## Open items — found 2026-10-30
 
 **DECIDED-DEFERRED, not resolved: the stored 2026-08-14 setlist is one song
 short of The Carton, and one pick's score is short because of it.** Decision
-(1) is deferred by the dev's call below; decision (2) stays OPEN. Found
+(1) is deferred by the dev's call below; decision (2) is design-locked
+2026-10-31 (`docs/decisions/setlist-check.md`), not built. Found
 2026-10-30 during a read-only check: the stored setlist for that show has 15
 songs and The Carton has 16, with "Rampage" missing at position 3. Investigated
 in a second read-only check on 2026-10-31. No score or setlist row has been
@@ -387,30 +419,67 @@ changed.
 - **Cause (confirmed 2026-10-31):** The Carton added "Rampage" after the
   2026-08-15 12:00:04Z final pass, sometime before the 2026-09-04 show was
   entered. Evidence: the final pass scored the pick "not played", and the
-  setlist write and scorer input come from the same fetch (`index.ts:734-760`,
-  `:884`), so a fetch containing the song would have scored a hit even if the
-  write had failed. The window's far end is inferred from The Carton's
+  setlist write and scorer input come from the same fetch (`scoreShow`'s fetch
+  and song mapping, `index.ts:744-770`, feeding `scorePicks` at `:894-896`, as
+  of bb2dea4), so a fetch containing the song would have scored a hit even if
+  the write had failed. The window's far end is inferred from The Carton's
   `uniqueid` sequence, since its API exposes no timestamps: this row is 46813,
   the rest of the show is 46356–46473, and the 09-04 show starts at 46891. A
   stale API response at that moment can't be excluded; the effect is the same.
+  - Corrected 2026-10-31 (survey): `734-760` and `884` were as of a949ba3 and
+    shifted +10 at bb2dea4; replaced with function anchors.
 - **Impact:** 1 pick in Ambassadors Casual scored 'not played' and is 2 points
   short; it changes the Casual all-time standing at the top. Official and
   seasons are unaffected. Player-identifying details (rank, scores, standing
   positions) are deliberately not recorded in this public repo. All 1,657 frozen
   verdicts on the 17 shows with a stored setlist were re-derived against The
-  Carton (hit and reason, not points) and only this one changes, as of
-  2026-10-31.
+  Carton (hit and reason, not points) as of 2026-10-31: one hit flip, this one
+  (2026-08-14, bracket 2). The raw comparison showed 23 differing (hit, reason)
+  pairs; the other 22 were slot-keyed rows in brackets 2 and 4 re-derived under
+  those brackets' current ranked config, all unchanged under slot rules.
+  - Corrected 2026-10-31 (survey): "only this one changes" was exact for `hit`
+    and true for `reason` only through the second script; the 22 mode
+    artifacts went unrecorded. Method, scripts and counts:
+    `docs/history/2026-10-31-setlist-guard-survey.md` (§0d).
+- **Known blind spot of that re-derivation:** it compared `hit` and `reason`
+  with the ` +cover`/` +debut` bonus suffixes stripped and never compared
+  points, so a Carton footnote or cover-flag change after final that only adds
+  or removes the debut/cover bonus on a pick naming the song (10 points where
+  `bonuses.debut` is 10) is invisible to it. A change that flips the Any Debut
+  wildcard or a `cover1` verdict does show, because `hit` or the base reason
+  changes. The 2026-10-15 footnote edit
+  (`docs/history/2026-10-15-wild-mountain-honey-footnote.md`) is the example:
+  had it landed after final, its 2-point wildcard swing would have been seen,
+  while the 12-point variant that record describes (a flat pick naming the
+  song, 2 + 10) would have read as unchanged, since the hit stays a hit and
+  the ` +debut` suffix is stripped.
+  - Added 2026-10-31 (survey).
 - **CORRECTION 2026-10-31:** 038264f recorded rank, score and standing details
   that identify the player; redacted here. Git history still contains them; the
   dev chose not to rewrite history on a public Pages-deployed repo.
 - **Systemic flaw:** once a show is final the scoring cron never re-reads it
-  (`index.ts:537`), and reopen alone doesn't rescore a show dated before
-  yesterday (`:541-543`); only the follow-up finalize does (`:960`). All final
-  shows with picks are exposed, and late Carton edits are real (07-30 name fix,
-  10-15 segue change). Green Eggs finalized 3–9h before Ambassadors on six shows
-  (10-15 to 10-21), so an edit in that gap reaches only one league, and a
+  (`eligibleLeagueShows` selects `status != 'final'`; `index.ts:547` as of
+  bb2dea4), and reopen alone doesn't rescore a show dated before yesterday
+  (the 24-hour UTC-date floor in the cron's `shows` lookup, `:551-553`, which
+  the manual "Run scoring now" button shares); only the follow-up finalize
+  does (`finalizeShow`'s unfloored `scoreShow` call, `:970`). All final shows
+  with picks are exposed. Late Carton edits are real, but of the three seen
+  only the 08-14 insert is scoring-relevant: the 07-30 name fix and the 10-15
+  segue change are stored-vs-Carton drift with no scoring effect (a trailing
+  space is `norm()`-equal; segue is display-only and never reaches the
+  scorer). Green Eggs finalized 3–9h before Ambassadors on six shows (10-15
+  to 10-21), so an edit in that gap reaches only one league, and a
   stored-vs-Carton comparison can't detect it: the stored rows are shared, so
-  they still end up matching The Carton.
+  they still end up matching The Carton. The gap's consequence for those
+  rows: `setlist_songs` is written only by scoring passes, so a show final in
+  both leagues is never updated again, while a show final in one league keeps
+  updating until the other league finalizes.
+  - Corrected 2026-10-31 (survey): the raw line numbers 537, 541-543 and 960
+    were as of a949ba3 and shifted +10 at bb2dea4, so they are replaced with
+    function anchors; the "Run scoring now" button sharing the floor, the
+    no-scoring-effect reading of the 07-30 and 10-15 edits, and the
+    `setlist_songs` write-path consequence are added. Survey:
+    `docs/history/2026-10-31-setlist-guard-survey.md` (§0a, §0c, §7).
 - **DECISION 2026-10-31 (dev's call) on decision (1), whether to correct this
   pick's score: do NOT correct the Ambassadors Casual pick now.** It's a
   Casual-bracket score and not worth the effort unprompted. If the player raises
@@ -418,14 +487,22 @@ changed.
 - **Method if raised:** a targeted adjustment to that player's rows only, never
   reopen/finalize (which would re-score the three Official `cover1` rows from 5
   to 3). Any fix SQL contains a player ID, so run it ad hoc and never commit it.
-- **Bearing on (1):** reopen wipes every Ambassadors bracket's scores on this
-  show (`:909`) and finalize re-scores them under today's config, so three
-  Official `cover1` rows would drop from 5 to 3 (see "Official `cover1` value"
-  below). So any correction must be a targeted adjustment to that one score, not
-  reopen/finalize.
-- **Decision (2) stays OPEN (the dev's, not yet made):** whether to add a guard
-  against late Carton edits after final, such as a daily flag-only re-derivation
-  of frozen verdicts.
+- **Bearing on (1):** reopen wipes the scores on this show for every bracket
+  of the calling league only, so both Ambassadors brackets here; the other
+  league's scores and status are untouched (`reopenShow`'s delete is scoped
+  to the caller's bracket ids, `index.ts:919` as of bb2dea4). Finalize then
+  re-scores them under today's config, so three Official `cover1` rows would
+  drop from 5 to 3 (see "Official `cover1` value" below). So any correction
+  must be a targeted adjustment to that one score, not reopen/finalize.
+  - Corrected 2026-10-31 (survey): `:909` was as of a949ba3 (now `:919`);
+    the league scope of reopen is now stated explicitly rather than implied
+    by "every Ambassadors bracket".
+- **Decision (2): design locked 2026-10-31 →
+  `docs/decisions/setlist-check.md`** (a daily setlist check: scoring-fact
+  hashes stored at finalize, flag-only, Admin tab; not built). Was: whether to
+  add a guard against late Carton edits after final, such as a daily flag-only
+  re-derivation of frozen verdicts; the re-derivation idea was superseded, see
+  "Approach change" there.
 
 **Other open items found 2026-10-31 (unverified, no action yet):**
 - **Official `cover1` value.** Ambassadors Official's `cover1` paid 5 on

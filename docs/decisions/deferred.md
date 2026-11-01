@@ -73,5 +73,8 @@ so one pick is 2 points short. A final show is never re-read by the scoring
 cron, so all final shows with picks are exposed. **Decided-deferred, not
 resolved (dev's call, 2026-10-31):** the pick is not corrected now; revisit if
 the player raises it, by targeted adjustment only, never reopen/finalize, with
-the fix SQL never committed. Still open: a guard against late Carton edits after
-final. Four smaller unverified items sit beside it, with no action yet.
+the fix SQL never committed. The guard against late Carton edits after final
+is decision (2): design LOCKED 2026-10-31, not built,
+`docs/decisions/setlist-check.md` (the survey behind it:
+`docs/history/2026-10-31-setlist-guard-survey.md`). Four smaller unverified
+items sit beside it, with no action yet.

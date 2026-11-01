@@ -1,0 +1,30 @@
+# Daily setlist check — guard against late Carton edits after final
+
+Decision (2) from the open items found 2026-10-30 (`docs/decisions/scoring-rules.md`). Design locked in Chat 2026-10-31 on a read-only survey of the repo (`docs/history/2026-10-31-setlist-guard-survey.md`). Status: locked, not built. Plan file: to follow.
+
+## Problem
+Once a show is final in a league, nothing reads it again. The Carton edits after final (three known cases; one scoring-relevant). Reopen + finalize re-scores every bracket of that league under today's config and can change old points, so it is not a correction tool.
+
+## Approach change (recorded, not a quiet revision)
+Starting idea was a daily re-derivation of frozen verdicts comparing hit/reason. Superseded on 2026-10-31: with bonus suffixes stripped and points not compared, hit/reason cannot see a cover/debut footnote change that only moves the +debut/+cover bonus — the 12-point variant of the class that bit on 2026-10-15 (the wildcard flip itself would show). Chat's first wording claimed the 10-15 edit itself would have been missed; that was wrong and is corrected here, same day. The detector is the setlist's scoring facts; verdict re-derivation is enrichment only.
+
+## Locked
+1. Unit is (league, show): final lives on league_shows.
+2. Detector: finalizeShow stores two hashes on league_shows from the mapped Carton rows it just scored. Scoring hash over (position, setnumber, is_encore, norm(songname), is_cover, has_debut via /debut/i). Full hash adds raw songname, segue, whole footnote. Hashes come from the fetched rows, never from setlist_songs. Daily: for every final (league, show) with scores rows, fetch by stored showdate, filter by Carton show_id (existing logic), map with the existing mapping, hash, compare. Scoring hash differs → kind A ('scoring'). Only the full hash differs → kind B ('drift').
+3. Enrichment on kind A only: re-derive that league's frozen verdicts (both brackets) with the mode inferred from each stored slot key (not today's config), a synthetic config per mode, and league_shows.format; attach per-bracket counts of hit/outcome flips with slot and song only, never player identity.
+4. Scope: every final (league, show) with scores rows, forever. No window. A per-run cap is a candidate for when the count warrants it.
+5. Flags: table setlist_flags, both kinds recorded. Dedup key (league_id, show_id, kind, carton_hash): one flag per distinct Carton state. Clearing stamps cleared_at/cleared_by on the row; no separate log table.
+6. Surface: Admin tab only. Per-show notice in the Shows section reusing the sync-flag noticebox + Clear; count folded into the existing header attention pill (one pill, not two). Console log too. No Discord. Do not reuse shows.sync_flag (it posts to every league's Discord on first record). Visible to that league's admins and global.
+7. Correction: nothing built in v1. A SQL template with placeholders only (:bracket_id, :show_id, :player_id), run by hand in the SQL editor: rewrite one breakdown element, set scores.points = sum of breakdown; posted Discord results stay as posted. admin_adjust_verdict (global only, logged in admin_audit_log under a new action value (needs an ALTER on the admin_audit_log.action check, which today allows only remove_account; sql/stage_x_signup_clear_and_remove.sql:64-77)) is a candidate; build trigger = the first real use of the template.
+8. Policy (resolves half of the 2026-10-18 open question): finalized scores do not change when the Carton corrects data unless a player raises it; then the fix is targeted and logged, never reopen/finalize. Precedent: the 2026-08-14 case. "Does FTP count as a debut" stays open.
+9. Schema, Stage Z: league_shows.setlist_hash_scoring and setlist_hash_full (text, nullable); setlist_flags(id, league_id, show_id, kind, carton_hash, detail jsonb, found_at, cleared_at, cleared_by, note), RLS on, no policies; sync_state row daily_setlist_check; RPCs admin_list_setlist_flags(p_name, p_pin, p_league_id) and admin_clear_setlist_flag(p_name, p_pin, p_flag_id); test/stageZ.test.mjs.
+10. Naming after Z: two-letter stages (stage_aa, stage_ab …), tests stageAA.test.mjs. Y stays reserved for Discord Part 2.
+11. Scheduling and cost: one tick per day, after the daily show sync has run for the day so stored dates are current; 5-wide fetch batches; skipped on live-burst ticks; the show sync's 30-minute retry gate. About 17 date GETs of ~13 KB today, +1 per show. Free-plan edge limits (150 s wall clock per worker, 2 s CPU per request) are not close. Bulk year endpoint rejected for v1: unused by the app, unmeasured, a second mapping path.
+12. First run: full verdict re-derivation over every final show (the 2026-10-31 pass as a job), hashes baselined from that day's Carton, flags reviewed once. The 2026-08-14 show is expected to flag; clearing it is the acknowledgment.
+
+## Edge cases
+- Date moved after final: show sync flags it and leaves the date; the check fetches by stored date, finds no row with the show's Carton id, raises kind A "show not found at stored date" rather than a hash mismatch.
+- Two Carton shows on one date (2026-09-18): the show_id filter handles it.
+
+## Rejected 2026-10-31
+Window scope · log-only for kind B · a second header pill · building the adjustment RPC in v1 · correct-on-sight policy · Discord surfacing · reusing shows.sync_flag · date-prefixed migration names · bulk year endpoint for v1.
