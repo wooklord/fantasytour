@@ -1,6 +1,6 @@
 # Onboarding: community links, derived states, join codes
 
-## RESUME HERE (updated 2026-10-31 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 LIVE, Discord split Part 1 LIVE `bb2dea4`, D7 DONE 2026-10-31 (`DISCORD_WEBHOOK_AMBASSADORS` set, verified by name, digest differs from Green Eggs'); NEXT: Discord Part 2 (Stage Y); all in `discord-routing.md`)
+## RESUME HERE (updated 2026-11-01 — Batch 1 LIVE, Stage F APPLIED, Batch 3 BUILT, Batch 4 HELD, vet-first LIVE, decision 8 LIVE, Discord split Part 1 LIVE `bb2dea4`, D7 DONE 2026-10-31 (`DISCORD_WEBHOOK_AMBASSADORS` set, verified by name, digest differs from Green Eggs'); Discord Part 2 BUILT 2026-11-01 (`065648e`, local only, NOT applied/deployed/pushed); NEXT: Stage Y STEP 0 → apply → 2A → 2B, edge deploy (by Tue 2026-11-03 or after Sun 2026-11-08 13:00 UTC), first daily run reviewed, client push; all in `discord-routing.md`)
 
 **State:** Batch 1 (onboarding community links: Stage S SQL, no-league
 screen links, login-screen links, admin Community section) is **LIVE as of

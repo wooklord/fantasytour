@@ -50,8 +50,9 @@ dev's attestation, not a reading.
 A fresh session builds from this section: **Part 1 first, then Part 2.**
 **Part 1 is BUILT 2026-10-31** ("Part 1 status" below holds the build and
 deploy record) **and D7 is DONE 2026-10-31** (the "D7" record at the end of
-"Part 1 status"); **Part 2 is APPROVED 2026-11-01, build in progress** (the
-"Part 2 build record" below). The survey it rests on was read-only
+"Part 1 status"); **Part 2 is BUILT 2026-11-01 (`065648e`, local only: NOT
+applied, NOT deployed, NOT pushed)** — the "Part 2 build record" and "Part 2
+status" below. The survey it rests on was read-only
 and is summarised under "Survey basis" below.
 
 ### Decisions
@@ -375,6 +376,88 @@ and is summarised under "Survey basis" below.
   `git diff` empty between. Code committed LOCALLY, not pushed. **Deploy
   window: the edge deploy by Tue 2026-11-03, or after Sun 2026-11-08 13:00
   UTC** (the two Ardmore shows and their auto-finalize sit between).
+
+### Part 2 status: ✅ BUILT 2026-11-01 (commit `065648e`, LOCAL ONLY — NOT applied, NOT deployed, NOT pushed)
+
+- **Built as approved, with the seven calls applied.** `sql/stage_y_discord_status.sql`
+  (head: the three columns, the check constraint, `my_leagues` dropped and
+  recreated with `discord_live`, `discord_status`, `discord_checked_at`, the
+  `daily_discord_check` gate row seeded; footer in the Stage X shape: STEP 0
+  five read-only checks anchored on Stage S's `my_leagues` md5
+  `dd072ff27627e89fffa1a6c02745a2d6`, STEP 2A seven checks anchored on Stage
+  Y's `13d48d9aee5f65990eb706790748db28`, STEP 2B a 15-check smoke that
+  always rolls back, STEP R the rollback to Stage S's exact body).
+  `discord.js`: `NO_KEY`, `DEAD_STATUSES`, `STATUS_RE`, `statusPatch`;
+  `postOutcome` maps an out-of-range or fractional number to `error` so the
+  stored word always satisfies the constraint. `index.ts` (header v10):
+  `notifyLeague(leagueId, leagueName, msg)` at all nine call sites,
+  `recordDiscord` after every post and `no_key` on every attempt without a
+  secret; `checkWebhooks` / `dailyDiscordCheck` / `dailyDiscordCheckSafe`
+  beside the show sync, own `sync_state` row, same `dailyGateDue`, skipped
+  on a live burst, GET by secret NAME, only the HTTP status read and the
+  body cancelled unread, `ran_at` stamped only when every status write
+  succeeded, returned as `discord_check` on both paths; the stale
+  `syncShows` comment fixed. Client: `src/core/discordHint.js` (the pure
+  rule `discordHintApplies`, the bar on `.installbar`/`.installhow`, Join as
+  an anchor whose onclick sets the flag and clears the slot on the next
+  tick, ✕, How? with the All Messages tip, `relativeTime`,
+  `discordStatusLine`), `DISCORD_FLAG_PREFIX` in `config.js`,
+  `discordLinkOf` behind `community.js`'s one https guard, the
+  `#discord-bar` slot after `#install-bar` rendered once per build of the
+  list AFTER `renderInstallSlots()`, the "Show Discord tips" switch under
+  the league links in Settings, the read-only line under the Discord link
+  field in the admin Community editor, four window exports. Tests:
+  `test/discord.test.mjs` (statusPatch, the vocabulary, the dead words),
+  `test/stageY.test.mjs` in `npm test`, `runDiscordHintScenario` in the
+  harness with a second league added locally (the shared fixture stays
+  single-league), 13 checks per mode. **Full suite green in both modes.**
+  Build id `14b071b-de691c7`.
+- **Two build details, recorded at build weight (not the dev's calls):**
+  the Settings switch acts at once on its own slot, as the install switch
+  does — only the cross-feature handover waits for the next render; and a
+  stale success reads "Not posting (ok), checked 3 days ago" in the admin
+  line: the word is what was stored, the time says why it is not live.
+- **Call 7 needed NO admin RPC change:** the status rides on the
+  `my_leagues` row the client already loads. No follow-up candidate.
+- **Mutations, each KILLED, each reverted by exact-text replacement with
+  `git diff --stat` EMPTY against HEAD afterwards (discipline item 6):**
+  M4 (the hint ignores the install bar) failed the D6 install-first check;
+  M5 (Join doesn't set the flag) failed the Join and the per-league checks;
+  M6 (the hint ignores `discord_live`) failed the refined-D1 and the
+  link-gate/legacy checks; M7 (the flag device-wide) failed five checks,
+  Join, per league, ✕, per device, the Settings switch; M8a (the harness
+  mirror of `discord_live` drops the 2-day window) failed the refined-D1
+  and the admin-line stale case, and `stageY.test`'s "harness mirrors the
+  SQL rule"; M8b (the SQL body's window widened to 20 days) failed
+  `stageY.test`'s STEP 2A md5 and its window check. Each client mutation
+  turned the same checks red in BOTH modes.
+  - **Stated plainly, the build-id caveat:** the committed `app.js` was
+    built before its commit existed, so its `<contenthash>-<gitsha>` label
+    carries the PREVIOUS commit's sha (`de691c7`) by construction, while a
+    rebuild after a revert stamps HEAD's. The runner proved the content
+    hash half IDENTICAL after every revert (it covers `src/**`,
+    `styles.css` and `index.html`, so equality proves the source is back)
+    and restored the committed label by exact-text replacement; only then
+    was `git diff` empty. The first three runs (M4–M6) showed that one
+    label line as the only diff before the runner learnt this.
+- **Residual, stated plainly:** the footer has never run against a real
+  database (the PGlite candidate in `testing-harness.md`), so the dev's
+  STEP 0 is its first run; the daily GET check has not been exercised
+  against Discord — the first daily run after the deploy is that test; the
+  harness proves the fake's `discord_live`, STEP 2B proves the live
+  expression. Liveness is read at boot (`my_leagues` is not re-run on
+  foreground), which a once-a-day check makes acceptable.
+- **NEXT, in order (the dev's steps 1–5 of the Part 2 plan):** STEP 0 →
+  apply → STEP 2A → STEP 2B in the SQL editor; the edge deploy, verified by
+  download and `cmp` and by the cron responses in `net._http_response`;
+  the first daily run reviewed (`select id, discord_status,
+  discord_checked_at, discord_ok_at from leagues order by id` reads `ok`
+  for both; `sync_state` row `daily_discord_check` stamped); then the
+  client push, the live build id confirmed; then the device checks.
+  **Deploy window: the edge deploy by Tue 2026-11-03, or after Sun
+  2026-11-08 13:00 UTC.** Rollback per step: STEP R for the SQL; revert the
+  edge commit and redeploy for the function; revert, rebuild, push for the
+  client.
 
 ### Corrections to Chat (recorded 2026-10-28)
 
