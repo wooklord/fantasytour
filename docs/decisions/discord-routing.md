@@ -377,7 +377,7 @@ and is summarised under "Survey basis" below.
   window: the edge deploy by Tue 2026-11-03, or after Sun 2026-11-08 13:00
   UTC** (the two Ardmore shows and their auto-finalize sit between).
 
-### Part 2 status: ✅ LIVE 2026-11-01 — Stage Y APPLIED · edge DEPLOYED 18:26 UTC · first daily check ok ×2 · client PUSHED 18:28 UTC (build id `14b071b-de691c7`)
+### Part 2 status: ✅ LIVE 2026-11-01 — Stage Y APPLIED · edge DEPLOYED 18:26 UTC · first daily check ok ×2 · client PUSHED 18:28 UTC (build id `14b071b-de691c7`) · device checks PASSED
 
 - **Deploy log 2026-11-01, each step recorded the moment it landed (the
   dev's steps 1–4 of the deploy message):**
@@ -425,6 +425,11 @@ and is summarised under "Survey basis" below.
      first (the deploy message assumed it did; the row says otherwise).
      The Community save patches the client's own league rows, so a new
      link needs no reload; `discord_live` is read at boot only.
+  5. ✅ **Device checks PASSED 2026-11-01** — the dev, on the dev's device:
+     the bar, How?, Join, ✕, the Settings switch and the admin status line.
+     Recorded at the weight reported: those six were named; the no-double-
+     hint case, the per-league/per-device scope and a non-admin player's
+     confirmation were not named (not failed — not reported).
 - **Built as approved, with the seven calls applied.** `sql/stage_y_discord_status.sql`
   (head: the three columns, the check constraint, `my_leagues` dropped and
   recreated with `discord_live`, `discord_status`, `discord_checked_at`, the
@@ -500,10 +505,11 @@ and is summarised under "Survey basis" below.
   stay: the old client ignores the new columns); the function — revert its
   edge files and redeploy; the SQL — STEP R, only with Part 1's function
   deployed.
-- **NEXT: the dev's device checks, per league.** Close and reopen the PWA
-  (an open tab keeps the old bundle up to 10 minutes); Settings shows build
-  id `14b071b-de691c7`. In each league: (1) Shows with the install bar or
-  the welcome card up shows NO Discord bar, and dismissing those does not
+- **Device checklist (the dev ran it 2026-11-01 — deploy-log step 5; reuse
+  after any client change that touches the hint).** Close and reopen the
+  PWA (an open tab keeps the old bundle up to 10 minutes); Settings shows
+  the build id. In each league: (1) Shows with the install bar or the
+  welcome card up shows NO Discord bar, and dismissing those does not
   summon it until the next render (switch tabs and back); (2) the bar reads
   "Get show reminders and scores in Discord" with Join · How? · ✕; (3) How?
   opens the All Messages tip and closes again; (4) Join opens the invite in
@@ -512,11 +518,20 @@ and is summarised under "Survey basis" below.
   tips" is off after Join or ✕, on brings the bar back, off removes it;
   (6) the flag is per league (the other league's bar is unaffected) and per
   device (a second device still shows it); (7) Admin → Community reads
-  "Posting: OK, checked N minutes ago" under the Discord link field. Then
-  one non-admin player per league confirms the bar and that Join opens the
-  invite. The CLAUDE.md Discord stub still reads "NEXT: Discord Part 2
-  (Stage Y)" — left untouched on the dev's standing instruction; a one-line
-  update is the open follow-up.
+  "Posting: OK, checked N minutes ago" under the Discord link field; (8) one
+  non-admin player per league confirms the bar and that Join opens the
+  invite. The CLAUDE.md Discord stub was updated to LIVE in `cf228d6`.
+- **NEXT — the one remaining watch item: the 2026-11-06 22:00 UTC reminder
+  for show 1786388218, the first real post through the new path** (both
+  leagues' cutoffs are 23:00 UTC; the 1-hour reminder fires at 22:00 UTC).
+  Expect: one reminder per league, each in its own channel; `remind_sent`
+  stamped on both `league_shows` rows; and, because `recordDiscord` writes
+  after every post, both `leagues` rows at `discord_status = ok` with
+  `discord_checked_at` and `discord_ok_at` advanced to about 22:00 UTC. A
+  failed post leaves `http_<code>` or `error` in `discord_status` and a
+  `notifyLeague: Discord post failed` line in the function log; `http_404`
+  or `http_401` also drops `discord_live`, which hides that league's bar on
+  the next boot. The 09:00 ET daily check keeps running meanwhile.
 
 ### Corrections to Chat (recorded 2026-10-28)
 
