@@ -209,11 +209,11 @@ in the file each one names.
   on 2026-10-11. LOCKED list, Stage R (written, NOT applied) and THE
   POST-FIRST-SHOW BATCH (a)–(f): `docs/decisions/post-first-show-batch.md`.
   Pre-sync check, verification, findings: `docs/history/2026-10-green-eggs-overlay.md`.
-- **Discord routing — Part 1 LIVE 2026-10-31 (`bb2dea4`):** the league's own
-  secret only, NO global fallback; author name "Fantasy Eggy · <League>" and
-  `allowed_mentions: {parse: []}` on every post. D7 DONE 2026-10-31:
-  `DISCORD_WEBHOOK_AMBASSADORS` set, verified by name, digest differs from
-  Green Eggs'. NEXT: Discord Part 2 (Stage Y): `docs/decisions/discord-routing.md`.
+- **Discord routing — Part 2 LIVE 2026-11-01** (Stage Y applied, edge deployed,
+  client pushed; Part 1 LIVE 2026-10-31, D7 DONE): the league's own secret
+  only, NO global fallback; author "Fantasy Eggy · <League>", no mentions. The
+  full record, the daily webhook check, the hint rules and the status
+  vocabulary: `docs/decisions/discord-routing.md`.
 - **Short Postgres rules — `docs/decisions/postgres-rules.md`:** pgcrypto is
   in `extensions`; finalized `breakdown` text is frozen; `shows.timezone` null
   means unmapped, and a new `shows` column needs its own backfill; `banned` is
