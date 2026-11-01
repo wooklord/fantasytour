@@ -1,14 +1,15 @@
 # BUILD PLAN — approved in Chat 2026-10-25, build starts 2026-10-26
 
-> **STATUS 2026-10-26 — BUILT and committed locally. NOT pushed. Stage U
-> NOT applied. Edge function NOT deployed.** The next step is the dev's,
-> in the strict order below: apply `sql/stage_u_show_sync.sql` and run its
-> verification footer (steps 1–8; 9 optional), then
-> `supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz`,
-> then `git push`. Everything the build added beyond this file, and the
-> mutation results, are recorded under "BUILT 2026-10-26" in
-> `docs/decisions/cron-secret-edge-auth.md`. No question is open from the
-> build itself.
+> **STATUS: LIVE 2026-10-26.** Stage U applied, the edge function deployed
+> and the client pushed, in the strict order below. Everything the build
+> added beyond this file, and the mutation results, are recorded under
+> "BUILT 2026-10-26" in `docs/decisions/cron-secret-edge-auth.md`; the live
+> state is in `CLAUDE.md` ("Hourly `sync_shows` SUPERSEDED ... LIVE
+> 2026-10-26"). No question is open from the build itself.
+> **Header corrected 2026-11-01:** until then it still read "NOT pushed,
+> Stage U NOT applied, edge function NOT deployed", five days after all
+> three had happened. The Discord note under `index.ts` below predates the
+> per-league split; `docs/decisions/discord-routing.md` is current.
 
 Daily in-tick show sync: new shows AND changes to existing ones, from The
 Carton. Decision record (binding, six locked items plus the survey

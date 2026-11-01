@@ -50,7 +50,8 @@ dev's attestation, not a reading.
 A fresh session builds from this section: **Part 1 first, then Part 2.**
 **Part 1 is BUILT 2026-10-31** ("Part 1 status" below holds the build and
 deploy record) **and D7 is DONE 2026-10-31** (the "D7" record at the end of
-"Part 1 status"); Part 2 is not built. The survey it rests on was read-only
+"Part 1 status"); **Part 2 is APPROVED 2026-11-01, build in progress** (the
+"Part 2 build record" below). The survey it rests on was read-only
 and is summarised under "Survey basis" below.
 
 ### Decisions
@@ -306,6 +307,74 @@ and is summarised under "Survey basis" below.
   3. a digest comparison reports "different";
   4. wait for `discord_status` to read `ok`;
   5. only then delete the old webhook.
+
+### Part 2 build record: APPROVED 2026-11-01 (the dev's seven calls)
+
+- **Pre-build state, 2026-11-01 04:37 UTC, read-only:** tree clean on
+  `main` at `3ed62fc`, equal to `origin/main`; `sql/` runs through
+  `stage_x`, no `stage_y` or `stage_z` file; no `league_shows` row of
+  either league has a cutoff, or a non-final status with a past cutoff,
+  within 12 hours. The next cutoffs are show 1786388218 (2026-11-06) and
+  1786388257 (2026-11-07), both leagues, 23:00 UTC each (6 PM EST, DST
+  having ended that morning; the 1-hour reminder fires at 22:00 UTC). The
+  live `my_leagues` body md5 equals the Stage S file's
+  (`dd072ff27627e89fffa1a6c02745a2d6`), the live `leagues` columns are
+  `id, name, created_at, config`, and its only policy is the public
+  select. `docs/security_audit_plan.md` does not exist.
+- **What Part 1 left for Part 2 (checked against `3ed62fc`):**
+  `notifyLeague(leagueName, msg)` resolves the hook, posts, sorts the
+  answer with `postOutcome` and only logs a failure; it knows the league
+  by NAME, and all ten call sites pass a name. `leagues.name` has no unique
+  constraint (the primary key is the only one), so a per-post write needs
+  the league ID, which every call site already holds.
+- **The dev's calls, each a question the 2026-10-28 record left open:**
+  1. **Gate row.** The daily webhook check has its OWN `sync_state` row,
+     `daily_discord_check`, gated by the same `dailyGateDue` (09:00 ET, the
+     30-minute backoff, skipped on a live-burst tick). Independent of a
+     Carton failure and of the "Sync shows" button, both of which only
+     touch `daily_show_sync`.
+  2. **`discord_live`, a REFINEMENT of D1's "status ok, checked within
+     about 2 days":** `discord_ok_at` within 2 days AND `discord_status`
+     not in `http_404`, `http_401`, `no_key`. Reason: a transient 429,
+     5xx or network error must not hide the hint for a day; a deleted
+     webhook or a bad token must drop it at once; two days without any
+     success drops it too.
+  3. **Handover is NEXT RENDER, not immediate.** The Discord bar never
+     appears as a direct result of dismissing the install bar or the
+     welcome card; it shows the next time the shows list is built. Reason:
+     one new hint per visit, and no cross-feature handover code. The
+     scenario "card ✕ hands over" becomes "card ✕ does not hand over; the
+     bar appears on the next render".
+  4. **Join is an `<a target="_blank" rel="noopener noreferrer">`,** never
+     `window.open` (in-app browsers block it). Its onclick sets the flag
+     and clears the slot on the NEXT tick: an anchor removed from the
+     document mid-click cannot navigate.
+  5. **`no_key` is written on every post attempt** for a league whose name
+     resolves to no secret, so a removed or renamed secret flips the
+     league dead at its next event, not only at the next daily check.
+  6. **The check constraint stays:** `discord_status` is `ok`, `no_key`,
+     `error` or `http_<3 digits>`; a new status word needs a migration,
+     by design.
+  7. **Admin visibility.** `my_leagues` also returns `discord_status` and
+     `discord_checked_at`; the admin Community editor shows one read-only
+     line under the Discord link field: "Posting: OK, checked <relative
+     time>" / "Not posting (<status>), checked <relative time>" / "Never
+     checked". No new RPC: the row is the one `my_leagues` already
+     returns at boot.
+- **Also corrected with this record:** `docs/show_sync_plan.md`'s header
+  still said Stage U was unapplied and undeployed; it has been live since
+  2026-10-26.
+- **Build order (the BUILT record follows below when done):** this record
+  committed and pushed FIRST; then `sql/stage_y_discord_status.sql` (STEP 0
+  / apply / 2A / 2B / STEP R, the Stage X shape), `discord.js` + `index.ts`
+  (`notifyLeague` by id, `statusPatch`, `dailyDiscordCheck` wrapped like
+  `dailyShowSyncSafe`, the stale `syncShows` comment fixed),
+  `src/core/discordHint.js` + the bar + the Settings switch + the admin
+  status line, `test/discord.test.mjs`, `test/stageY.test.mjs`, the harness
+  scenario in both modes, mutations M4–M8 each applied and reverted with
+  `git diff` empty between. Code committed LOCALLY, not pushed. **Deploy
+  window: the edge deploy by Tue 2026-11-03, or after Sun 2026-11-08 13:00
+  UTC** (the two Ardmore shows and their auto-finalize sit between).
 
 ### Corrections to Chat (recorded 2026-10-28)
 
