@@ -377,7 +377,7 @@ and is summarised under "Survey basis" below.
   window: the edge deploy by Tue 2026-11-03, or after Sun 2026-11-08 13:00
   UTC** (the two Ardmore shows and their auto-finalize sit between).
 
-### Part 2 status: BUILT 2026-11-01 (`065648e`) · Stage Y APPLIED 2026-11-01 · edge DEPLOYED 2026-11-01 18:26 UTC · client NOT pushed
+### Part 2 status: BUILT 2026-11-01 (`065648e`) · Stage Y APPLIED 2026-11-01 · edge DEPLOYED 2026-11-01 18:26 UTC · first daily check ok ×2 · client NOT pushed
 
 - **Deploy log 2026-11-01, each step recorded the moment it landed (the
   dev's steps 1–4 of the deploy message):**
@@ -399,6 +399,18 @@ and is summarised under "Survey basis" below.
      `net._http_response`: the 18:22–18:26 UTC ticks (Part 1's function)
      answered 200 with no `discord_check` key; the first post-deploy tick at
      18:27:00 UTC answered 200 with one, so the new function booted.
+  3. ✅ **First daily check ran on that first post-deploy tick, 18:27 UTC**
+     (13:27 EST: the gate had been open since 09:00 ET and the seeded row
+     was unstamped, so the first tick was due). Read back at 18:27:17 UTC:
+     both leagues `discord_status = ok`, `discord_ok_at` equal to
+     `discord_checked_at` (18:27:02 UTC each); `sync_state` row
+     `daily_discord_check` stamped `attempted_at` 18:27:02.36, `ran_at`
+     18:27:02.96, note `{"checked":2,"ok":2,"no_key":0,"failed":0}`; the
+     tick's `discord_check` read `{"due":true,"checked":2,"ok":2,"no_key":0,
+     "failed":0}`. Both webhooks answered the GET with 200 — status only,
+     the body cancelled unread. The daily show sync's own row was untouched
+     (its 09:00 ET run stood). Next check: the first tick at or after 09:00
+     ET on 2026-11-02; `discord_live` stays true for 2 days from each `ok`.
 - **Built as approved, with the seven calls applied.** `sql/stage_y_discord_status.sql`
   (head: the three columns, the check constraint, `my_leagues` dropped and
   recreated with `discord_live`, `discord_status`, `discord_checked_at`, the
