@@ -51,7 +51,7 @@ A fresh session builds from this section: **Part 1 first, then Part 2.**
 **Part 1 is BUILT 2026-10-31** ("Part 1 status" below holds the build and
 deploy record) **and D7 is DONE 2026-10-31** (the "D7" record at the end of
 "Part 1 status"); **Part 2 is BUILT 2026-11-01 (`065648e`); Stage Y APPLIED
-2026-11-01; edge NOT deployed; client NOT pushed** — the "Part 2 build
+2026-11-01; edge DEPLOYED 2026-11-01; client NOT pushed** — the "Part 2 build
 record" and "Part 2 status" below. The survey it rests on was read-only
 and is summarised under "Survey basis" below.
 
@@ -377,7 +377,7 @@ and is summarised under "Survey basis" below.
   window: the edge deploy by Tue 2026-11-03, or after Sun 2026-11-08 13:00
   UTC** (the two Ardmore shows and their auto-finalize sit between).
 
-### Part 2 status: BUILT 2026-11-01 (`065648e`) · Stage Y APPLIED 2026-11-01 · edge NOT deployed · client NOT pushed
+### Part 2 status: BUILT 2026-11-01 (`065648e`) · Stage Y APPLIED 2026-11-01 · edge DEPLOYED 2026-11-01 18:26 UTC · client NOT pushed
 
 - **Deploy log 2026-11-01, each step recorded the moment it landed (the
   dev's steps 1–4 of the deploy message):**
@@ -388,6 +388,17 @@ and is summarised under "Survey basis" below.
      check), `my_leagues` returns the three new columns, and the gate row
      `daily_discord_check` sits unstamped (Y2.7). The deployed function
      is still Part 1's (`bb2dea4`): it ignores the new columns.
+  2. ✅ **edge DEPLOYED 2026-11-01 18:26 UTC** (`supabase functions deploy
+     carton-sync --project-ref zdfhglvjxquvkjyvophz`: "Deployed Functions.",
+     the four assets uploaded, the usual Docker warning). Pre-deploy read-only
+     check: no `league_shows` row with a cutoff within 12 hours and no show
+     in the live window (today or yesterday, Eastern); next cutoff 2026-11-06
+     23:00 UTC. Verified by download into a scratch `--workdir` and `cmp` of
+     all four files against HEAD (`index.ts`, `discord.js`, `showSync.js`,
+     `scoring.js`: identical, byte for byte), and by the cron responses in
+     `net._http_response`: the 18:22–18:26 UTC ticks (Part 1's function)
+     answered 200 with no `discord_check` key; the first post-deploy tick at
+     18:27:00 UTC answered 200 with one, so the new function booted.
 - **Built as approved, with the seven calls applied.** `sql/stage_y_discord_status.sql`
   (head: the three columns, the check constraint, `my_leagues` dropped and
   recreated with `discord_live`, `discord_status`, `discord_checked_at`, the
