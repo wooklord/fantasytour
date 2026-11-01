@@ -14,6 +14,14 @@
 //     name holding a raw <@…> can never ping a channel (M2: block dropped);
 //   * every post carries the per-league author name, so the two leagues'
 //     posts stay legible even through a reused webhook (M3: label dropped).
+// Part 2 (Stage Y, APPROVED 2026-11-01, "Part 2 build record" in the same
+// file): the outcome vocabulary below is what leagues.discord_status stores
+// (its check constraint; STATUS_RE is the same regex), statusPatch is the
+// row update index.ts writes after every post and every daily GET check,
+// and DEAD_STATUSES are the words that drop the client's hint on their own
+// (the SQL's discord_live names exactly them). Mutation M8 (a stale check
+// counted as live) is run against the SQL rule's mirror in test/harness.mjs
+// and against the stage file; nothing here decides liveness.
 
 // Instance constants (Conventions: instance values live in named constants).
 export const APP_NAME = "Fantasy Eggy";
@@ -70,11 +78,42 @@ export function discordBody(leagueName, msg) {
 // post — 404 a deleted webhook, 401 a bad token, 429 rate-limited, 400 a
 // rejected body. The `status` strings are the vocabulary Part 2's
 // leagues.discord_status will store (`ok`, `http_<code>`, `error`; `no_key`
-// is resolveHook's null and never reaches here). Part 1 only logs them.
+// is resolveHook's null and never reaches here); index.ts writes them through
+// statusPatch below, and the daily check reads a GET's status through this.
 export function postOutcome(status) {
   if (status == null) return { ok: false, status: "error" };
   const n = Number(status);
   if (!Number.isFinite(n)) return { ok: false, status: "error" };
+  // Only a real three-digit HTTP status becomes http_<n>; anything else is
+  // `error`, so the stored word always satisfies the Stage Y constraint.
+  if (!Number.isInteger(n) || n < 100 || n > 999) return { ok: false, status: "error" };
   if (n >= 200 && n < 300) return { ok: true, status: "ok" };
   return { ok: false, status: `http_${n}` };
+}
+
+// ---- Part 2 (Stage Y) ----
+// The status a league gets when its name resolves to no secret: resolveHook's
+// null, written on EVERY post attempt and by the daily check (the dev's call
+// 5), so a removed or renamed secret flips the league dead at its next
+// event, not only at the next daily check.
+export const NO_KEY = "no_key";
+// The three words that mean "not live" on their own, whatever the last
+// success was: a deleted webhook, a bad token, no secret. The SQL's
+// discord_live (sql/stage_y_discord_status.sql) names exactly these; a
+// transient failure (429, 5xx, error) is deliberately NOT here (call 2).
+export const DEAD_STATUSES = ["http_404", "http_401", NO_KEY];
+// The vocabulary leagues.discord_status accepts — its check constraint, as a
+// JS regex. test/stageY.test.mjs checks the two are the same text.
+export const STATUS_RE = /^(ok|no_key|error|http_[0-9]{3})$/;
+
+// The update index.ts writes to leagues after a post or a daily check: the
+// status and the check time ALWAYS, the success time ONLY on a success — so
+// discord_ok_at is the last success and a failure never touches it. A word
+// outside the vocabulary (there should be none) is written as `error` rather
+// than failing the constraint. `nowIso` is injected so tests are exact.
+export function statusPatch(outcome, nowIso) {
+  const status = STATUS_RE.test(outcome?.status ?? "") ? outcome.status : "error";
+  const patch = { discord_status: status, discord_checked_at: nowIso };
+  if (status === "ok") patch.discord_ok_at = nowIso;
+  return patch;
 }

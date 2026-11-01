@@ -43,3 +43,10 @@ export const NEW_SIGNUP_DAYS = 14;
 // registers after the clear relights it at once; a cleared account still in
 // no league and still inside NEW_SIGNUP_DAYS relights when the snooze ends.
 export const SIGNUP_SNOOZE_DAYS = 7;
+
+// Discord hint (docs/decisions/discord-routing.md, Part 2, D5): ONE device
+// flag PER LEAGUE, "<prefix><leagueId>", permanent — Join and ✕ both set it,
+// only the Settings switch "Show Discord tips" clears it. Not logout, not
+// re-login, not switching players. The install flag is a separate, device-
+// wide key (core/install.js).
+export const DISCORD_FLAG_PREFIX = "ft_discord_dismissed_";

@@ -54,12 +54,22 @@
 //     "Fantasy Eggy · <League>" and allowed_mentions { parse: [] }, and
 //     Discord's answer is sorted into ok/failed and logged. The pure parts
 //     live in discord.js (unit-tested under Node, like scoring/showSync).
+// v10 (Discord per-league split, Part 2 / Stage Y, APPROVED 2026-11-01 — see
+//     docs/decisions/discord-routing.md, "Part 2 build record"): every post
+//     RECORDS its outcome on the league's row (leagues.discord_status /
+//     discord_checked_at / discord_ok_at, recordDiscord), a league whose
+//     name resolves to no secret records no_key, and once a day — its own
+//     sync_state row daily_discord_check, the same gate as the show sync —
+//     each league's webhook is checked with a GET that posts nothing and
+//     reads only the HTTP status. my_leagues derives discord_live from those
+//     columns; the client's Discord hint and the admin status line read it.
+//     No URL is stored or logged, and no response body is ever read.
 // ============================================================
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { norm, deriveSlotFacts, scorePicks } from "./scoring.js";
 import { dailyGateDue, diffShows, cutoffPlan, appendFlag } from "./showSync.js";
-import { resolveHook, discordBody, postOutcome } from "./discord.js";
+import { resolveHook, discordBody, postOutcome, statusPatch, NO_KEY } from "./discord.js";
 
 // Instance constant: setlist data source.
 const CARTON = "https://thecarton.net/api/v2";
@@ -113,19 +123,39 @@ function decodeEntities<T extends string | null | undefined>(s: T): T {
 // than into another league's channel (Part 1 of the per-league split,
 // docs/decisions/discord-routing.md, LOCKED 2026-10-28). Routing stays on
 // env vars (roadmap decision 2); no DB column holds a URL. Every post carries
-// the per-league author name and blocks every mention; Discord's answer is
-// sorted into ok/failed and logged, not stored (storing it is Part 2).
-async function notifyLeague(leagueName: string, msg: string) {
+// the per-league author name and blocks every mention. Part 2 (Stage Y):
+// Discord's answer is sorted into ok/failed and RECORDED on the league's row
+// (recordDiscord), and a league whose name resolves to no secret records
+// no_key on every attempt (the dev's call 5, 2026-11-01) — the record is what
+// the client's Discord hint and the admin status line read.
+//
+// recordDiscord writes leagues.discord_status / discord_checked_at /
+// discord_ok_at for one league: the status and the time of every check or
+// post, the success time only on a success (discord.js statusPatch).
+// Best-effort like pingRealtime — a failed write is logged, never thrown into
+// the post or the scoring path. It returns false on failure so the daily
+// check can refuse to stamp ran_at (the activateSeasons write-ordering
+// lesson: never record a success that did not happen).
+async function recordDiscord(leagueId: number | null | undefined, outcome: { ok: boolean; status: string }): Promise<boolean> {
+  if (leagueId == null) return false;
+  const { error } = await supa.from("leagues")
+    .update(statusPatch(outcome, new Date().toISOString())).eq("id", leagueId);
+  if (error) { console.error(`recordDiscord: status write failed for league ${leagueId} (is Stage Y applied?):`, error); return false; }
+  return true;
+}
+async function notifyLeague(leagueId: number | null | undefined, leagueName: string, msg: string) {
   if (!msg) return;
   const hook = resolveHook(leagueName, (k: string) => Deno.env.get(k));
-  if (!hook) return;
+  if (!hook) { await recordDiscord(leagueId, { ok: false, status: NO_KEY }); return; }
   const res = await fetch(hook, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(discordBody(leagueName, msg)),
   }).catch(() => null);
+  if (res?.body) await res.body.cancel().catch(() => {}); // never read
   const outcome = postOutcome(res?.status ?? null);
   if (!outcome.ok) console.error(`notifyLeague: Discord post failed for league "${leagueName}": ${outcome.status}`);
+  await recordDiscord(leagueId, outcome);
 }
 
 // scores/league_shows have zero public RLS SELECT policies by design (see
@@ -345,7 +375,7 @@ async function syncShows() {
       if (error) { console.error(`syncShows: cutoff move failed for league ${ov.league_id} show ${u.id}:`, error); continue; }
       cutoffsMoved++;
       await pingRealtime(ov.league_id, ov.show_id);
-      await notifyLeague(leagueName.get(ov.league_id) ?? "",
+      await notifyLeague(ov.league_id, leagueName.get(ov.league_id) ?? "",
         cutoffChangedMessage(u.row.venue ?? u.row.showdate ?? u.id, plan.cutoff_at));
     }
   }
@@ -364,9 +394,10 @@ async function syncShows() {
   }
 
   // Flags: one write per show. Posted to every league on first record only
-  // (shows are global; any league's admin may clear). notifyLeague no-ops
-  // where a league has no per-league secret — Ambassadors, until
-  // DISCORD_WEBHOOK_AMBASSADORS is set (docs/decisions/discord-routing.md, D7).
+  // (shows are global; any league's admin may clear). A league whose name
+  // resolves to no secret posts nothing and records no_key; both leagues
+  // have had their own secret since D7, 2026-10-31
+  // (docs/decisions/discord-routing.md).
   for (const [id, text] of flagText) {
     const { error } = await supa.from("shows").update({ sync_flag: text }).eq("id", id);
     if (error) console.error(`syncShows: flag write failed for show ${id}:`, error);
@@ -374,7 +405,7 @@ async function syncShows() {
   for (const n of newNotes) {
     const sh = existingMap.get(n.id);
     const label = sh ? `${sh.venue ?? "TBA"} (${sh.showdate})` : `show ${n.id}`;
-    for (const lg of leagues ?? []) await notifyLeague(lg.name, `⚠️ **Show sync** — ${label}: ${n.note}`);
+    for (const lg of leagues ?? []) await notifyLeague(lg.id, lg.name, `⚠️ **Show sync** — ${label}: ${n.note}`);
   }
 
   // Festival-tagged shows default to one_set format (promote only — a manual
@@ -466,6 +497,65 @@ async function dailyShowSync(live: boolean) {
 async function dailyShowSyncSafe(live: boolean) {
   try { return await dailyShowSync(live); }
   catch (e) { console.error("dailyShowSync failed (scoring unaffected):", e); return { error: String(e) }; }
+}
+
+// ---------- daily Discord webhook check (Part 2, Stage Y) ----------
+// Once a day, inside the scoring tick, each league's webhook is checked with
+// a GET: Discord answers a GET on a webhook URL with the webhook object and
+// posts nothing — 200 is live, 404 a deleted webhook, 401 a bad token. ONLY
+// the HTTP status is read; the body (it carries the token) is cancelled
+// unread, and no URL is ever logged. Its own sync_state row, DAILY_DISCORD_KEY,
+// through the same gate as the show sync (showSync.js dailyGateDue: Eastern
+// hour >= 9, not yet run today, 30-minute backoff after a failed attempt),
+// so a Carton failure or a "Sync shows" button press — both of which only
+// touch daily_show_sync — never skips it (the dev's call 1, 2026-11-01).
+// ran_at is stamped only when EVERY league's status write succeeded; one
+// failed write (Stage Y not applied) throws, leaving attempted_at set and
+// ran_at unset, so the gate retries in 30 minutes instead of recording a
+// success that did not happen.
+const DAILY_DISCORD_KEY = "daily_discord_check";
+async function checkWebhooks() {
+  const { data: leagues, error } = await supa.from("leagues").select("id,name");
+  if (error) throw error;
+  const counts = { checked: 0, ok: 0, no_key: 0, failed: 0 };
+  let writeFailures = 0;
+  for (const lg of leagues ?? []) {
+    const hook = resolveHook(lg.name, (k: string) => Deno.env.get(k));
+    let outcome: { ok: boolean; status: string };
+    if (!hook) outcome = { ok: false, status: NO_KEY };
+    else {
+      const res = await fetch(hook, { method: "GET" }).catch(() => null);
+      if (res?.body) await res.body.cancel().catch(() => {}); // never read: it holds the token
+      outcome = postOutcome(res?.status ?? null);
+    }
+    if (!(await recordDiscord(lg.id, outcome))) writeFailures++;
+    counts.checked++;
+    if (outcome.ok) counts.ok++;
+    else if (outcome.status === NO_KEY) counts.no_key++;
+    else { counts.failed++; console.error(`checkWebhooks: league "${lg.name}" webhook check: ${outcome.status}`); }
+  }
+  if (writeFailures) throw new Error(`checkWebhooks: ${writeFailures} status write(s) failed — ran_at not stamped`);
+  const { error: stampErr } = await supa.from("sync_state")
+    .upsert({ key: DAILY_DISCORD_KEY, ran_at: new Date().toISOString(), note: JSON.stringify(counts) }, { onConflict: "key" });
+  if (stampErr) console.error("checkWebhooks: ran_at stamp failed:", stampErr);
+  return counts;
+}
+async function dailyDiscordCheck(live: boolean) {
+  if (live) return { skipped: "live burst" };
+  const now = new Date();
+  const { data: st, error } = await supa.from("sync_state").select("*").eq("key", DAILY_DISCORD_KEY).maybeSingle();
+  if (error) throw error;
+  if (!dailyGateDue({ ranAt: st?.ran_at ?? null, attemptedAt: st?.attempted_at ?? null, now })) return { due: false };
+  const { error: stampErr } = await supa.from("sync_state")
+    .upsert({ key: DAILY_DISCORD_KEY, attempted_at: now.toISOString() }, { onConflict: "key" });
+  if (stampErr) throw stampErr; // no backoff record → don't run without one
+  const counts = await checkWebhooks();
+  return { due: true, ...counts };
+}
+// Same isolation as dailyShowSyncSafe: nothing here can throw into scoring.
+async function dailyDiscordCheckSafe(live: boolean) {
+  try { return await dailyDiscordCheck(live); }
+  catch (e) { console.error("dailyDiscordCheck failed (scoring unaffected):", e); return { error: String(e) }; }
 }
 
 // ---------- sync songs (global catalog — unchanged by the multi-tenant split) ----------
@@ -607,7 +697,7 @@ async function announcements() {
       const missing = (members ?? []).filter((m: any) => !voted.has(m.player_id))
         .map((m: any) => pn[m.player_id]).filter(Boolean);
       const label = show?.venue ?? show?.showdate ?? `show ${ls.show_id}`;
-      await notifyLeague(leagueName.get(ls.league_id) ?? "", missing.length
+      await notifyLeague(ls.league_id, leagueName.get(ls.league_id) ?? "", missing.length
         ? `⏰ **1 hour to lock** — ${label}. Still waiting on: ${missing.join(", ")}`
         : `⏰ **1 hour to lock** — ${label}. Everyone's in \u{1F95A}`);
       await supa.from("league_shows").update({ remind_sent: nowIso })
@@ -628,7 +718,7 @@ async function announcements() {
         .eq("show_id", ls.show_id).in("bracket_id", bracketIds.length ? bracketIds : [-1]);
       const n = new Set((picks ?? []).map((p: any) => p.player_id)).size;
       const label = show.venue ?? show.showdate;
-      await notifyLeague(leagueName.get(ls.league_id) ?? "",
+      await notifyLeague(ls.league_id, leagueName.get(ls.league_id) ?? "",
         `\u{1F512} **Picks are locked** for ${label} — ${n} sheets in. Boards are live in the app.`);
       await supa.from("league_shows").update({ lock_sent: nowIso })
         .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
@@ -664,7 +754,7 @@ async function announcements() {
       }
       const label = show.venue ?? show.showdate;
       if (parts.length) {
-        await notifyLeague(leagueName.get(ls.league_id) ?? "", `\u{1F3C6} **${label}** is final\n${parts.join("\n")}`);
+        await notifyLeague(ls.league_id, leagueName.get(ls.league_id) ?? "", `\u{1F3C6} **${label}** is final\n${parts.join("\n")}`);
       }
       await supa.from("league_shows").update({ winner_sent: nowIso })
         .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
@@ -694,7 +784,7 @@ async function announcements() {
           const pn = await playerNames();
           const podium = ranked.slice(0, 3).map(([id, p], i) =>
             `${["\u{1F947}", "\u{1F948}", "\u{1F949}"][i]} ${pn[id]} · ${p}`).join("   ");
-          await notifyLeague(leagueName.get(bracket.league_id) ?? "", `\u{1F451} **${se.name} is in the books!**\n${podium}`);
+          await notifyLeague(bracket.league_id, leagueName.get(bracket.league_id) ?? "", `\u{1F451} **${se.name} is in the books!**\n${podium}`);
         }
       }
       await supa.from("seasons").update({ winner_sent: nowIso }).eq("id", se.id);
@@ -708,13 +798,14 @@ async function scoreShows() {
   const autoclosed = await autoFinalize();
   await announcements();
   let rows = await eligibleLeagueShows();
-  // The daily show sync runs on BOTH return paths — "no eligible shows" is
-  // the normal tick on most days of the year, so it is the path the sync
-  // mostly runs on.
+  // The daily show sync AND the daily Discord check run on BOTH return paths
+  // — "no eligible shows" is the normal tick on most days of the year, so it
+  // is the path they mostly run on.
   if (!rows.length) return {
     scored: [], autoclosed, seasons_activated: seasonActivation.activated,
     season_activation_failures: seasonActivation.failed, note: "no eligible shows",
     daily_sync: await dailyShowSyncSafe(false),
+    discord_check: await dailyDiscordCheckSafe(false),
   };
 
   const live = rows.some((r: any) => isLiveWindow(r.show));
@@ -732,6 +823,7 @@ async function scoreShows() {
     scored: results, burst: live, autoclosed, seasons_activated: seasonActivation.activated,
     season_activation_failures: seasonActivation.failed,
     daily_sync: await dailyShowSyncSafe(live),
+    discord_check: await dailyDiscordCheckSafe(live),
   };
 }
 
@@ -819,7 +911,7 @@ async function scoreShow(show: any, leagueShowRows: any[], isFinal = false) {
       if (seenLeagues.has(r.league_id)) continue;
       seenLeagues.add(r.league_id);
       const { data: lg } = await supa.from("leagues").select("name").eq("id", r.league_id).single();
-      if (lg) await notifyLeague(lg.name, msg);
+      if (lg) await notifyLeague(r.league_id, lg.name, msg);
     }
   }
 
@@ -924,7 +1016,7 @@ async function reopenShow(name: string, pin: string, leagueId: number, showId: n
   const { data: lg } = await supa.from("leagues").select("name").eq("id", leagueId).single();
   const { data: show } = await supa.from("shows").select("venue,showdate").eq("id", showId).single();
   if (lg) {
-    await notifyLeague(lg.name,
+    await notifyLeague(leagueId, lg.name,
       `\u{1F504} **Scores reopened** for ${show?.venue ?? show?.showdate ?? showId} — corrected setlist, re-scoring now.`);
   }
   return { ok: true, league_id: leagueId, show_id: showId };
@@ -947,7 +1039,7 @@ async function cutoffChanged(name: string, pin: string, leagueId: number, showId
   const { data: lg } = await supa.from("leagues").select("name").eq("id", leagueId).single();
   const { data: show } = await supa.from("shows").select("venue,showdate").eq("id", showId).single();
   if (!lg || !ls) return { ok: false, error: "league or show not found" };
-  await notifyLeague(lg.name, cutoffChangedMessage(show?.venue ?? show?.showdate ?? showId, ls.cutoff_at));
+  await notifyLeague(leagueId, lg.name, cutoffChangedMessage(show?.venue ?? show?.showdate ?? showId, ls.cutoff_at));
   return { ok: true };
 }
 

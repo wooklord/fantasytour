@@ -7,6 +7,7 @@ import { toast } from "../core/toast.js";
 import { loadConfig, loadSongs } from "../core/session.js";
 import { markTab } from "../core/layout.js";
 import { settingsPanelHtml, wireSettingsPanel } from "./settings.js";
+import { discordStatusLine } from "../core/discordHint.js"; // the Community editor's read-only Discord status (discord-routing.md, Part 2, the dev's call 7)
 import { currentBracket, setSignupRows, signupBadgeLit } from "../core/switcher.js";
 import { isNew } from "../core/signups.js";
 import { TIEBREAK_LABELS } from "../core/tiebreak.js";
@@ -455,6 +456,7 @@ export async function renderAdmin(){
         <input id="lc-fb" type="url" placeholder="https://…" value="${esc(currentBracket()?.fb_url || "")}" autocomplete="off"></div>
       <div class="field"><label>Discord invite URL</label>
         <input id="lc-discord" type="url" placeholder="https://…" value="${esc(currentBracket()?.discord_url || "")}" autocomplete="off"></div>
+      <p class="muted" id="lc-discord-status">${esc(discordStatusLine(currentBracket()))}</p>
       <button class="btn ghost small" onclick="saveLeagueConfig()">Save links</button>
       <div class="err" id="lc-err"></div>
     `)}

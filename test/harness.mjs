@@ -61,6 +61,14 @@ const fakeHasPlayed = (id, tables) => (tables.picks || []).some(r => r.player_id
   || (tables.season_rosters || []).some(r => r.player_id === id)
   || (tables.sync_flag_clears || []).some(r => r.cleared_by === id);
 let fakeRegisterSeq = 0;
+// Stage Y (sql/stage_y_discord_status.sql): discord_live = a success within
+// 2 days AND the status is none of the three "dead on its own" words. A
+// transient 429/5xx/error keeps it; http_404, http_401 and no_key drop it;
+// nothing recorded yet is false. Mutation M8 (a stale check counted as live)
+// is run against THIS rule; the live expression is proven by STEP 2B.
+const DEAD_STATUSES = ["http_404", "http_401", "no_key"];
+const fakeDiscordLive = l => l.discord_ok_at != null && Date.parse(l.discord_ok_at) > Date.now() - 2 * 864e5
+  && !DEAD_STATUSES.includes(l.discord_status ?? "");
 
 // Handlers compute against the fixture's relational tables (passed as the
 // second argument by fakeSupabase.rpc) rather than returning fixed stubs, so
@@ -100,6 +108,9 @@ const RPC_HANDLERS = {
         // Stage S: l.config->>'fb_url' / 'discord_url' — null when the
         // league has no config at all, exactly as the real RPC returns.
         fb_url: league.config?.fb_url ?? null, discord_url: league.config?.discord_url ?? null,
+        // Stage Y: the three status columns as the edge function leaves them
+        // (null until the first check), and discord_live by the SQL's rule.
+        discord_live: fakeDiscordLive(league), discord_status: league.discord_status ?? null, discord_checked_at: league.discord_checked_at ?? null,
       }));
     });
   },
@@ -2970,6 +2981,199 @@ export async function runOnboardingScenario({ html, scripts, mode }){
   out.relatedEmpty.settings = empty.read();
   out.relatedEmpty.picks = (await load({ who: "p1", relatedApps: [] })).read();
   out.relatedThrow = { shows: (await load({ who: "p2", relatedApps: "throw" })).read(), picks: (await load({ who: "p1", relatedApps: "throw" })).read() };
+  return out;
+}
+
+// ---------- Discord hint (docs/decisions/discord-routing.md, Part 2) ----------
+// The bar on the shows list, its Join / How? / ✕, the per-league device flag,
+// the Settings switch and the admin status line, driven through the real
+// bundle against the fake my_leagues above (which computes discord_live by
+// the SQL's rule). Every load is a fresh JSDOM; "reload" copies localStorage
+// into the next load. jsdom's own user agent reads as desktop, so install
+// help never applies unless a phone agent is passed. A second league is
+// added HERE (not to makeFixtures — the shared fixture is single-league),
+// with a saved pick for p1 so the welcome card never covers that league.
+// Mutations M4–M8 each turn at least one of these checks red.
+export async function runDiscordHintScenario({ html, scripts, mode }){
+  const ANDROID = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36";
+  const LINK = "https://example.invalid/discord-invite", LINK2 = "https://example.invalid/discord-invite-2";
+  const ago = h => new Date(Date.now() - h * 3600e3).toISOString();
+  // What the edge function's daily check leaves on leagues: the status, the
+  // check time, the last success.
+  const LIVE = { discord_status: "ok", discord_checked_at: ago(1), discord_ok_at: ago(1) };
+  const STALE = { discord_status: "ok", discord_checked_at: ago(72), discord_ok_at: ago(72) };
+  const DEAD = { discord_status: "http_404", discord_checked_at: ago(1), discord_ok_at: ago(2) };
+  const TRANSIENT = { discord_status: "http_429", discord_checked_at: ago(1), discord_ok_at: ago(2) };
+  const NO_KEY = { discord_status: "no_key", discord_checked_at: ago(1), discord_ok_at: ago(2) };
+  const NEVER = { discord_status: null, discord_checked_at: null, discord_ok_at: null };
+  const NAMES = { p1: "Wooklord", p2: "EggHead" };
+  async function load({ who = "p1", ua, status = LIVE, link = LINK, status2 = LIVE, storage = {}, legacy = false, tab = "shows" } = {}){
+    const { tables, ids } = makeFixtures();
+    Object.assign(tables.leagues[0], status);
+    tables.leagues[0].config = link == null ? {} : { discord_url: link };
+    tables.leagues.push({ id: 2, name: "Green Eggs", config: { discord_url: LINK2 }, ...status2 });
+    tables.brackets.push({ id: 20, league_id: 2, kind: "casual", name: "Casual", config: tables.brackets[0].config });
+    tables.league_members.push({ league_id: 2, player_id: "p1", is_league_admin: false, official_opt_in: true },
+                               { league_id: 2, player_id: "p2", is_league_admin: false, official_opt_in: true });
+    for (const ls of tables.league_shows.filter(l => l.league_id === ids.LEAGUE_ID)) tables.league_shows.push({ ...ls, league_id: 2 });
+    tables.picks.push({ player_id: "p1", bracket_id: 20, show_id: 2, slot: "opener", songname: "Distraction" });
+    // An older my_leagues (Stage S) returns no status column at all.
+    const handlers = legacy
+      ? { ...RPC_HANDLERS, my_leagues: async (args, t) => (await RPC_HANDLERS.my_leagues(args, t)).map(({ discord_live, discord_status, discord_checked_at, ...rest }) => rest) }
+      : RPC_HANDLERS;
+    const calls = [];
+    const dom = new JSDOM(stripScripts(html), { url: "http://localhost/", runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window;
+    installGlobals(w, mode, tables, handlers, calls, {}, ua ? { ua } : {});
+    for (const [k, v] of Object.entries(storage)) w.localStorage.setItem(k, v);
+    w.localStorage.setItem("ft_session", JSON.stringify({ id: who, name: NAMES[who], pin: "1234", is_global_admin: false }));
+    w.localStorage.setItem("ft_bracket_id", String(ids.CASUAL_ID));
+    for (const src of scripts) w.eval(src);
+    await tick(); await tick();
+    clickTab(w, tab);
+    await tick(); await tick(); await tick();
+    const d = w.document;
+    // Same as runOnboardingScenario: inline handler attributes only run under
+    // runScripts:"dangerously"; fire() runs the attribute's text in the
+    // window's scope, so a handler missing from window throws here.
+    const fire = (el, attr = "onclick") => { const code = el?.getAttribute(attr); if (!code) return false; new w.Function(code).call(el); return true; };
+    const attrs = el => el ? { text: el.textContent.trim(), label: el.getAttribute("aria-label"), title: el.getAttribute("title"), onclick: el.getAttribute("onclick"), expanded: el.getAttribute("aria-expanded") } : null;
+    const read = () => {
+      const bars = d.querySelectorAll("#discord-bar .installbar");
+      const bar = bars[0] ?? null, how = d.getElementById("discord-how"), join = bar?.querySelector(".ib-join") ?? null;
+      const tips = d.getElementById("discord-tips");
+      return {
+        bar: !!bar, bars: bars.length,
+        afterInstallSlot: d.getElementById("install-bar")?.nextElementSibling?.id ?? null,
+        text: bar?.querySelector(".ib-text")?.textContent ?? null,
+        join: join ? { text: join.textContent.trim(), href: join.getAttribute("href"), target: join.getAttribute("target"), rel: join.getAttribute("rel"), onclick: join.getAttribute("onclick"), tag: join.tagName } : null,
+        how: attrs(bar?.querySelector(".ib-how")),
+        howHidden: how ? how.classList.contains("hidden") : null,
+        tip: how ? [...how.querySelectorAll(".ih-step")].map(p => p.textContent) : [],
+        x: attrs(bar?.querySelector(".ib-x")),
+        installBar: !!d.querySelector("#install-bar .installbar"), installSection: !!d.getElementById("install-section"),
+        card: !!d.getElementById("welcome-card"),
+        tips: tips ? { checked: tips.checked, onchange: tips.getAttribute("onchange") } : null,
+        status: d.getElementById("lc-discord-status")?.textContent ?? null,
+        statusUnderLink: d.getElementById("lc-discord")?.closest(".field")?.nextElementSibling?.id ?? null,
+      };
+    };
+    const storageNow = () => dumpLocalStorage(w);
+    // The hint flags on the device, sorted so key order never decides a check.
+    const flags = () => Object.fromEntries(Object.entries(storageNow())
+      .filter(([k]) => k.startsWith("ft_discord_dismissed_") || k === "ft_install_dismissed").sort(([a], [b]) => a.localeCompare(b)));
+    const rerender = async () => { await w.renderShows(); await tick(); await tick(); };
+    const showsTab = async () => { clickTab(w, "shows"); await tick(); await tick(); await tick(); };
+    const settingsTab = async () => { clickTab(w, "admin"); await tick(); await tick(); await tick(); };
+    const switchLeague = async id => { await w.switchToLeague(id); await tick(); await tick(); await tick(); };
+    return { w, d, ids, read, storageNow, flags, rerender, showsTab, settingsTab, switchLeague, fire };
+  }
+  const out = {};
+
+  // 1. The bar: a live league, an https link, a player with picks, a desktop agent.
+  const a = await load();
+  out.live = a.read();
+  a.fire(a.d.querySelector("#discord-bar .ib-how"));
+  out.howOpen = a.read();
+  a.fire(a.d.querySelector("#discord-bar .ib-how"));
+  out.howClosed = a.read();
+  await a.rerender(); await a.rerender();
+  out.liveRerendered = a.read();
+
+  // 2. The status gate (D1 as refined 2026-11-01): what never shows the bar,
+  //    and the transient failure that keeps it.
+  out.dead = (await load({ status: DEAD })).read();
+  out.stale = (await load({ status: STALE })).read();
+  out.noKey = (await load({ status: NO_KEY })).read();
+  out.never = (await load({ status: NEVER })).read();
+  out.transient = (await load({ status: TRANSIENT })).read();
+  // 3. The link gate: the one https-only guard (community.js).
+  out.noLink = (await load({ link: null })).read();
+  out.jsLink = (await load({ link: "javascript:void(0)" })).read();
+  out.httpLink = (await load({ link: "http://example.invalid/plain" })).read();
+  out.upperLink = (await load({ link: "HTTPS://example.invalid/upper" })).read();
+  // 4. An older my_leagues without the column.
+  out.legacy = (await load({ legacy: true })).read();
+
+  // 5. D6, one hint at a time, handover on the NEXT render (the dev's call 3).
+  const ib = await load({ ua: ANDROID });
+  out.withInstallBar = ib.read();
+  ib.fire(ib.d.querySelector("#install-bar .ib-x"));
+  await tick();
+  out.afterInstallX = { read: ib.read(), flags: ib.flags() };
+  await ib.rerender();
+  out.afterInstallXRerender = { read: ib.read(), flags: ib.flags() };
+  const wc = await load({ who: "p2" });
+  out.withCard = wc.read();
+  wc.fire(wc.d.querySelector(".welcome-x"));
+  await tick();
+  out.afterCardX = { read: wc.read(), flags: wc.flags() };
+  await wc.rerender();
+  out.afterCardXRerender = { read: wc.read(), flags: wc.flags() };
+  out.cardAndSection = (await load({ who: "p2", ua: ANDROID })).read();
+
+  // 6. Join: the flag for THIS league, the slot cleared on the next tick, gone
+  //    after a reload; the other league untouched (D5, M5, M7).
+  const j = await load();
+  out.joinFired = j.fire(j.d.querySelector("#discord-bar .ib-join"));
+  out.joinSync = { read: j.read(), flags: j.flags() };
+  await tick(); await tick();
+  out.join = { read: j.read(), flags: j.flags() };
+  out.joinReload = (await load({ storage: j.storageNow() })).read();
+  await j.switchLeague(2);
+  out.otherLeague = { read: j.read(), flags: j.flags() };
+  j.fire(j.d.querySelector("#discord-bar .ib-x"));
+  await tick();
+  out.otherLeagueX = { read: j.read(), flags: j.flags() };
+  await j.switchLeague(1);
+  out.backToFirst = { read: j.read(), flags: j.flags() };
+
+  // 7. ✕: the same flag, the same way.
+  const x = await load();
+  x.fire(x.d.querySelector("#discord-bar .ib-x"));
+  await tick();
+  out.x = { read: x.read(), flags: x.flags() };
+  out.xReload = (await load({ storage: x.storageNow() })).read();
+
+  // 8. Per device, not per player (D5): logout keeps the flag; another player
+  //    on the device (card already closed) sees no bar with it, the bar without it.
+  const lo = await load({ storage: { ft_discord_dismissed_1: "1" } });
+  lo.w.logout(); await tick();
+  const afterLogout = lo.storageNow();
+  out.logout = { sessionGone: !("ft_session" in afterLogout), flag: afterLogout.ft_discord_dismissed_1 ?? null };
+  out.otherPlayerFlagged = (await load({ who: "p2", storage: { ...afterLogout, ft_welcome_p2: "1" } })).read();
+  out.otherPlayerClean = (await load({ who: "p2", storage: { ft_welcome_p2: "1" } })).read();
+
+  // 9. The Settings switch (D5's undo): present iff the league has a link.
+  const sNo = await load({ link: null }); await sNo.settingsTab(); out.switchNoLink = sNo.read();
+  const sDead = await load({ status: DEAD }); await sDead.settingsTab(); out.switchDeadLeague = sDead.read();
+  const sw = await load({ storage: { ft_discord_dismissed_1: "1", ft_discord_dismissed_2: "1" } });
+  await sw.settingsTab();
+  out.switchBefore = { read: sw.read(), flags: sw.flags() };
+  const box = sw.d.getElementById("discord-tips");
+  if (box){ box.checked = true; sw.fire(box, "onchange"); }
+  await tick();
+  out.switchOn = { read: sw.read(), flags: sw.flags() };
+  await sw.showsTab();
+  out.switchOnShows = sw.read();
+  await sw.settingsTab();
+  const box2 = sw.d.getElementById("discord-tips");
+  if (box2){ box2.checked = false; sw.fire(box2, "onchange"); }
+  await tick();
+  out.switchOff = { read: sw.read(), flags: sw.flags() };
+  // The wide layout renders Settings beside the list: the bar's ✕ must leave
+  // an on-screen switch unchecked.
+  const dx = await load();
+  dx.fire(dx.d.querySelector("#discord-bar .ib-x"));
+  await tick();
+  out.xUpdatesSwitch = dx.read();
+
+  // 10. The admin status line (the dev's call 7), off the same row.
+  const adm = await load(); await adm.settingsTab(); out.statusLive = adm.read();
+  const admDead = await load({ status: DEAD }); await admDead.settingsTab(); out.statusDead = admDead.read();
+  const admNever = await load({ status: NEVER }); await admNever.settingsTab(); out.statusNever = admNever.read();
+  const admStale = await load({ status: STALE }); await admStale.settingsTab(); out.statusStale = admStale.read();
+  const nonAdmin = await load({ who: "p2" }); await nonAdmin.settingsTab(); out.statusNonAdmin = nonAdmin.read();
   return out;
 }
 

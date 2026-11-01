@@ -13,6 +13,7 @@
 import {
   APP_NAME, WEBHOOK_KEY_PREFIX, CONTENT_MAX, USERNAME_MAX,
   webhookEnvKey, resolveHook, authorName, discordBody, postOutcome,
+  NO_KEY, DEAD_STATUSES, STATUS_RE, statusPatch,
 } from "../supabase/functions/carton-sync/discord.js";
 
 const failures = [];
@@ -169,6 +170,34 @@ check("outcome: a numeric string is read as a number", postOutcome("204"), { ok:
   const all = [200, 204, 301, 400, 401, 404, 429, 500, null, undefined, "abc"].map(postOutcome);
   check("outcome: ok is true exactly when status is \"ok\" (no third state)", all.every((o) => o.ok === (o.status === "ok")), true);
 }
+check("outcome: an out-of-range or fractional number is error, never http_0 / http_1000 / http_204.5",
+  [postOutcome(0).status, postOutcome(99).status, postOutcome(1000).status, postOutcome(204.5).status], ["error", "error", "error", "error"]);
+
+// ---------------------------------------------------------------
+// Part 2 (Stage Y): the stored vocabulary and the row update.
+// ---------------------------------------------------------------
+const NOW = "2026-11-01T14:00:00.000Z";
+check("patch: a success → status ok, checked now, ok_at now", statusPatch(postOutcome(204), NOW),
+  { discord_status: "ok", discord_checked_at: NOW, discord_ok_at: NOW });
+check("patch: 404 → http_404, checked now, and NO ok_at key at all (the last success is left alone)",
+  statusPatch(postOutcome(404), NOW), { discord_status: "http_404", discord_checked_at: NOW });
+check("patch: 429 → recorded as http_429, ok_at untouched", statusPatch(postOutcome(429), NOW), { discord_status: "http_429", discord_checked_at: NOW });
+check("patch: the fetch threw → error, checked now", statusPatch(postOutcome(null), NOW), { discord_status: "error", discord_checked_at: NOW });
+check("patch: no secret → no_key, checked now", statusPatch({ ok: false, status: NO_KEY }, NOW), { discord_status: "no_key", discord_checked_at: NOW });
+check("patch: a word outside the vocabulary is written as error, never past the constraint",
+  statusPatch({ ok: false, status: "dead" }, NOW).discord_status, "error");
+check("patch: a forged ok with a wrong word writes error and does NOT set ok_at",
+  statusPatch({ ok: true, status: "fine" }, NOW), { discord_status: "error", discord_checked_at: NOW });
+check("patch: a missing outcome is error, not a crash", statusPatch(null, NOW), { discord_status: "error", discord_checked_at: NOW });
+check("patch: exactly the three leagues.discord_* columns, nothing else",
+  Object.keys(statusPatch(postOutcome(200), NOW)).sort(), ["discord_checked_at", "discord_ok_at", "discord_status"]);
+check("vocabulary: every word postOutcome can produce, and no_key, satisfies the constraint regex (offenders)",
+  [200, 204, 301, 400, 401, 404, 429, 500, 0, 99, 1000, null, undefined, "abc", "204"].map(postOutcome).map((o) => o.status).concat([NO_KEY])
+    .filter((s) => !STATUS_RE.test(s)), []);
+check("vocabulary: words outside it are refused", ["dead", "http_NaN", "http_4", "http_4040", "", "OK", "ok "].filter((s) => STATUS_RE.test(s)), []);
+check("vocabulary: the constraint text is the one sql/stage_y_discord_status.sql carries", STATUS_RE.source, "^(ok|no_key|error|http_[0-9]{3})$");
+check("dead: exactly the three words that drop the hint on their own — a deleted webhook, a bad token, no secret", DEAD_STATUSES, ["http_404", "http_401", "no_key"]);
+check("dead: a transient failure is NOT among them (the refined D1)", ["http_429", "http_500", "error", "ok"].filter((s) => DEAD_STATUSES.includes(s)), []);
 
 // ---------------------------------------------------------------
 if (failures.length) {

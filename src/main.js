@@ -9,6 +9,7 @@ import { renderShows, dismissWelcome } from "./features/shows.js";
 import { setBoardSeason, toggleTieGroup, setStatsSort } from "./features/standings.js";
 import { changeOwnPin } from "./features/settings.js";
 import { captureInstallPrompt, checkInstalledApp, promptInstall, dismissInstall, toggleInstallHow, setInstallTips } from "./core/install.js";
+import { joinDiscord, dismissDiscord, toggleDiscordHow, setDiscordTips } from "./core/discordHint.js";
 import {
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
   toggleFormat, saveCutoff, finalizeShow, reopenShow, toggleBans, unban, runEdge, bootPlayer,
@@ -32,6 +33,7 @@ Object.assign(window, {
   saveLeagueConfig, setRosterFilter, clearSyncFlag, clearNewSignups, removeAccount,
   switchToBracket, switchToLeague,
   promptInstall, dismissInstall, toggleInstallHow, setInstallTips, dismissWelcome,
+  joinDiscord, dismissDiscord, toggleDiscordHow, setDiscordTips,
 });
 
 // Before boot(): beforeinstallprompt can fire at any point after load, and

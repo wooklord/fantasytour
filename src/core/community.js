@@ -14,13 +14,18 @@ import { db } from "./supabaseClient.js";
 // are fixed; the URL is the only admin-supplied part. Returns [] for a
 // league with no links (or no config at all), which callers must treat as
 // "render nothing", not as an error.
+const httpsOk = u => typeof u === "string" && /^https:\/\//i.test(u);
 export function communityLinks(cfg){
-  const ok = u => typeof u === "string" && /^https:\/\//i.test(u);
   const out = [];
-  if (ok(cfg?.fb_url)) out.push({ label: "Facebook group", url: cfg.fb_url });
-  if (ok(cfg?.discord_url)) out.push({ label: "Discord", url: cfg.discord_url });
+  if (httpsOk(cfg?.fb_url)) out.push({ label: "Facebook group", url: cfg.fb_url });
+  if (httpsOk(cfg?.discord_url)) out.push({ label: "Discord", url: cfg.discord_url });
   return out;
 }
+// The league's Discord link after the SAME guard, or null. The Discord hint
+// (core/discordHint.js) and its Settings switch read it; nothing else is an
+// href source for it. The my_leagues row and leagues.config both carry the
+// key as discord_url (sql/stage_s_league_config.sql's whitelist).
+export function discordLinkOf(cfg){ return httpsOk(cfg?.discord_url) ? cfg.discord_url : null; }
 
 // One row per league that has at least one valid link; a league with none
 // contributes nothing. "" when no league has any.

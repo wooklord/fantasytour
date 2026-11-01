@@ -10,6 +10,7 @@ import { slotDefs, draftKey, draftPrefix, firstSaveKey, openShow } from "./picks
 import { communityLinks } from "../core/community.js";
 import { BAND_NAME } from "../core/config.js";
 import { renderInstallSlots } from "../core/install.js";
+import { renderDiscordSlot } from "../core/discordHint.js";
 
 // ---------- Welcome card (onboarding.md, decision 6, Batch 3) ----------
 // The in-league-no-picks state, derived, never stored: no saved pick in
@@ -51,7 +52,9 @@ function welcomeHtml(next){
 export function dismissWelcome(){
   try { localStorage.setItem(welcomeKey(), "1"); } catch { /* storage blocked */ }
   document.getElementById("welcome-card")?.remove();
-  renderInstallSlots(); // the section left with the card, so the bar takes over
+  renderInstallSlots(); // the section left with the card, so the install bar takes over
+  // The Discord bar does NOT take over here: it waits for the next build of
+  // the list (discord-routing.md, the dev's call 3 — one new hint per visit).
 }
 
 // The Shows nav-tab entry point — deliberately distinct from renderShows()
@@ -311,12 +314,14 @@ export async function renderShows(){
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
     ${showWelcome ? welcomeHtml(upcoming.find(s => showState(s) === "open")) : ""}
     <div id="install-bar"></div>
+    <div id="discord-bar"></div>
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     ${liveNow.length ? `<div class="panel live-halo"><h2>Live</h2>${liveNow.map(s => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet — admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons([...extraRecent, ...(past||[])]) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;
   renderInstallSlots();
+  renderDiscordSlot(); // after the install slots: D6 reads the DOM they left
   state.timers.push(setInterval(() => {
     document.querySelectorAll("[data-cd]").forEach(el => {
       if (!el.dataset.cd) return;

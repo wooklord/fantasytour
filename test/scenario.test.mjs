@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario, runVetFirstScenario, runNameEscapeScenario, runSignupClearRemoveScenario, runSignupLayoutScenario } from "./harness.mjs";
+import { runScenario, runLoggedOutBoot, runNonAdminScenario, runGlobalAdminScenario, runBootScenario, runRosterScenario, runNoLeagueScenario, runNoLeagueLinksScenario, runNoLeaguePollScenario, runNoLeaguePollTimersScenario, runUnaffiliatedScenario, runFormatToggleScenario, runSaveSplitScenario, runForcedPinChangeScenario, runRankedChoiceScenario, runNoOverlayScenario, runSettingsLinksScenario, runStandingsTiebreakScenario, runScoresViewScenario, runLongNameScenario, runWhosPickedScenario, runRegisterLengthScenario, runSyncFlagScenario, runMembersPanelScenario, runStatsScenario, runEmptyLadderScenario, runOnboardingScenario, runVetFirstScenario, runNameEscapeScenario, runSignupClearRemoveScenario, runSignupLayoutScenario, runDiscordHintScenario } from "./harness.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -1561,6 +1561,69 @@ async function runMode(mode){
   check(`decision 8 layout fix: the list renders once, ${mode === "desktop" ? "in the desktop admin column" : "in the main view"}`,
     lay.lists === 1 && (mode === "desktop" ? lay.inAdminColumn && !lay.inMain : lay.inMain && !lay.inAdminColumn),
     `lists: ${lay.lists} col: ${lay.inAdminColumn} main: ${lay.inMain}`);
+
+  // ---------- Discord hint (docs/decisions/discord-routing.md, Part 2, the dev's seven calls of 2026-11-01) ----------
+  const dh = await runDiscordHintScenario({ html, scripts, mode });
+  const DH_TEXT = "Get show reminders and scores in Discord";
+  const DH_TIP = "After you join, open the channel's notification settings and pick All Messages. Discord only buzzes for mentions otherwise.";
+  const DH_LINK = "https://example.invalid/discord-invite", DH_LINK2 = "https://example.invalid/discord-invite-2";
+  const noBar = r => r.bar === false && r.bars === 0;
+  const tipsOffOrAbsent = r => r.tips === null || r.tips.checked === false;
+  check("Discord bar: live league + https link + a player with picks → ONE bar in #discord-bar right after #install-bar, the exact text, Join as an ANCHOR to the league link (target _blank, rel noopener noreferrer, onclick joinDiscord()), How? collapsed, ✕ labelled Don't show again, the tip hidden with the exact wording; no install bar and no card on screen",
+    dh.live.bar && dh.live.bars === 1 && dh.live.afterInstallSlot === "discord-bar" && dh.live.text === DH_TEXT
+      && J(dh.live.join) === J({ text: "Join", href: DH_LINK, target: "_blank", rel: "noopener noreferrer", onclick: "joinDiscord()", tag: "A" })
+      && dh.live.how?.text === "How?" && dh.live.how?.onclick === "toggleDiscordHow()" && dh.live.how?.expanded === "false"
+      && dh.live.howHidden === true && J(dh.live.tip) === J([DH_TIP])
+      && dh.live.x?.onclick === "dismissDiscord()" && dh.live.x?.label === "Don't show again" && dh.live.x?.title === "Don't show again"
+      && !dh.live.installBar && !dh.live.card,
+    `live: ${J(dh.live)}`);
+  check("Discord bar: How? reveals the tip (aria-expanded true) and hides it again; rebuilding the list never duplicates the bar",
+    dh.howOpen.howHidden === false && dh.howOpen.how?.expanded === "true" && dh.howClosed.howHidden === true && dh.howClosed.how?.expanded === "false" && dh.liveRerendered.bars === 1,
+    `open: ${J(dh.howOpen)} closed: ${J(dh.howClosed)} rerendered: ${J(dh.liveRerendered)}`);
+  check("D1 refined: never for a dead webhook (http_404 after a success, link present), a stale success (3 days), no_key, or never checked — while a transient http_429 after a recent success keeps it",
+    noBar(dh.dead) && noBar(dh.stale) && noBar(dh.noKey) && noBar(dh.never) && dh.transient.bar === true,
+    `dead: ${dh.dead.bar} stale: ${dh.stale.bar} noKey: ${dh.noKey.bar} never: ${dh.never.bar} transient: ${dh.transient.bar}`);
+  check("the link gate: never without an https link (none, javascript:, http:), while HTTPS:// in caps passes the one shared guard; an older my_leagues without the column never shows it",
+    noBar(dh.noLink) && noBar(dh.jsLink) && noBar(dh.httpLink) && dh.upperLink.bar === true && dh.upperLink.join?.href === "HTTPS://example.invalid/upper" && noBar(dh.legacy),
+    `noLink: ${dh.noLink.bar} js: ${dh.jsLink.bar} http: ${dh.httpLink.bar} upper: ${J(dh.upperLink.join)} legacy: ${dh.legacy.bar}`);
+  check("D6, install first: with the install bar on screen (Android) there is no Discord bar; its ✕ does NOT hand over (the dev's call 3) — only the install flag is set and the slot stays empty — and the Discord bar appears on the NEXT build of the list",
+    dh.withInstallBar.installBar && noBar(dh.withInstallBar)
+      && !dh.afterInstallX.read.installBar && noBar(dh.afterInstallX.read) && J(dh.afterInstallX.flags) === J({ ft_install_dismissed: "1" })
+      && dh.afterInstallXRerender.read.bar === true && !dh.afterInstallXRerender.read.installBar && J(dh.afterInstallXRerender.flags) === J({ ft_install_dismissed: "1" }),
+    `with: ${J(dh.withInstallBar)} afterX: ${J(dh.afterInstallX)} rerender: ${J(dh.afterInstallXRerender)}`);
+  check("D6, the welcome card: no Discord bar while the card is up (desktop agent, so no install help); the card's ✕ does NOT hand over — the bar appears on the next build; a card WITH an install section blocks it too",
+    dh.withCard.card && noBar(dh.withCard) && !dh.afterCardX.read.card && noBar(dh.afterCardX.read) && J(dh.afterCardX.flags) === J({})
+      && dh.afterCardXRerender.read.bar === true && dh.cardAndSection.card && dh.cardAndSection.installSection && noBar(dh.cardAndSection),
+    `card: ${J(dh.withCard)} afterX: ${J(dh.afterCardX)} rerender: ${J(dh.afterCardXRerender)} both: ${J(dh.cardAndSection)}`);
+  check("Join: firing the anchor's onclick sets ft_discord_dismissed_1 (and nothing else) while the anchor is STILL in the document; the slot clears on the next tick; the bar stays gone after a reload",
+    dh.joinFired === true && J(dh.joinSync.flags) === J({ ft_discord_dismissed_1: "1" }) && dh.joinSync.read.bar === true
+      && noBar(dh.join.read) && J(dh.join.flags) === J({ ft_discord_dismissed_1: "1" }) && noBar(dh.joinReload),
+    `sync: ${J(dh.joinSync)} after: ${J(dh.join)} reload: ${dh.joinReload.bar}`);
+  check("D5, per league: after Join in league 1, league 2 still shows its own bar (its own link) with no flag of its own; its ✕ sets ft_discord_dismissed_2 only; back in league 1 the bar is still gone",
+    dh.otherLeague.read.bar === true && dh.otherLeague.read.join?.href === DH_LINK2 && J(dh.otherLeague.flags) === J({ ft_discord_dismissed_1: "1" })
+      && noBar(dh.otherLeagueX.read) && J(dh.otherLeagueX.flags) === J({ ft_discord_dismissed_1: "1", ft_discord_dismissed_2: "1" })
+      && noBar(dh.backToFirst.read),
+    `other: ${J(dh.otherLeague)} otherX: ${J(dh.otherLeagueX)} back: ${J(dh.backToFirst)}`);
+  check("✕ dismisses the same way: the league's flag, the bar gone now and after a reload",
+    noBar(dh.x.read) && J(dh.x.flags) === J({ ft_discord_dismissed_1: "1" }) && noBar(dh.xReload),
+    `x: ${J(dh.x)} reload: ${dh.xReload.bar}`);
+  check("D5, per device: logout keeps the flag; another player on the device (card closed) sees no bar with the flag and the bar without it",
+    dh.logout.sessionGone && dh.logout.flag === "1" && noBar(dh.otherPlayerFlagged) && dh.otherPlayerClean.bar === true,
+    `logout: ${J(dh.logout)} flagged: ${dh.otherPlayerFlagged.bar} clean: ${dh.otherPlayerClean.bar}`);
+  check("Settings 'Show Discord tips': absent for a league without a link, present for a league with a link even when its webhook is dead; unchecked while dismissed; checking clears ONLY the current league's flag and the bar is back on the shows list; unchecking sets it again",
+    dh.switchNoLink.tips === null && dh.switchDeadLeague.tips !== null
+      && dh.switchBefore.read.tips?.checked === false && dh.switchBefore.read.tips?.onchange === "setDiscordTips(this.checked)"
+      && J(dh.switchOn.flags) === J({ ft_discord_dismissed_2: "1" }) && dh.switchOnShows.bar === true
+      && J(dh.switchOff.flags) === J({ ft_discord_dismissed_1: "1", ft_discord_dismissed_2: "1" }),
+    `noLink: ${J(dh.switchNoLink.tips)} dead: ${J(dh.switchDeadLeague.tips)} before: ${J(dh.switchBefore)} on: ${J(dh.switchOn)} onShows: ${dh.switchOnShows.bar} off: ${J(dh.switchOff)}`);
+  check(`the bar's ✕ leaves any on-screen switch unchecked (${mode === "desktop" ? "Settings sits beside the list, so the switch is there" : "no switch on this tab"})`,
+    noBar(dh.xUpdatesSwitch) && tipsOffOrAbsent(dh.xUpdatesSwitch) && (mode !== "desktop" || dh.xUpdatesSwitch.tips !== null),
+    `x: ${J(dh.xUpdatesSwitch)}`);
+  check("admin status line (the dev's call 7): one read-only line right under the Discord link field — 'Posting: OK, checked 1 hour ago' / 'Not posting (http_404), checked 1 hour ago' / 'Never checked' / a stale 'Not posting (ok), checked 3 days ago'; a non-admin has no such line",
+    dh.statusLive.status === "Posting: OK, checked 1 hour ago" && dh.statusLive.statusUnderLink === "lc-discord-status"
+      && dh.statusDead.status === "Not posting (http_404), checked 1 hour ago" && dh.statusNever.status === "Never checked"
+      && dh.statusStale.status === "Not posting (ok), checked 3 days ago" && dh.statusNonAdmin.status === null,
+    `live: ${dh.statusLive.status} dead: ${dh.statusDead.status} never: ${dh.statusNever.status} stale: ${dh.statusStale.status} nonAdmin: ${dh.statusNonAdmin.status}`);
 
   return failures.length;
 }

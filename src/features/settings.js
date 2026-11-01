@@ -7,6 +7,7 @@ import { toast } from "../core/toast.js";
 import { renderBracketToggle, renderLeagueSelector, currentBracket } from "../core/switcher.js";
 import { communityBlockHtml } from "../core/community.js";
 import { installHelpPossible, installDismissed } from "../core/install.js";
+import { discordTipsPossible, discordDismissed } from "../core/discordHint.js";
 
 // "Show install tips" (onboarding.md Batch 3, item 3 amendment): the undo
 // for "Don't show again". Checked = tips allowed; unchecking sets the same
@@ -18,6 +19,17 @@ function installTipsHtml(){
     onchange="setInstallTips(this.checked)"> Show install tips</label>`;
 }
 
+// "Show Discord tips" (discord-routing.md, Part 2, D5): the undo for the
+// Discord bar's "Don't show again" and for Join, for the CURRENT league
+// only. Checked = tips allowed; unchecking sets that league's flag. Absent
+// where the league has no valid Discord link — live or not, since the switch
+// undoes a dismissal and a webhook that is down today may be back tomorrow.
+function discordTipsHtml(){
+  if (!discordTipsPossible()) return "";
+  return `<label class="tips-switch"><input type="checkbox" id="discord-tips" ${discordDismissed(state.currentLeagueId) ? "" : "checked"}
+    onchange="setDiscordTips(this.checked)"> Show Discord tips</label>`;
+}
+
 // Shared between the standalone Settings tab (non-admins) and a section
 // inside the Admin tab (admins) — one panel, two mounting points, so the
 // toggle/league-selector/logout/credits/PIN-change form never has to be
@@ -27,6 +39,7 @@ export function settingsPanelHtml(){
     <div class="field"><label>Bracket</label><div class="switcher" id="bracketToggle"></div></div>
     <div id="leagueSelect"></div>
     <div id="leagueLinks"></div>
+    ${discordTipsHtml()}
     ${installTipsHtml()}
     <p class="muted" style="margin-top:16px;font-weight:600">Change PIN</p>
     <div class="field"><label>Current PIN</label><input id="pin-current" inputmode="numeric" autocomplete="current-password" type="password" placeholder="••••"></div>

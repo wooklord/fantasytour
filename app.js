@@ -46,6 +46,7 @@
   var NAME_MAX_LEN = 20;
   var NEW_SIGNUP_DAYS = 14;
   var SIGNUP_SNOOZE_DAYS = 7;
+  var DISCORD_FLAG_PREFIX = "ft_discord_dismissed_";
 
   // src/core/theme.js
   var sysLight = matchMedia("(prefers-color-scheme: light)");
@@ -91,12 +92,15 @@
   }
 
   // src/core/community.js
+  var httpsOk = (u) => typeof u === "string" && /^https:\/\//i.test(u);
   function communityLinks(cfg) {
-    const ok = (u) => typeof u === "string" && /^https:\/\//i.test(u);
     const out = [];
-    if (ok(cfg == null ? void 0 : cfg.fb_url)) out.push({ label: "Facebook group", url: cfg.fb_url });
-    if (ok(cfg == null ? void 0 : cfg.discord_url)) out.push({ label: "Discord", url: cfg.discord_url });
+    if (httpsOk(cfg == null ? void 0 : cfg.fb_url)) out.push({ label: "Facebook group", url: cfg.fb_url });
+    if (httpsOk(cfg == null ? void 0 : cfg.discord_url)) out.push({ label: "Discord", url: cfg.discord_url });
     return out;
+  }
+  function discordLinkOf(cfg) {
+    return httpsOk(cfg == null ? void 0 : cfg.discord_url) ? cfg.discord_url : null;
   }
   function communityRowsHtml(leagues) {
     return (leagues || []).map((l) => {
@@ -1033,6 +1037,112 @@ Save anyway?`)) return;
     renderInstallSlots();
   }
 
+  // src/core/discordHint.js
+  var discordFlagKey = (leagueId) => `${DISCORD_FLAG_PREFIX}${leagueId}`;
+  function discordDismissed(leagueId) {
+    if (leagueId == null) return true;
+    try {
+      return localStorage.getItem(discordFlagKey(leagueId)) === "1";
+    } catch {
+      return false;
+    }
+  }
+  function setDismissed2(leagueId, on) {
+    if (leagueId == null) return;
+    try {
+      on ? localStorage.setItem(discordFlagKey(leagueId), "1") : localStorage.removeItem(discordFlagKey(leagueId));
+    } catch {
+    }
+  }
+  function discordHintApplies({ row, dismissed, installOnScreen: installOnScreen2, welcomeOnScreen }) {
+    if (!row || row.discord_live !== true) return false;
+    if (!discordLinkOf(row)) return false;
+    if (dismissed) return false;
+    if (installOnScreen2 || welcomeOnScreen) return false;
+    return true;
+  }
+  function discordTipsPossible(row = currentBracket()) {
+    return !!discordLinkOf(row);
+  }
+  var DONT2 = "Don't show again";
+  var DISCORD_BAR_TEXT = "Get show reminders and scores in Discord";
+  var DISCORD_TIP = "After you join, open the channel's notification settings and pick All Messages. Discord only buzzes for mentions otherwise.";
+  function barHtml2(url) {
+    return `<div class="installbar discordbar"><span class="ib-text">${DISCORD_BAR_TEXT}</span>
+    <a class="linkbtn ib-join" href="${esc(url)}" target="_blank" rel="noopener noreferrer" onclick="joinDiscord()">Join</a>
+    <button class="linkbtn ib-how" id="discord-how-btn" onclick="toggleDiscordHow()" aria-expanded="false">How?</button>
+    <button class="linkbtn ib-x" onclick="dismissDiscord()" aria-label="${DONT2}" title="${DONT2}">\u2715</button></div>
+    <div class="installhow hidden" id="discord-how"><p class="ih-step">${DISCORD_TIP}</p></div>`;
+  }
+  function installOnScreen() {
+    return !!document.querySelector("#install-bar .installbar") || !!document.getElementById("install-section");
+  }
+  function renderDiscordSlot() {
+    const slot = document.getElementById("discord-bar");
+    if (!slot) return;
+    const row = currentBracket();
+    const applies = discordHintApplies({
+      row,
+      dismissed: discordDismissed(row == null ? void 0 : row.league_id),
+      installOnScreen: installOnScreen(),
+      welcomeOnScreen: !!document.getElementById("welcome-card")
+    });
+    slot.innerHTML = applies ? barHtml2(discordLinkOf(row)) : "";
+    syncSwitch();
+  }
+  function clearSlot() {
+    const slot = document.getElementById("discord-bar");
+    if (slot) slot.innerHTML = "";
+  }
+  function syncSwitch() {
+    var _a;
+    const box = document.getElementById("discord-tips");
+    if (!box) return;
+    if (discordTipsPossible()) box.checked = !discordDismissed(state.currentLeagueId);
+    else (_a = box.closest(".tips-switch")) == null ? void 0 : _a.remove();
+  }
+  function dismissDiscord() {
+    setDismissed2(state.currentLeagueId, true);
+    clearSlot();
+    syncSwitch();
+  }
+  function joinDiscord() {
+    setDismissed2(state.currentLeagueId, true);
+    setTimeout(() => {
+      clearSlot();
+      syncSwitch();
+    }, 0);
+  }
+  function setDiscordTips(on) {
+    setDismissed2(state.currentLeagueId, !on);
+    renderDiscordSlot();
+  }
+  function toggleDiscordHow() {
+    var _a;
+    const el = document.getElementById("discord-how");
+    if (!el) return;
+    const open = !el.classList.toggle("hidden");
+    (_a = document.getElementById("discord-how-btn")) == null ? void 0 : _a.setAttribute("aria-expanded", String(open));
+  }
+  function relativeTime(iso, nowMs = Date.now()) {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return "at an unknown time";
+    const s = Math.max(0, Math.round((nowMs - t) / 1e3));
+    if (s < 60) return "just now";
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m} minute${m === 1 ? "" : "s"} ago`;
+    const h = Math.round(m / 60);
+    if (h < 48) return `${h} hour${h === 1 ? "" : "s"} ago`;
+    const d = Math.round(h / 24);
+    return `${d} day${d === 1 ? "" : "s"} ago`;
+  }
+  function discordStatusLine(row, nowMs = Date.now()) {
+    var _a;
+    if (!(row == null ? void 0 : row.discord_checked_at)) return "Never checked";
+    const when = relativeTime(row.discord_checked_at, nowMs);
+    return row.discord_live === true ? `Posting: OK, checked ${when}` : `Not posting (${(_a = row.discord_status) != null ? _a : "unknown"}), checked ${when}`;
+  }
+
   // src/features/shows.js
   var welcomeKey = () => `ft_welcome_${state.session.id}`;
   var hasSaved = (rows) => (rows || []).some((c) => c.pick_count > 0);
@@ -1228,12 +1338,14 @@ Save anyway?`)) return;
     ${rosterBanner ? `<div class="noticebox">${esc(rosterBanner)}</div>` : ""}
     ${showWelcome ? welcomeHtml(upcoming.find((s) => showState(s) === "open")) : ""}
     <div id="install-bar"></div>
+    <div id="discord-bar"></div>
     ${justPlayed.length ? `<div class="panel"><h2>Just played</h2>${justPlayed.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     ${liveNow.length ? `<div class="panel live-halo"><h2>Live</h2>${liveNow.map((s) => row(s, { gameNumber: labelOf(s.showdate) ? gameNumberOf[s.id] : null })).join("")}</div>` : ""}
     <div class="panel"><h2>Upcoming</h2>${withSeasons(upcoming) || '<p class="muted">No shows synced yet \u2014 admin can sync from The Carton.</p>'}</div>
     <div class="panel"><h2>Recent</h2>${withSeasons([...extraRecent, ...past || []]) || '<p class="muted">Nothing yet.</p>'}</div>
     ${footerHtml()}`;
     renderInstallSlots();
+    renderDiscordSlot();
     state.timers.push(setInterval(() => {
       document.querySelectorAll("[data-cd]").forEach((el) => {
         if (!el.dataset.cd) return;
@@ -1684,11 +1796,17 @@ Save anyway?`)) return;
     return `<label class="tips-switch"><input type="checkbox" id="install-tips" ${installDismissed() ? "" : "checked"}
     onchange="setInstallTips(this.checked)"> Show install tips</label>`;
   }
+  function discordTipsHtml() {
+    if (!discordTipsPossible()) return "";
+    return `<label class="tips-switch"><input type="checkbox" id="discord-tips" ${discordDismissed(state.currentLeagueId) ? "" : "checked"}
+    onchange="setDiscordTips(this.checked)"> Show Discord tips</label>`;
+  }
   function settingsPanelHtml() {
     return `<div class="panel"><h2>Settings</h2>
     <div class="field"><label>Bracket</label><div class="switcher" id="bracketToggle"></div></div>
     <div id="leagueSelect"></div>
     <div id="leagueLinks"></div>
+    ${discordTipsHtml()}
     ${installTipsHtml()}
     <p class="muted" style="margin-top:16px;font-weight:600">Change PIN</p>
     <div class="field"><label>Current PIN</label><input id="pin-current" inputmode="numeric" autocomplete="current-password" type="password" placeholder="\u2022\u2022\u2022\u2022"></div>
@@ -1702,7 +1820,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"9dbc014-9e7ecb1"}</p>
+      <p class="colophon buildid">build ${"14b071b-de691c7"}</p>
     </div>
   </div>`;
   }
@@ -2089,6 +2207,7 @@ Relay this to them now \u2014 it will not be shown again.`);
         <input id="lc-fb" type="url" placeholder="https://\u2026" value="${esc(((_a = currentBracket()) == null ? void 0 : _a.fb_url) || "")}" autocomplete="off"></div>
       <div class="field"><label>Discord invite URL</label>
         <input id="lc-discord" type="url" placeholder="https://\u2026" value="${esc(((_b = currentBracket()) == null ? void 0 : _b.discord_url) || "")}" autocomplete="off"></div>
+      <p class="muted" id="lc-discord-status">${esc(discordStatusLine(currentBracket()))}</p>
       <button class="btn ghost small" onclick="saveLeagueConfig()">Save links</button>
       <div class="err" id="lc-err"></div>
     `)}
@@ -3128,7 +3247,11 @@ Switch anyway?`
     dismissInstall,
     toggleInstallHow,
     setInstallTips,
-    dismissWelcome
+    dismissWelcome,
+    joinDiscord,
+    dismissDiscord,
+    toggleDiscordHow,
+    setDiscordTips
   });
   captureInstallPrompt();
   checkInstalledApp();
