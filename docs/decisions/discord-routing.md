@@ -50,9 +50,9 @@ dev's attestation, not a reading.
 A fresh session builds from this section: **Part 1 first, then Part 2.**
 **Part 1 is BUILT 2026-10-31** ("Part 1 status" below holds the build and
 deploy record) **and D7 is DONE 2026-10-31** (the "D7" record at the end of
-"Part 1 status"); **Part 2 is BUILT 2026-11-01 (`065648e`); Stage Y APPLIED
-2026-11-01; edge DEPLOYED 2026-11-01; client NOT pushed** — the "Part 2 build
-record" and "Part 2 status" below. The survey it rests on was read-only
+"Part 1 status"); **Part 2 is LIVE 2026-11-01** (Stage Y applied, edge deployed 18:26
+UTC, client pushed 18:28 UTC, live build id `14b071b-de691c7`) — the "Part 2
+build record" and "Part 2 status" below. The survey it rests on was read-only
 and is summarised under "Survey basis" below.
 
 ### Decisions
@@ -377,7 +377,7 @@ and is summarised under "Survey basis" below.
   window: the edge deploy by Tue 2026-11-03, or after Sun 2026-11-08 13:00
   UTC** (the two Ardmore shows and their auto-finalize sit between).
 
-### Part 2 status: BUILT 2026-11-01 (`065648e`) · Stage Y APPLIED 2026-11-01 · edge DEPLOYED 2026-11-01 18:26 UTC · first daily check ok ×2 · client NOT pushed
+### Part 2 status: ✅ LIVE 2026-11-01 — Stage Y APPLIED · edge DEPLOYED 18:26 UTC · first daily check ok ×2 · client PUSHED 18:28 UTC (build id `14b071b-de691c7`)
 
 - **Deploy log 2026-11-01, each step recorded the moment it landed (the
   dev's steps 1–4 of the deploy message):**
@@ -411,6 +411,20 @@ and is summarised under "Survey basis" below.
      the body cancelled unread. The daily show sync's own row was untouched
      (its 09:00 ET run stood). Next check: the first tick at or after 09:00
      ET on 2026-11-02; `discord_live` stays true for 2 days from each `ok`.
+  4. ✅ **client PUSHED, Part 2 LIVE 2026-11-01 18:28 UTC.** No rebuild: the
+     committed bundle is the one the suite and the mutations ran against,
+     build id `14b071b-de691c7`. `git push origin main` moved origin from
+     `de691c7` to `e2aeed3` (the build `065648e`, the BUILT record `4f34994`,
+     deploy-log steps 1–3). The live `app.js` served the previous id
+     `9dbc014-9e7ecb1` for three reads and `14b071b-de691c7` from 18:29:32
+     UTC (Invoke-WebRequest with a cache-busting query; PowerShell, no
+     curl). An open PWA keeps the old bundle for up to 10 minutes
+     (`deploy-cache.md`). Read-only at 18:30 UTC, values not printed: BOTH
+     leagues already hold an https `discord_url` in `leagues.config`, so
+     both bars can show — Ambassadors needs no Admin → Community step
+     first (the deploy message assumed it did; the row says otherwise).
+     The Community save patches the client's own league rows, so a new
+     link needs no reload; `discord_live` is read at boot only.
 - **Built as approved, with the seven calls applied.** `sql/stage_y_discord_status.sql`
   (head: the three columns, the check constraint, `my_leagues` dropped and
   recreated with `discord_live`, `discord_status`, `discord_checked_at`, the
@@ -479,17 +493,30 @@ and is summarised under "Survey basis" below.
   harness proves the fake's `discord_live`, STEP 2B proves the live
   expression. Liveness is read at boot (`my_leagues` is not re-run on
   foreground), which a once-a-day check makes acceptable.
-- **NEXT, in order (the dev's steps 1–5 of the Part 2 plan):** STEP 0 →
-  apply → STEP 2A → STEP 2B in the SQL editor; the edge deploy, verified by
-  download and `cmp` and by the cron responses in `net._http_response`;
-  the first daily run reviewed (`select id, discord_status,
-  discord_checked_at, discord_ok_at from leagues order by id` reads `ok`
-  for both; `sync_state` row `daily_discord_check` stamped); then the
-  client push, the live build id confirmed; then the device checks.
-  **Deploy window: the edge deploy by Tue 2026-11-03, or after Sun
-  2026-11-08 13:00 UTC.** Rollback per step: STEP R for the SQL; revert the
-  edge commit and redeploy for the function; revert, rebuild, push for the
-  client.
+- **Steps 1–5 of the Part 2 plan are DONE 2026-11-01 (the deploy log
+  above); the edge deploy landed inside the window (by Tue 2026-11-03).**
+  Rollback per layer if a device check fails: the client — revert
+  `065648e`'s `src/` files, rebuild, push (the function and Stage Y can
+  stay: the old client ignores the new columns); the function — revert its
+  edge files and redeploy; the SQL — STEP R, only with Part 1's function
+  deployed.
+- **NEXT: the dev's device checks, per league.** Close and reopen the PWA
+  (an open tab keeps the old bundle up to 10 minutes); Settings shows build
+  id `14b071b-de691c7`. In each league: (1) Shows with the install bar or
+  the welcome card up shows NO Discord bar, and dismissing those does not
+  summon it until the next render (switch tabs and back); (2) the bar reads
+  "Get show reminders and scores in Discord" with Join · How? · ✕; (3) How?
+  opens the All Messages tip and closes again; (4) Join opens the invite in
+  a new tab, and on return the bar is gone and stays gone through tab
+  switches, a reopen, logout and re-login; (5) Settings → "Show Discord
+  tips" is off after Join or ✕, on brings the bar back, off removes it;
+  (6) the flag is per league (the other league's bar is unaffected) and per
+  device (a second device still shows it); (7) Admin → Community reads
+  "Posting: OK, checked N minutes ago" under the Discord link field. Then
+  one non-admin player per league confirms the bar and that Join opens the
+  invite. The CLAUDE.md Discord stub still reads "NEXT: Discord Part 2
+  (Stage Y)" — left untouched on the dev's standing instruction; a one-line
+  update is the open follow-up.
 
 ### Corrections to Chat (recorded 2026-10-28)
 
