@@ -50,9 +50,9 @@ dev's attestation, not a reading.
 A fresh session builds from this section: **Part 1 first, then Part 2.**
 **Part 1 is BUILT 2026-10-31** ("Part 1 status" below holds the build and
 deploy record) **and D7 is DONE 2026-10-31** (the "D7" record at the end of
-"Part 1 status"); **Part 2 is BUILT 2026-11-01 (`065648e`, local only: NOT
-applied, NOT deployed, NOT pushed)** — the "Part 2 build record" and "Part 2
-status" below. The survey it rests on was read-only
+"Part 1 status"); **Part 2 is BUILT 2026-11-01 (`065648e`); Stage Y APPLIED
+2026-11-01; edge NOT deployed; client NOT pushed** — the "Part 2 build
+record" and "Part 2 status" below. The survey it rests on was read-only
 and is summarised under "Survey basis" below.
 
 ### Decisions
@@ -377,8 +377,17 @@ and is summarised under "Survey basis" below.
   window: the edge deploy by Tue 2026-11-03, or after Sun 2026-11-08 13:00
   UTC** (the two Ardmore shows and their auto-finalize sit between).
 
-### Part 2 status: ✅ BUILT 2026-11-01 (commit `065648e`, LOCAL ONLY — NOT applied, NOT deployed, NOT pushed)
+### Part 2 status: BUILT 2026-11-01 (`065648e`) · Stage Y APPLIED 2026-11-01 · edge NOT deployed · client NOT pushed
 
+- **Deploy log 2026-11-01, each step recorded the moment it landed (the
+  dev's steps 1–4 of the deploy message):**
+  1. ✅ **Stage Y APPLIED 2026-11-01** by the dev in the SQL editor: STEP 0
+     all ok, the apply block succeeded, STEP 2A all ok, STEP 2B
+     `0 of 15 FAILED`. `leagues` now carries `discord_status`,
+     `discord_checked_at`, `discord_ok_at` (all null until the first
+     check), `my_leagues` returns the three new columns, and the gate row
+     `daily_discord_check` sits unstamped (Y2.7). The deployed function
+     is still Part 1's (`bb2dea4`): it ignores the new columns.
 - **Built as approved, with the seven calls applied.** `sql/stage_y_discord_status.sql`
   (head: the three columns, the check constraint, `my_leagues` dropped and
   recreated with `discord_live`, `discord_status`, `discord_checked_at`, the
