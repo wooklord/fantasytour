@@ -1,13 +1,12 @@
 # BUILD PLAN — daily setlist check (decision (2)) — approved 2026-11-01
 
-> **STATUS: BUILD STEPS 1 AND 2 WRITTEN 2026-11-02; STAGE Z NOT APPLIED.** No
-> `index.ts` change, no SQL applied, no deploy. The rest is still plan.
-> Checked locally only, 2026-11-02: the Stage Z file, every footer step and the
-> rehearsal SQL ran clean on throwaway in-memory Postgres (PGlite 0.5.14 with real
-> pgcrypto, PGlite 0.3.14 with stubs for it) against hand-written stub tables, with
-> a real run of the smoke at 0 of 18 failed. That proves the SQL parses and behaves on
-> those stubs. It does not prove the stubs match the live schema, and it is not a
-> Supabase run. STEP 0 is still the first read of the real thing.
+> **STATUS: BUILD STEPS 1 AND 2 WRITTEN 2026-11-02; Stage Z APPLIED 2026-11-02**
+> (results in §8 step 1). No `index.ts` change and no deploy. The rest is still
+> plan. Checked locally before the apply, 2026-11-02: the Stage Z file, every
+> footer step and the rehearsal SQL ran clean on throwaway in-memory Postgres
+> (PGlite 0.5.14 with real pgcrypto, PGlite 0.3.14 with stubs for it) against
+> hand-written stub tables. That says nothing about the rehearsal SQL on the live
+> schema, which has not run there.
 > Approved in Chat 2026-11-01 in two passes (the outline, then the full
 > file with the five changes listed under "Second pass" below). Decision
 > record (binding): `docs/decisions/setlist-check.md` — LOCKED 2026-10-31,
@@ -969,8 +968,16 @@ Cleanup: none; the fixture stays.
   ERROR panel reads `STAGE Z SMOKE: 0 of <n> FAILED`.
 - Confirm nothing persisted: `select count(*) from setlist_flags;` → 0;
   the four columns all null.
+- **Applied 2026-11-02 (Kyle, in the SQL editor).** STEP 0: 4 of 4 `ok`. STEP
+  2A: 11 of 11 `ok`, with live md5s matching the file: helper `9b341334…`,
+  targets `fff84b2a…`, clear `c70ab88a…`, list `bf020545…`. STEP 2B: `STAGE Z
+  SMOKE: 0 of 18 FAILED`, rolled back. `setlist_flags` count 0 afterwards. The
+  four columns were null at STEP 2A (its Z2.11).
 - Rollback: STEP R — only while the deployed function is `b9f3ee6`'s or
-  earlier (see §1).
+  earlier (see §1). **Recorded 2026-11-02: with Stage Z live, STEP R is governed
+  by the deploy-A warning in §1 from now on.** Deploy A writes the four columns
+  in the same update that sets `status = 'final'`, so with the columns gone the
+  show does not go final. After deploy A, roll the function back first (step 3).
 
 **Step 2 — tests and mutations.**
 ```powershell
