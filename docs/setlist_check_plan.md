@@ -561,12 +561,35 @@ select jsonb_agg(to_jsonb(x) order by x.showdate, x.league_id) as result from (
   carry no baseline either.
 - **`autoFinalize`** and **`finalizeShow`**: `const res = await
   scoreShow(…, true).catch(() => null)` and then one update,
-  `{ status: "final", ...(res?.baseline ?? {}) }` — the baseline lands in
-  the same write as the status flip or not at all. Both callers go through
-  this, so the manual button and the 08:00 ET auto pass behave alike.
-- **`reopenShow`** unchanged: the four columns stay until the next
-  finalize overwrites them, and a reopened row is not final so the daily
-  check skips it.
+  `finalUpdatePatch(res)` — the baseline lands in the same write as the
+  status flip. Both callers go through this, so the manual button and the
+  08:00 ET auto pass behave alike.
+- **CORRECTION 2026-11-02, found at the deploy-A review (Kyle's call): a final
+  pass always writes all four columns.** This replaces "the four columns stay
+  until the next finalize overwrites them" and the payload
+  `{ status: "final", ...(res?.baseline ?? {}) }`. `finalUpdatePatch(res)` is
+  `{ status: "final" }` plus the four baseline values when `res.baseline` is
+  present, and the four columns explicitly null otherwise: baseline null, `res`
+  null because `scoreShow` threw, or an early-return result. Reason: as first
+  written, a re-finalize after a reopen that produced no baseline left the old
+  one in place, so the daily check would compare today's Carton against a
+  setlist nobody scored from and flag a show whose scores are current. Writing
+  nulls hands the row to §6's null-hash branch next morning, which re-derives
+  the frozen verdicts first and then either baselines silently or flags with a
+  reason. This is still "baseline written at finalize", since it happens at
+  finalize. Stage Z's column comments still read "Null: never baselined", now
+  narrower than the behaviour; left as applied, since this step runs no SQL.
+- **`reopenShow`** unchanged: a reopen does not touch the four columns, and a
+  reopened row is not final so the daily check skips it. The next final pass
+  replaces them, with values or with nulls.
+- **Also approved at that review, 2026-11-02.** `withFinalBaseline` in
+  `setlistCheck.js` holds the two rules around the hash (not final: the result
+  untouched, so the cron response keeps its shape; not matched: `baseline:
+  null`), so they are tested in plain Node; the `console.warn` stays in
+  `scoreShow`. Both final updates log their `error` with `console.error`, and
+  nothing else about them changes: `autoFinalize` still counts the row and
+  `finalizeShow` still returns `{ ok: true }`. The `decodeEntities` import
+  serves `syncSongs` as well as `syncShows`.
 - Response size: `autoFinalize` discards `scoreShow`'s result and
   `finalizeShow` returns `{ok}`, so the cron response in
   `net._http_response` does not grow.
