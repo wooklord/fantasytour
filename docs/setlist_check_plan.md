@@ -1,6 +1,13 @@
 # BUILD PLAN — daily setlist check (decision (2)) — approved 2026-11-01
 
-> **STATUS: PLAN ONLY. NOT BUILT.** No app code, no SQL applied, no deploy.
+> **STATUS: BUILD STEPS 1 AND 2 WRITTEN 2026-11-02; STAGE Z NOT APPLIED.** No
+> `index.ts` change, no SQL applied, no deploy. The rest is still plan.
+> Checked locally only, 2026-11-02: the Stage Z file, every footer step and the
+> rehearsal SQL ran clean on throwaway in-memory Postgres (PGlite 0.5.14 with real
+> pgcrypto, PGlite 0.3.14 with stubs for it) against hand-written stub tables, with
+> a real run of the smoke at 0 of 18 failed. That proves the SQL parses and behaves on
+> those stubs. It does not prove the stubs match the live schema, and it is not a
+> Supabase run. STEP 0 is still the first read of the real thing.
 > Approved in Chat 2026-11-01 in two passes (the outline, then the full
 > file with the five changes listed under "Second pass" below). Decision
 > record (binding): `docs/decisions/setlist-check.md` — LOCKED 2026-10-31,
@@ -95,8 +102,26 @@ more:**
   new variable on a show night, not two. Steps 1 and 2 can proceed any
   time: the live function reads none of what Stage Z creates.
 
+**Additions 2026-11-02 (approved in Chat the same day; the rehearsal is
+Kyle's call), made when build steps 1 and 2 started:**
+
+- **The Carton row mapping moves into the pure module.** `mapSetlistRows`
+  and `decodeEntities` live in `setlistCheck.js`, not `index.ts`, so the
+  hash, the daily check and the replay script share one mapping. Deploy A
+  imports both (§2, §3). Tests M1–M4.
+- **`tools/replay_setlist_check.mjs`** replays the whole pure path against
+  frozen-verdict exports before any of it is deployed (§2, last part).
+- **Two cross-checks read `setlistCheck.js` until deploy B.**
+  `DAILY_SETLIST_KEY` and `FLAG_DEDUP_KEY` are declared there; deploy B
+  imports them into `index.ts` rather than redeclaring them (§1, §4).
+- **A shadow league rehearsal:** §8 step 0, with rehearsal sub-steps under
+  deploy A, deploy B and the client step. §6's expected counts adjusted.
+  The deploy A timing rule is unchanged. What in the brief did not survive
+  contact with the code is stated in step 0 and in §9.
+
 ## Build order (strict)
 
+0. **Rehearsal fixture** (§8 step 0), any time before step 3.
 1. **Stage Z applied by the dev** (STEP 0 → paste → STEP 2A → STEP 2B).
 2. **Projection, diff, gate and enrichment tests green**, mutation pass
    done, `npm test` wiring in.
@@ -117,14 +142,16 @@ Stage U rule). Each step is verifiable on its own.
 
 - A **pure module** `supabase/functions/carton-sync/setlistCheck.js` — no
   Supabase client, no Deno APIs, the `showSync.js` isolation — holds the
-  projection, hash, diff, gate and verdict re-derivation. It imports
+  Carton row mapping (2026-11-02), the projection, hash, diff, gate and
+  verdict re-derivation. It imports
   `norm`, `deriveSlotFacts` and `scorePicks` from `scoring.js` and
   `dailyGateDue`, `easternDateOf` from `showSync.js`. `index.ts` fetches,
   calls it, and applies the writes it returns. Plain Node tests (Node 24.20
   here; `crypto.subtle` is global in Node ≥ 20 and in Deno).
-- `index.ts` gains: `mapSetlistRows` (extracted from `scoreShow`), a
-  baseline on the final pass, `dailySetlistCheck` / `dailySetlistCheckSafe`
-  / `checkSetlists` (the `dailyShowSync` shape), and the enrichment read.
+- `index.ts` gains a baseline on the final pass, `dailySetlistCheck` /
+  `dailySetlistCheckSafe` / `checkSetlists` (the `dailyShowSync` shape), and
+  the enrichment read. It imports `mapSetlistRows` and `decodeEntities` from
+  the pure module (2026-11-02) in place of its own copies.
 - Stage Z SQL, two RPCs, one service-role helper, one redefinition.
 - Client: `switcher.js`, `admin.js`, `main.js`, `state.js`, `signups.js`.
 
@@ -291,6 +318,12 @@ string `index.ts` passes; STEP R's helper body md5 equals Stage X's; the
 helper's revoke/grant lines present; every `references players(` is a
 column line inside a `create table` block.
 
+**2026-11-02:** until deploy B, `DAILY_SETLIST_KEY` and the unique key's
+column list (`FLAG_DEDUP_KEY`) are declared in `setlistCheck.js`, and these
+two checks read them there. Deploy B imports both into `index.ts` and passes
+`FLAG_DEDUP_KEY` as the `onConflict` string, so there is still one definition
+for the SQL to be checked against.
+
 **Stage X test amendment (finding 1).** `test/stageX.test.mjs` computes its
 "foreign keys to players before/after Stage X" and "uuid columns before
 Stage X" expectations over EVERY file in `sql/`, and its helper-coverage
@@ -316,7 +349,14 @@ later; the projection applies it here for the scoring fields.
 ### Exports
 
 - `PROJECTION_VERSION = "setlist-v1"`, `KINDS = ["scoring", "drift"]`,
-  `ABSENT = "absent"`.
+  `ABSENT = "absent"`, `DAILY_SETLIST_KEY = "daily_setlist_check"`,
+  `FLAG_DEDUP_KEY = "league_id,show_id,kind,carton_hash"`.
+- **`mapSetlistRows(show, rows)` → `{ songs, matched }`** and
+  **`decodeEntities`** (2026-11-02): the mapping `scoreShow` holds as of
+  `efb088b`, moved here so the hash, the daily check and the replay share
+  it; deploy A imports it (§3). `matched` is true when at least one row
+  carried the stored show id. It sorts a copy; `scoreShow`'s version sorts
+  the fetched array in place, and reads nothing from it afterwards.
 - **`projectSetlist(songs)` → `{ scoring, full }`**, two strings. Rows
   copied and sorted by numeric `position`. Each row is an ARRAY in fixed
   order (no object keys, so no key-order question — the lesson of bug
@@ -360,6 +400,16 @@ later; the projection applies it here for the scoring fields.
 
 Top-level `await`; the existing fixtures are already in mapped shape. The
 file passes today (2026-11-01) and is added to `npm test` in this stage.
+
+Mapping (2026-11-02; the mapping cited is `scoreShow`'s as of `efb088b`):
+- M1 the show-id filter keeps only the rows carrying the stored id, and
+  `matched` is true.
+- M2 no row carries the id: the fallback uses every row at the date, and
+  `matched` is false.
+- M3 empty-name rows are dropped.
+- M4 the output field set and order equal what `scoreShow` stores
+  (`show_id, position, setnumber, is_encore, songname, is_cover, footnote,
+  segue`), entities decoded on the way.
 
 Projection and hash:
 - P1 the 16-row fixture: both hashes are 64 lowercase hex, differ from
@@ -425,6 +475,45 @@ prefix → P3 and P8; diff matched by position only (no alignment) → D2
 reports shifted rows as moved; skip the field comparison → D5; gate
 without the show-sync clause → G1.
 
+### `tools/replay_setlist_check.mjs` (2026-11-02)
+
+Tracked, with no player data in it or its output. Reads two exports the dev
+produces into the gitignored `.scratch/`: `verdict_groups.json` (the
+`q_allshows.sql` shape: show, bracket, slot, songname, hit, reason, n) and
+`final_rows.json` (one row per final `league_shows` row: league, show, date,
+format, that league's bracket ids). Neither export selects `player_id`.
+Fetches each distinct date once from The Carton with Node `fetch`, runs
+`mapSetlistRows` → `hashSetlist` → `rederiveVerdicts` per (league, show), and
+prints per row: matched, the four hash and projection lengths, the baseline
+hashes, and the hit and reason flip counts per bracket. It prints counts, not
+slots or songs. It writes nothing and is not imported by the edge function.
+Expected on the 2026-10-31 data: exactly one hit flip, 2026-08-14 bracket 2.
+
+The exports, read-only. Both name leagues 1 and 2, so the shadow league stays out
+whichever order the rehearsal and a replay happen in. Paste one statement at a time
+in the SQL editor. Each returns one cell, which is the whole file.
+
+```sql
+-- Save the one cell this returns as .scratch/verdict_groups.json
+select jsonb_agg(to_jsonb(x)) as result from (
+  select s.show_id as show, s.bracket_id as bracket, e->>'slot' as slot, e->>'songname' as songname,
+         (e->>'hit')::boolean as hit, e->>'reason' as reason, count(*) as n
+  from scores s
+  join brackets b on b.id = s.bracket_id and b.league_id in (1, 2)
+  cross join lateral jsonb_array_elements(s.breakdown) e
+  group by 1, 2, 3, 4, 5, 6
+) x;
+
+-- Save the one cell this returns as .scratch/final_rows.json
+select jsonb_agg(to_jsonb(x) order by x.showdate, x.league_id) as result from (
+  select ls.league_id, ls.show_id, s.showdate, ls.format,
+         (select array_agg(b.id order by b.id) from brackets b where b.league_id = ls.league_id) as bracket_ids
+  from league_shows ls
+  join shows s on s.id = ls.show_id
+  where ls.status = 'final' and ls.league_id in (1, 2)
+) x;
+```
+
 ---
 
 ## 3. Finalize-time baseline
@@ -435,6 +524,12 @@ without the show-sync clause → G1.
   is true when at least one row carried the stored show id (the `mine`
   array as of `b9f3ee6` was non-empty). `scoreShow` calls it; no behaviour
   change on any existing path.
+  - **2026-11-02:** the function and `decodeEntities` live in
+    `setlistCheck.js` (§2), written in steps 1 and 2. Deploy A deletes the
+    inline mapping and the local `decodeEntities` from `index.ts` and imports
+    both; `syncShows` uses the same import. `scoreShow` keeps its two early
+    returns as two: zero fetched rows is "no setlist yet", zero named rows is
+    "empty setlist".
 - **`scoreShow`** when `isFinal`: if `matched`, `await hashSetlist(songs)`
   and return it as `baseline` beside the existing result; if not matched,
   `baseline: null` and a `console.warn` that the final pass hashed nothing
@@ -462,8 +557,9 @@ without the show-sync clause → G1.
 
 ## 4. The daily check
 
-Constants in `index.ts`: `DAILY_SETLIST_KEY = "daily_setlist_check"`,
-`SETLIST_FETCH_BATCH = 5`.
+Constants: `SETLIST_FETCH_BATCH = 5` in `index.ts`. `DAILY_SETLIST_KEY` and
+`FLAG_DEDUP_KEY` are declared in `setlistCheck.js` (2026-11-02) and imported
+at deploy B; step 5's `onConflict` passes `FLAG_DEDUP_KEY`.
 
 - **Placement.** A third entry, `setlist_check: await
   dailySetlistCheckSafe(live)`, after `discord_check` in BOTH return
@@ -667,6 +763,16 @@ to record in the decision record, not to clear on sight. Clearing the
 08-14 flag from the Admin tab is the acknowledgment (design item 12) and
 happens at step 7.
 
+**The shadow league (2026-11-02).** If the rehearsal fixture exists by then
+(§8 step 0), its 2026-10-23 row is one more target, already baselined by its
+manual finalize at deploy A, so the null-hash branch skips it. Targets go up
+by 1. Distinct dates stay the same, because league 2's 10-23 row is already a
+target. `note.baselined` is targets minus every row that already carried a
+baseline: the shadow row, and any show that went final with scores after
+deploy A. The shadow row raises nothing. Every other shadow row on a final
+show has no scores, is not a target, and carries an inert baseline from deploy
+A onward.
+
 ---
 
 ## 7. Client
@@ -742,6 +848,93 @@ Every shell example is PowerShell. SQL runs in the Supabase SQL editor
 (or psql read-only via the connection string kept OUTSIDE the repo,
 `CLAUDE.md` → Backups; never paste it anywhere).
 
+**Step 0 — rehearsal fixture (any time before deploy A, Kyle's call
+2026-11-02).** A real, permanent league that takes the whole path on a row no
+player depends on. One date matters: **without SQL, the league must exist and
+a show sync must run by 2026-11-06** (item 3 below). Every code reference here
+is as of `efb088b`. No player nickname, player id or pick text goes in any
+tracked file; replace `<SHADOW_ID>` in this file with the league id the day
+the league is created, and record that id in the decision record. **Every
+future survey or count excludes this league.**
+
+1. **Create the league** in the Global console, under a name Kyle picks that
+   no one can mistake for play, and that does not derive to an existing
+   secret (`webhookEnvKey`). `global_create_league` **always creates two
+   brackets**, Official and Casual, both on the default config (slots mode:
+   no `mode` key). The brief asked for one bracket. Keep both: removing
+   Official takes SQL and leaves a league the client does not expect (the 2.0
+   model is exactly two, and `officialBracketId()` reads it). Official with no
+   season is inert, because `scoreBracket` returns "no active season — not
+   scored". **The sheet goes in Casual, so `flips` carries one bracket.**
+2. **Appoint Kyle** from the Global console (`global_appoint_league_admin`
+   makes Kyle a member and admin). Fully reload the app so the switcher sees
+   the league (`docs/decisions/multi-league-switcher.md`). No season. No
+   Discord secret.
+3. **The overlay row.** Press "Sync shows", or let the 09:00 ET sync run.
+   `syncShows` creates **one `league_shows` row per show in its 14-day window,
+   and for every later show**, not the single row the brief describes. The
+   2026-10-23 show is inside that window only through 2026-11-06 (UTC). After
+   that date this is the one step that needs SQL, because nothing else creates
+   an overlay row for an old show:
+   ```sql
+   insert into league_shows (league_id, show_id, cutoff_at)
+   select <SHADOW_ID>, s.id, now() - interval '1 hour' from shows s where s.showdate = '2026-10-23'
+     and <SHADOW_ID> not in (1, 2);
+   ```
+4. **The pick sheet, with no SQL.** Move the cutoff to tomorrow, submit the
+   sheet in the app, move the cutoff back. The Admin tab cannot do the cutoff
+   half: `renderAdmin` lists shows from the last 7 days and 10-23 left that
+   list on 2026-10-30. So both moves call `admin_set_cutoff` directly, the
+   same RPC the button calls, and no Discord notice goes out because
+   `cutoff_changed` is the button's own second call. The sheet itself goes
+   through the app: Shows tab, Casual bracket, Recent panel, the 10-23 row.
+   `showState` reads a future cutoff as open and `openShow` opens the sheet.
+   `submit_picks` accepts it, because its "That show already happened" gate
+   sits only in the `voting_override = 'open'` branch, and the default config
+   is `auto`. These PowerShell lines have not been run; the PIN is typed at
+   the prompt and never stored:
+   ```powershell
+   $base = "https://zdfhglvjxquvkjyvophz.supabase.co"
+   $anon = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo"   # public by design: CLAUDE.md, Credentials
+   $h = @{ Authorization = "Bearer $anon"; apikey = $anon; "Content-Type" = "application/json" }
+   $name = Read-Host "name"; $pin = Read-Host "PIN"; $league = <SHADOW_ID>
+   $show = (Invoke-RestMethod "$base/rest/v1/shows?showdate=eq.2026-10-23&select=id" -Headers $h).id   # must print ONE id
+   $show
+   $rows = Invoke-RestMethod -Method Post "$base/rest/v1/rpc/get_league_shows" -Headers $h -Body (@{ p_league_id = $league } | ConvertTo-Json)
+   $orig = ($rows | Where-Object show_id -eq $show).cutoff_at
+   function Set-Cutoff($iso) { Invoke-RestMethod -Method Post "$base/rest/v1/rpc/admin_set_cutoff" -Headers $h -Body (@{ p_name = $name; p_pin = $pin; p_league_id = $league; p_show_id = $show; p_cutoff = $iso } | ConvertTo-Json) }
+   Set-Cutoff (Get-Date).ToUniversalTime().AddDays(1).ToString("o")
+   # submit the sheet in the app, then:
+   Set-Cutoff $orig
+   ```
+5. **The row stays unscored until deploy A.** `eligibleLeagueShows` drops any
+   show older than a day, and `autoFinalize` reads that list, so the cron
+   never touches it.
+
+**What the fixture does on its own, all expected:**
+- **Discord fails closed.** There is no `DISCORD_WEBHOOK_<NAME>` secret, so
+  `resolveHook` returns null and `notifyLeague` records `no_key` and returns.
+  **The function logs show nothing for it:** neither `notifyLeague` nor
+  `checkWebhooks` logs on that path. It shows as `leagues.discord_status =
+  'no_key'` with `discord_live` false (Stage Y's rule), as "Not posting
+  (no_key), checked <when>" on the Admin status line, and as one more `no_key`
+  in the daily check's note: `{"checked":3,"ok":2,"no_key":1,"failed":0}`, in
+  place of today's two-league note. A monitor reading that note must expect
+  it.
+- **Every show from now on has a shadow row.** It goes live, then final at the
+  08:00 ET pass, with no picks and no scores. Reminder, lock and winner stamps
+  advance with nothing posted. A shadow row that is final counts in
+  `syncShows`' "finalized in N league(s)" text. None of these rows is a setlist
+  check target.
+- **Kyle's switcher carries the league** from step 2 onward.
+
+**Where its rows live, for a future one-off deletion.** `delete from leagues
+where id = <SHADOW_ID>` cascades to `brackets`, `league_members`,
+`league_shows`, `setlist_flags`, `banned_names` and `realtime_pings`;
+`brackets` cascades to `seasons`, `picks` and `scores`. Global `shows` and
+`setlist_songs` do not cascade, and `sync_state` notes are not rewritten.
+Cleanup: none; the fixture stays.
+
 **Step 1 — Stage Z.**
 - Before: `node test/stageZ.test.mjs` and `node test/stageX.test.mjs`
   green (the md5s and the amendment); STEP 0 every row `ok`.
@@ -804,6 +997,37 @@ supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz
   null baseline with `status = final` means `scoreShow` hit the `.catch`
   or the fallback: read the function logs before the next step, and
   expect the null-hash branch to handle it after deploy B.
+- **Rehearsal, after this deploy's boot check:** manual finalize on the
+  shadow row. The Admin tab cannot reach it for the same 7-day reason as step
+  0, so it is the `finalize` action the button sends (variables from step 0;
+  `requireLeagueAdmin` checks name and PIN):
+  ```powershell
+  Invoke-RestMethod -Method Post "$base/functions/v1/carton-sync" -Headers $h -Body (@{ action = "finalize"; p_name = $name; p_pin = $pin; league_id = $league; show_id = $show } | ConvertTo-Json)
+  ```
+  ```sql
+  select ls.status, encode(extensions.digest(ls.setlist_projection_scoring, 'sha256'), 'hex') = ls.setlist_hash_scoring as scoring_hash_matches_text,
+         encode(extensions.digest(ls.setlist_projection_full, 'sha256'), 'hex') = ls.setlist_hash_full as full_hash_matches_text,
+         ls.setlist_hash_scoring, ls.setlist_hash_full,
+         (select count(*) from scores sc join brackets b on b.id = sc.bracket_id
+          where b.league_id = ls.league_id and b.kind = 'casual' and sc.show_id = ls.show_id) as casual_scores,
+         (select count(*) from scores sc join brackets b on b.id = sc.bracket_id
+          where b.league_id = ls.league_id and b.kind = 'official' and sc.show_id = ls.show_id) as official_scores
+  from league_shows ls
+  where ls.league_id = <SHADOW_ID> and ls.league_id not in (1, 2)
+    and ls.show_id = (select id from shows where showdate = '2026-10-23');
+  ```
+  **Pass:** `final`; both `*_matches_text` true; both hashes equal what
+  `tools/replay_setlist_check.mjs` printed for 10-23 (any league's row, since
+  the hash does not depend on the league); `casual_scores` 1; `official_scores`
+  0. **Nothing posts:** `announcements` stamps a winner older than 7 days
+  without sending, and skips the lock notice on a show that old. **One side
+  effect is not isolated:** `scoreShow` writes the global `setlist_songs`, so
+  if The Carton edited this show since its last pass, this finalize refreshes
+  that shared table for both real leagues' setlist views. It re-scores nobody
+  else, since `scoreShow` receives only the shadow's row. If The Carton has a
+  new song name on that show, its "new songs" post also goes to the shadow
+  league only, and ends in `no_key`. This does not replace the check on the
+  first real final below it.
 - Rollback: redeploy `b9f3ee6`'s function from a scratch worktree, never
   by `git checkout` in the working tree:
   ```powershell
@@ -816,6 +1040,15 @@ supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz
 **Step 4 — edge deploy B (§4, §5, §6).** Same command, same file and boot
 checks (the download loop above with a new `$wd`). Nothing else is
 observable until the next gate.
+- **Rehearsal, on the next daily run:** the shadow row is a target, its
+  baseline equals today's Carton, and it raises nothing.
+  ```sql
+  select count(*) from setlist_flags where league_id = <SHADOW_ID>;   -- pass: 0
+  select count(*) from _setlist_check_targets() where league_id = <SHADOW_ID>;   -- pass: 1
+  ```
+  A flag here is only a failure if the stored hashes differ with no Carton
+  edit behind them; a real Carton edit to 10-23 would flag this row and show
+  up on the real leagues' rows too.
 
 **Step 5 — first run reviewed** (the morning after deploy B, after the
 09:00 ET gate; the show sync runs first in the same tick):
@@ -830,8 +1063,8 @@ select key, ran_at, attempted_at, note from sync_state order by key;
 select id, league_id, show_id, kind, left(carton_hash, 12) as hash, found_at,
        detail->>'reason' as reason, detail->'flips' as flips, detail->'counts' as counts
 from setlist_flags order by id;
-select count(*) filter (where setlist_hash_scoring is not null) as baselined, count(*) as total
-from league_shows where status = 'final';
+select count(*) filter (where setlist_hash_scoring is not null) as baselined, count(*) as targets
+from _setlist_check_targets();
 ```
 Expect: `daily_setlist_check.ran_at` set with `note` counts matching the
 first query; exactly one flag (league 1, the 2026-08-14 show, kind
@@ -841,6 +1074,10 @@ outcome in the decision record as a dated line. If `ran_at` is unset,
 `attempted_at` and `note` are absent: read `setlist_check.error` in the
 latest cron response and the function logs; the 30-minute retry is
 already scheduled.
+- **Rehearsal (2026-11-02):** the first query counts the shadow row, and
+  `note.baselined` leaves it out (§6). The last query reads the target list
+  rather than every final row, because from deploy A onward a final row with
+  no scores also carries a baseline, the shadow league's included.
 - Rollback: redeploy A's commit from a scratch worktree (the loop
   above). Data written stays and is harmless: deploy A reads none of it.
 
@@ -855,8 +1092,77 @@ The printed id must equal the one the Settings card shows after a fresh
 load (`docs/decisions/deploy-cache.md`, Quick reference; a stale tab
 shows the old id until closed). Device check, both leagues' admin views:
 league 1 shows the pill and the 08-14 flag in the block above the dated
-rows; league 2 shows neither; a non-admin sees no pill.
+rows; league 2 and the shadow league show neither; a non-admin sees no
+pill.
 - Rollback: revert the client commit and push; the RPCs stay, unused.
+- **Rehearsal, after this push.** Drift injected by SQL on the shadow row ONLY.
+  Paste, never type (`CLAUDE.md` → Tooling), and run the first query before
+  each one: its two values are the `carton_hash` values the flags must carry.
+  **The order is full-only first, then scoring: the reverse of the brief,
+  because of the second-pass rule in §4 step 4** (§9, item 1). Each injection
+  is judged on the next daily run.
+  ```sql
+  -- Before each injection: note the row's stored hashes. Before injection 1
+  -- these equal today's Carton hashes.
+  select setlist_hash_scoring, setlist_hash_full from league_shows
+  where league_id = <SHADOW_ID> and league_id not in (1, 2)
+    and show_id = (select id from shows where showdate = '2026-10-23');
+
+  -- Injection 1, kind B: a trailing space on the third row's raw name in the stored full baseline.
+  update league_shows
+  set setlist_projection_full = inj.txt,
+      setlist_hash_full = encode(extensions.digest(inj.txt, 'sha256'), 'hex')
+  from (
+    select 'setlist-v1:' || jsonb_set(j, '{2,6}', to_jsonb((j #>> '{2,6}') || ' '))::text as txt
+    from (select substr(setlist_projection_full, 12)::jsonb as j from league_shows
+          where league_id = <SHADOW_ID> and league_id not in (1, 2)
+            and show_id = (select id from shows where showdate = '2026-10-23')) q
+  ) inj
+  where league_id = <SHADOW_ID> and league_id not in (1, 2)
+    and show_id = (select id from shows where showdate = '2026-10-23');
+
+  -- Injection 2a, kind A: drop the third row from the stored scoring baseline.
+  update league_shows
+  set setlist_projection_scoring = inj.txt,
+      setlist_hash_scoring = encode(extensions.digest(inj.txt, 'sha256'), 'hex')
+  from (
+    select 'setlist-v1:' || (j - 2)::text as txt
+    from (select substr(setlist_projection_scoring, 12)::jsonb as j from league_shows
+          where league_id = <SHADOW_ID> and league_id not in (1, 2)
+            and show_id = (select id from shows where showdate = '2026-10-23')) q
+  ) inj
+  where league_id = <SHADOW_ID> and league_id not in (1, 2)
+    and show_id = (select id from shows where showdate = '2026-10-23');
+
+  -- Injection 2b, optional, SAME DAY as 2a (§9, item 2): make the first frozen
+  -- verdict on the shadow sheet the opposite of what today's Carton says.
+  update scores sc
+  set breakdown = jsonb_set(jsonb_set(sc.breakdown, '{0,hit}', to_jsonb(not (sc.breakdown->0->>'hit')::boolean)),
+                            '{0,reason}', to_jsonb(case when (sc.breakdown->0->>'hit')::boolean then 'not played' else 'played' end))
+  from brackets b
+  where b.id = sc.bracket_id and b.league_id = <SHADOW_ID> and b.league_id not in (1, 2)
+    and b.kind = 'casual' and sc.show_id = (select id from shows where showdate = '2026-10-23');
+  ```
+  The projection text comes back from `jsonb::text` with spaces after commas,
+  so it is no longer byte-canonical. That is harmless: the hash is recomputed
+  from that same text, `parseProjection` is `JSON.parse`, and only a baseline
+  that differs is wanted.
+
+  | | Injection 1 (full-only) | Injection 2a (scoring) |
+  |---|---|---|
+  | **New `setlist_flags` row** | exactly one, kind `drift` | exactly one, kind `scoring` |
+  | **`carton_hash`** | the full hash noted before it | the scoring hash noted before it |
+  | **`detail.diff`** | `changed` is one entry, position 3, `field: "songname"`, `from` with the trailing space, `to` without; the other three lists empty | `added` is one entry, position 3, the norm name; the other three lists empty |
+  | **`detail.full_hash`** | absent | today's Carton full hash: the full hash noted before injection 1 |
+  | **`detail.flips`** | absent | the Casual bracket only: `hit_flips` 0, `reason_flips` 0, `pairs` empty. With 2b: `hit_flips` 1, `reason_flips` 0, one pair, `n` 1 |
+  | **`note`** | `flagged_drift` 1 | `flagged_scoring` 1, `suppressed_drift` 1 (the altered full baseline is still a kind B candidate, and this kind A carries the current full hash) |
+  | **Admin tab, shadow league** | pill 1; one notice in the block above the dated rows, since 10-23 is outside the 7-day list; kind B copy | same, kind A copy, with the flip line if 2b ran |
+  | **Clear** | notice and pill go; `cleared_at` and `cleared_by` set | same |
+  | **The next daily run** | no new row, `deduped` 1 | no new row, `deduped` 1 and `suppressed_drift` 1 |
+
+  Any other result is a failure to record in the decision record. The altered
+  baselines stay, so those last two counts appear in the daily `note` every
+  day until the row is restored (§9, item 3).
 
 **Step 7 — acknowledge.** Clear the 08-14 flag from the Admin tab. Expect
 the notice and the pill to go, and in SQL `cleared_at`/`cleared_by` set
@@ -865,7 +1171,7 @@ live use of `admin_clear_setlist_flag`.
 
 ---
 
-## 9. Open points — none
+## 9. Open points
 
 Everything the outline left open was settled in the 2026-11-01 first
 pass. The draft of this file surfaced three more, listed here as they
@@ -882,13 +1188,37 @@ and their reasons):
 3. **Enrichment on fallback rows** → run it, labelled; flips present on
    every kind A; E7 added (§5, §6 case 3).
 
-Nothing is open from this plan as of its approval.
+Nothing was open from this plan as of its approval.
+
+**Added 2026-11-02 with the rehearsal. These change what the brief asked for
+or leave a choice for the rehearsal day; none blocks a build step:**
+
+1. **Injection order reversed (assumption written in).** The brief ran scoring
+   first, then full-only. Under the second-pass rule the second injection then
+   raises nothing: the kind A row already holds today's full hash in
+   `detail.full_hash`, and that suppresses the kind B candidate whether or not
+   the kind A was cleared. Full-only first raises both, needs no extra SQL and
+   no behaviour change, and also exercises the suppression, since injection
+   2a's run reports `suppressed_drift` 1. To keep the brief's order instead,
+   the kind A row has to be deleted by SQL before the full-only injection.
+2. **Kind A flips need 2b.** The brief expected flips if Kyle's sheet named the
+   dropped song. A baseline edit cannot produce any: enrichment compares the
+   frozen verdicts with today's Carton, and neither changes, so `flips` is
+   present and zero whatever the sheet says. Injection 2b edits one frozen
+   verdict on the shadow sheet to exercise a non-zero flip. It must land the
+   same day as 2a, because a deduped kind A never re-runs enrichment. The
+   table records both results; running 2b is the dev's call on the day.
+3. **Restoring the row afterwards.** The brief says no cleanup, so none is
+   written into the steps, and the daily `note` carries this row's `deduped`
+   and `suppressed_drift` from then on. If that noise matters, restoring the
+   four columns from league 2's 10-23 row removes it, since the hash does not
+   depend on the league.
 
 ## Files
 
 `supabase/functions/carton-sync/setlistCheck.js` (new) ·
-`supabase/functions/carton-sync/index.ts` · `sql/stage_z_setlist_check.sql`
-(new) · `test/stageZ.test.mjs` (new) · `test/stageX.test.mjs` (amended) ·
+`supabase/functions/carton-sync/index.ts` · `tools/replay_setlist_check.mjs`
+(new) · `sql/stage_z_setlist_check.sql` (new) · `test/stageZ.test.mjs` (new) · `test/stageX.test.mjs` (amended) ·
 `test/scoring.test.mjs` (new section; wired into `npm test`) ·
 `test/signups.test.mjs` · `test/harness.mjs` · `test/fixtures.mjs` ·
 `test/scenario.test.mjs` · `package.json` · `src/core/state.js` ·

@@ -6,7 +6,9 @@
 // a new table that references players without the "has history" helper
 // learning about it, would pass every other test, so this recomputes all of
 // it from the files. Plain Node. Record: docs/decisions/onboarding.md,
-// decision 8.
+// decision 8. Amended with Stage Z (docs/setlist_check_plan.md, section 1):
+// what STEP 0 and STEP 2A state is scoped to the files that existed at Stage
+// X, and the has-history coverage check reads the latest stage's helper.
 //
 //   node test/stageX.test.mjs
 
@@ -112,16 +114,29 @@ for (const f of files) {
     }
 }
 const fks = cols.filter(c => c.ref);
+// Stage order: single letters, then two letters (stage_aa follows stage_z). A
+// file that is not a stage (add_seasons.sql and the like) counts as before
+// every stage, as it did before this order existed.
+const stageRank = f => {
+  const s = f.match(/^stage_([a-z]{1,2})(?=[\d_])/)?.[1];
+  if (!s) return -1;
+  return s.length === 1 ? s.charCodeAt(0) - 97 : 26 + (s.charCodeAt(0) - 97) * 26 + (s.charCodeAt(1) - 97);
+};
+const beforeX = f => stageRank(f) < stageRank(X_FILE);
+const atOrBeforeX = f => stageRank(f) <= stageRank(X_FILE);
+check("stage order: a non-stage file, then a, c2a, x, z, aa, ab, ba",
+  ["add_seasons.sql", "stage_a_schema.sql", "stage_c2a_rpcs.sql", "stage_x_any.sql", "stage_z_any.sql", "stage_aa_any.sql", "stage_ab_any.sql", "stage_ba_any.sql"]
+    .map(stageRank).every((r, i, a) => i === 0 || r > a[i - 1]), true);
 const fkString = list => list.map(c => `${c.table}.${c.col}:${c.del}`).sort().join(", ");
 check("every 'references players(' in sql/ is a column line inside a create table block",
   fks.length, refsInFiles);
 check("STEP 0 expects exactly the foreign keys to players that sql/ held before Stage X",
-  step0.match(/fk\.v = '([^']*)'/)?.[1] ?? null, fkString(fks.filter(c => c.file !== X_FILE)));
+  step0.match(/fk\.v = '([^']*)'/)?.[1] ?? null, fkString(fks.filter(c => beforeX(c.file))));
 check("STEP 2A expects those plus Stage X's own",
-  step2a.match(/\(select v from fk\) = '([^']*)'/)?.[1] ?? null, fkString(fks));
+  step2a.match(/\(select v from fk\) = '([^']*)'/)?.[1] ?? null, fkString(fks.filter(c => atOrBeforeX(c.file))));
 check("STEP 0 expects exactly the uuid columns sql/ held before Stage X (players.id aside)",
   step0.match(/uu\.v = '([^']*)'/)?.[1] ?? null,
-  cols.filter(c => c.file !== X_FILE && c.type === "uuid" && !(c.table === "players" && c.col === "id")).map(c => `${c.table}.${c.col}`).sort().join(", "));
+  cols.filter(c => beforeX(c.file) && c.type === "uuid" && !(c.table === "players" && c.col === "id")).map(c => `${c.table}.${c.col}`).sort().join(", "));
 // "Never played" (decision 8, D7) must cover every table that holds a
 // player id, or Remove could delete an account with history: the cascade
 // would take those rows with it. These are exempt, each for a stated reason.
@@ -131,7 +146,15 @@ const EXEMPT = {
   "admin_audit_log.actor_id": "a snapshot with no foreign key, by the dev's requirement: deleting the account leaves it",
   "admin_audit_log.target_id": "the same",
 };
-const helper = definition(head, "_account_has_played")?.body ?? "";
+// The body comes from the LAST stage file that defines the helper, read from
+// that file's head: a footer's STEP R may quote an older body, and definition()
+// only skips -- comments. So Stage Z's extension is what is checked, and a later
+// table holding a player id still fails here until some stage's helper covers it.
+const headOf = src => { const at = src.indexOf("/*"); return at === -1 ? src : src.slice(0, at); };
+const helperFile = files.filter(f => definition(headOf(read(f)), "_account_has_played"))
+  .sort((a, b) => stageRank(a) - stageRank(b)).at(-1);
+const helper = definition(headOf(read(helperFile)), "_account_has_played")?.body ?? "";
+check("the coverage check reads a helper defined at Stage X or later", [helperFile && stageRank(helperFile) >= stageRank(X_FILE), helper.length > 0], [true, true]);
 check("_account_has_played reads every other table with a player id, by that column (a new one fails here until the helper covers it)",
   [...new Set([...fks.map(c => `${c.table}.${c.col}`), ...cols.filter(c => c.type === "uuid" && /player|_by$|_id$/.test(c.col) && c.col !== "id").map(c => `${c.table}.${c.col}`)])]
     .filter(k => !(k in EXEMPT))

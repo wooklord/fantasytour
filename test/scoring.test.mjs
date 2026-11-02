@@ -7,6 +7,10 @@
 //   node test/scoring.test.mjs
 
 import { deriveSlotFacts, resolveConfigSection, scorePicks, scoreRankedPicks } from "../supabase/functions/carton-sync/scoring.js";
+import {
+  decodeEntities, diffProjections, hashSetlist, mapSetlistRows, parseProjection, projectSetlist,
+  rederiveVerdicts, setlistCheckDue,
+} from "../supabase/functions/carton-sync/setlistCheck.js";
 
 const failures = [];
 function check(label, actual, expected) {
@@ -641,12 +645,359 @@ for (const [label, ladder, expected] of [
   check("ranked 7p: scoreRankedPicks callable directly", viaRanked.total, 5);
 }
 
+// ===============================================================
+// The daily setlist check: setlistCheck.js. Plan:
+// docs/setlist_check_plan.md, sections 2 and 5. Every fixture from here on is
+// synthetic except P1, P2 and D8, which reuse the Rocking The Docks setlist
+// above. None holds a real pick.
+// ===============================================================
+const cartonRow = (over) => ({ show_id: 900, position: 1, setnumber: "1", settype: "Set", songname: "Alpha Song", isoriginal: 1, footnote: "", transition: ",", ...over });
+
+// M1: the show-id filter keeps only the rows carrying the stored id.
+{
+  const rows = [
+    cartonRow({ position: 2, songname: "Bravo Song" }),
+    cartonRow({ position: 1, songname: "Alpha Song" }),
+    cartonRow({ show_id: 901, position: 1, songname: "Other Show Song" }),
+  ];
+  const { songs, matched } = mapSetlistRows({ id: 900 }, rows);
+  check("M1 show-id filter: only the matching rows, in position order, matched true",
+    [songs.map((s) => [s.position, s.songname]), matched], [[[1, "Alpha Song"], [2, "Bravo Song"]], true]);
+  check("M1 the show id is compared as a number", mapSetlistRows({ id: "900" }, rows).matched, true);
+  check("M1 the fetched array keeps its own order (the sort is on a copy)", rows.map((r) => r.position), [2, 1, 1]);
+}
+
+// M2: the fallback uses every row at the date and reports matched: false.
+{
+  const rows = [cartonRow({ show_id: 901, position: 1 }), cartonRow({ show_id: 902, position: 2, songname: "Bravo Song" })];
+  const { songs, matched } = mapSetlistRows({ id: 999 }, rows);
+  check("M2 fallback: every row at the date, matched false, mapped onto the stored show id",
+    [songs.map((s) => [s.show_id, s.position]), matched], [[[999, 1], [999, 2]], false]);
+  check("M2 zero rows: no songs, matched false", mapSetlistRows({ id: 999 }, []), { songs: [], matched: false });
+}
+
+// M3: empty-name rows are dropped; `song` stands in for a missing songname.
+{
+  const rows = [
+    cartonRow({ position: 1, songname: "" }),
+    cartonRow({ position: 2, songname: null, song: "Named By Song Field" }),
+    cartonRow({ position: 3, songname: null }),
+    cartonRow({ position: 4, songname: "Delta Song" }),
+  ];
+  check("M3 empty-name rows dropped", mapSetlistRows({ id: 900 }, rows).songs.map((s) => s.songname), ["Named By Song Field", "Delta Song"]);
+}
+
+// M4: the output field set and order equal what scoreShow stores in
+// setlist_songs (the mapping in index.ts as of efb088b).
+{
+  const rows = [
+    cartonRow({ position: "7", setnumber: "e", songname: "Rock &amp; Roll &#039;Tune&#39;", isoriginal: 0,
+      footnote: "Tom &amp; Jerry cover", footnotes: ["with &quot;tease&quot;"], transition: " > " }),
+    cartonRow({ position: 8, setnumber: 3, settype: "Encore", songname: "Plain Song", isoriginal: null, footnote: null, transition: "" }),
+  ];
+  const { songs } = mapSetlistRows({ id: 900 }, rows);
+  check("M4 field set and order", Object.keys(songs[0]), ["show_id", "position", "setnumber", "is_encore", "songname", "is_cover", "footnote", "segue"]);
+  check("M4 values, entities decoded", songs[0], {
+    show_id: 900, position: 7, setnumber: "e", is_encore: true, songname: "Rock & Roll 'Tune'", is_cover: true,
+    footnote: 'Tom & Jerry cover; with "tease"', segue: true,
+  });
+  check("M4 encore from settype, setnumber as a string, null isoriginal and no footnote stay null, no arrow is no segue", songs[1], {
+    show_id: 900, position: 8, setnumber: "3", is_encore: true, songname: "Plain Song", is_cover: null, footnote: null, segue: false,
+  });
+  check("M4 &amp; decodes last: no double decode", decodeEntities("&amp;lt;"), "&lt;");
+  check("M4 a null passes through decodeEntities", decodeEntities(null), null);
+}
+
+// ---------- projection and hash ----------
+const setRow = (position, songname, over = {}) => ({ show_id: 1, position, setnumber: "1", is_encore: false, songname, is_cover: false, footnote: null, segue: false, ...over });
+const five = [
+  setRow(1, "Alpha Song"), setRow(2, "Bravo Song"), setRow(3, "Charlie Song"),
+  setRow(4, "Delta Song", { setnumber: "2" }), setRow(5, "Echo Song", { setnumber: "e", is_encore: true }),
+];
+const edit = (rows, position, over) => rows.map((r) => (r.position === position ? { ...r, ...over } : r));
+const insertAt = (rows, position, row) => [
+  ...rows.filter((r) => r.position < position), { ...row, position },
+  ...rows.filter((r) => r.position >= position).map((r) => ({ ...r, position: r.position + 1 })),
+];
+const removeAt = (rows, position) => rows.filter((r) => r.position !== position)
+  .map((r) => (r.position > position ? { ...r, position: r.position - 1 } : r));
+const H5 = await hashSetlist(five);
+
+// P1
+{
+  const a = await hashSetlist(rockingDocks);
+  const b = await hashSetlist(rockingDocks);
+  const hex = /^[0-9a-f]{64}$/;
+  check("P1 both hashes are 64 lowercase hex, differ from each other, and repeat on a second call",
+    [hex.test(a.setlist_hash_scoring), hex.test(a.setlist_hash_full), a.setlist_hash_scoring !== a.setlist_hash_full,
+     a.setlist_hash_scoring === b.setlist_hash_scoring, a.setlist_hash_full === b.setlist_hash_full],
+    [true, true, true, true, true]);
+}
+
+// P2
+{
+  const a = await hashSetlist(rockingDocks);
+  const b = await hashSetlist([...rockingDocks].reverse());
+  check("P2 rows in another input order give identical strings and hashes", b, a);
+}
+
+// P3: the field order is a tested contract.
+const twoRows = [
+  setRow(1, "Alpha Song", { segue: true }),
+  setRow(2, "Béta's Tune", { setnumber: "e", is_encore: true, is_cover: true, footnote: "First-time cover, debut" }),
+];
+const P3_SCORING = 'setlist-v1:[[1,"1",false,"alpha song",false,false],[2,"e",true,"beta s tune",true,true]]';
+const P3_FULL = 'setlist-v1:[[1,"1",false,"alpha song",false,false,"Alpha Song",true,null],[2,"e",true,"beta s tune",true,true,"Béta\'s Tune",false,"First-time cover, debut"]]';
+check("P3 the exact canonical strings, prefix included", projectSetlist(twoRows), { scoring: P3_SCORING, full: P3_FULL });
+check("P3 hashSetlist stores those same two strings",
+  await hashSetlist(twoRows).then((h) => [h.setlist_projection_scoring, h.setlist_projection_full]), [P3_SCORING, P3_FULL]);
+check("P3 hashSetlist returns exactly the four column names",
+  Object.keys(await hashSetlist(twoRows)), ["setlist_hash_scoring", "setlist_hash_full", "setlist_projection_scoring", "setlist_projection_full"]);
+
+// P4: each scoring field moves the scoring hash, and with it the full hash.
+{
+  const variants = {
+    setnumber: edit(five, 3, { setnumber: "2" }),
+    is_encore: edit(five, 3, { is_encore: true }),
+    is_cover: edit(five, 3, { is_cover: true }),
+    "footnote gaining Debut": edit(five, 3, { footnote: "Debut" }),
+    "a different songname": edit(five, 3, { songname: "Zulu Song" }),
+    "a row inserted at 3, later rows shifted": insertAt(five, 3, setRow(0, "New Song")),
+  };
+  const unmoved = [];
+  for (const [name, rows] of Object.entries(variants)) {
+    const h = await hashSetlist(rows);
+    if (h.setlist_hash_scoring === H5.setlist_hash_scoring) unmoved.push(`${name}: scoring`);
+    if (h.setlist_hash_full === H5.setlist_hash_full) unmoved.push(`${name}: full`);
+  }
+  check("P4 every scoring field moves both hashes (the ones that did not)", unmoved, []);
+}
+
+// P5, P6, P7: display facts move the full hash only.
+{
+  const fullOnly = {
+    "P5 a trailing space on a songname": edit(five, 3, { songname: "Charlie Song " }),
+    "P6 a segue flip": edit(five, 3, { segue: true }),
+    "P7 a footnote change without the word debut": edit(five, 3, { footnote: "with Bravo Song tease" }),
+    "P7 a case change": edit(five, 3, { songname: "CHARLIE song" }),
+    "P7 a diacritic": edit(five, 3, { songname: "Chárlie Song" }),
+    'P7 "FTP" in a footnote does not set has_debut': edit(five, 3, { footnote: "FTP" }),
+  };
+  for (const [name, rows] of Object.entries(fullOnly)) {
+    const h = await hashSetlist(rows);
+    check(`${name}: scoring hash unchanged, full hash changed`,
+      [h.setlist_hash_scoring === H5.setlist_hash_scoring, h.setlist_hash_full === H5.setlist_hash_full], [true, false]);
+  }
+}
+
+// P8: the empty setlist. The constant was computed independently of the code
+// under test, over the UTF-8 bytes of the empty projection, in PowerShell:
+//   ([System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes('setlist-v1:[]'))) -replace '-','').ToLower()
+const EMPTY_SETLIST_SHA256 = "cbb50793a89bdda2c5264ae31fc7e560d5047d45fe0b363a5d76b29b370b5214";
+{
+  const h = await hashSetlist([]);
+  check("P8 both empty strings", [h.setlist_projection_scoring, h.setlist_projection_full], ["setlist-v1:[]", "setlist-v1:[]"]);
+  check("P8 both empty hashes equal the pinned constant", [h.setlist_hash_scoring, h.setlist_hash_full], [EMPTY_SETLIST_SHA256, EMPTY_SETLIST_SHA256]);
+  const one = await hashSetlist([setRow(1, "Alpha Song")]);
+  check("P8 a one-row list differs from the empty one",
+    [one.setlist_hash_scoring !== EMPTY_SETLIST_SHA256, one.setlist_hash_full !== EMPTY_SETLIST_SHA256], [true, true]);
+}
+
+// P9
+{
+  const row = { position: 1, setnumber: "1", is_encore: false, songname: "Alpha Song", is_cover: null, footnote: null };
+  check("P9 null is_cover and null footnote stay null, an undefined segue becomes false", projectSetlist([row]), {
+    scoring: 'setlist-v1:[[1,"1",false,"alpha song",null,false]]',
+    full: 'setlist-v1:[[1,"1",false,"alpha song",null,false,"Alpha Song",false,null]]',
+  });
+}
+
+// P10
+check("P10 parseProjection round-trips P3's strings",
+  [parseProjection(P3_SCORING), parseProjection(P3_FULL)],
+  [JSON.parse(P3_SCORING.slice("setlist-v1:".length)), JSON.parse(P3_FULL.slice("setlist-v1:".length))]);
+check("P10 another prefix, an unparsable body, a non-array body and a non-string all give null",
+  [parseProjection("setlist-v2:[]"), parseProjection("setlist-v1:[["), parseProjection('setlist-v1:{"a":1}'), parseProjection(null)],
+  [null, null, null, null]);
+
+// ---------- diff ----------
+const NO_DIFF = { added: [], removed: [], moved: [], changed: [] };
+const P5 = projectSetlist(five);
+const diffBoth = (rows) => {
+  const p = projectSetlist(rows);
+  return { scoring: diffProjections(P5.scoring, p.scoring), full: diffProjections(P5.full, p.full) };
+};
+
+check("D1 identical: all four lists empty, on both projections",
+  [diffProjections(P5.scoring, P5.scoring), diffProjections(P5.full, P5.full)], [NO_DIFF, NO_DIFF]);
+
+{
+  const d = diffBoth(insertAt(five, 3, setRow(0, "New Song")));
+  check("D2 a row inserted at 3: that one row is added, the shifted rows are not moves",
+    d.scoring, { ...NO_DIFF, added: [{ position: 3, song: "new song" }] });
+  check("D2 on the full projection the song is the raw name", d.full, { ...NO_DIFF, added: [{ position: 3, song: "New Song" }] });
+}
+
+check("D3 one row removed: removed has it, the rest empty",
+  diffBoth(removeAt(five, 3)).scoring, { ...NO_DIFF, removed: [{ position: 3, song: "charlie song" }] });
+
+{
+  const swapped = five.map((r) => (r.position === 2 ? { ...r, position: 3 } : r.position === 3 ? { ...r, position: 2 } : r));
+  const d = diffBoth(swapped).scoring;
+  check("D4 two adjacent rows swapped: moved non-empty, added, removed and changed empty",
+    [d?.moved.length > 0, d?.added, d?.removed, d?.changed], [true, [], [], []]);
+  check("D4 moved says from and to", d?.moved, [{ song: "bravo song", from: 2, to: 3 }]);
+}
+
+check("D5 one row's is_cover flipped: changed is exactly that",
+  diffBoth(edit(five, 3, { is_cover: true })).scoring,
+  { ...NO_DIFF, changed: [{ position: 3, song: "charlie song", field: "is_cover", from: false, to: true }] });
+
+{
+  const d = diffBoth(edit(five, 3, { footnote: "Debut" }));
+  check("D6 a footnote gaining Debut: has_debut only on the scoring projection",
+    d.scoring?.changed.map((c) => [c.position, c.field]), [[3, "has_debut"]]);
+  check("D6 has_debut and footnote for the same row on the full projection",
+    d.full?.changed.map((c) => [c.position, c.field]), [[3, "has_debut"], [3, "footnote"]]);
+}
+
+{
+  const d = diffBoth(edit(five, 3, { songname: "Charlie Song " }));
+  check("D7 a trailing space: songname only on the full projection",
+    d.full, { ...NO_DIFF, changed: [{ position: 3, song: "Charlie Song ", field: "songname", from: "Charlie Song", to: "Charlie Song " }] });
+  check("D7 a trailing space: nothing on the scoring projection", d.scoring, NO_DIFF);
+}
+
+{
+  const baseline = projectSetlist(rockingDocks).scoring;
+  // The Rocking The Docks sandwich: Reflections at 6 and at 8.
+  const secondGone = diffProjections(baseline, projectSetlist(removeAt(rockingDocks, 8)).scoring);
+  check("D8 the sandwich without its second occurrence: exactly that one removed, the other matched",
+    secondGone, { ...NO_DIFF, removed: [{ position: 8, song: "reflections" }] });
+  const firstGone = diffProjections(baseline, projectSetlist(removeAt(rockingDocks, 6)).scoring);
+  check("D8 the sandwich without its first occurrence: exactly one removed, nothing moved",
+    [firstGone?.removed.length, firstGone?.removed[0]?.song, firstGone?.moved, firstGone?.added, firstGone?.changed],
+    [1, "reflections", [], [], []]);
+}
+
+{
+  const p = projectSetlist(twoRows);
+  check("D9 an empty baseline: everything added",
+    diffProjections("setlist-v1:[]", p.scoring),
+    { ...NO_DIFF, added: [{ position: 1, song: "alpha song" }, { position: 2, song: "beta s tune" }] });
+  check("D9 an unparsable side, either way: null",
+    [diffProjections("setlist-v2:[]", p.scoring), diffProjections(p.scoring, "not a projection"), diffProjections(null, p.scoring)],
+    [null, null, null]);
+}
+
+// ---------- gate ----------
+// 2026-11-02 is Eastern Standard Time: 14:00Z is 09:00 ET.
+const G_NOW = new Date("2026-11-02T15:00:00Z");
+const G_SYNC_TODAY = "2026-11-02T14:00:30Z";
+const minutesBefore = (now, m) => new Date(now.getTime() - m * 60_000).toISOString();
+check("G1 own gate due, the show sync has not run today: false",
+  setlistCheckDue({ ranAt: null, attemptedAt: null, showSyncRanAt: null, now: G_NOW }), false);
+check("G2 the show sync ran today, own row never run: true",
+  setlistCheckDue({ ranAt: null, attemptedAt: null, showSyncRanAt: G_SYNC_TODAY, now: G_NOW }), true);
+check("G3 own row ran today: false",
+  setlistCheckDue({ ranAt: "2026-11-02T14:01:00Z", attemptedAt: "2026-11-02T14:00:40Z", showSyncRanAt: G_SYNC_TODAY, now: G_NOW }), false);
+check("G4 own attempt 10 minutes ago: false; 31 minutes ago: true",
+  [setlistCheckDue({ ranAt: null, attemptedAt: minutesBefore(G_NOW, 10), showSyncRanAt: G_SYNC_TODAY, now: G_NOW }),
+   setlistCheckDue({ ranAt: null, attemptedAt: minutesBefore(G_NOW, 31), showSyncRanAt: G_SYNC_TODAY, now: G_NOW })],
+  [false, true]);
+// 22:30 ET on 11-01 and 09:00 ET on 11-02 share the UTC date 11-02, so a UTC
+// comparison would wrongly call the show sync today's.
+check("G5 the show sync ran at 22:30 ET yesterday, now 09:00 ET today: false (Eastern date on both sides)",
+  setlistCheckDue({ ranAt: null, attemptedAt: null, showSyncRanAt: "2026-11-02T03:30:00Z", now: new Date("2026-11-02T14:00:00Z") }), false);
+
+// ---------- verdict re-derivation ----------
+const eSongs = [
+  setRow(1, "Alpha Song"), setRow(2, "Bravo Song"), setRow(3, "Charlie Song"),
+  setRow(4, "Cover Tune", { is_cover: true, footnote: "Some Artist cover" }),
+  setRow(5, "Debut Tune", { footnote: "Debut" }),
+  setRow(6, "Echo Song", { setnumber: "e", is_encore: true }),
+];
+const NO_FLIP = (total_rows) => ({ hit_flips: 0, reason_flips: 0, pairs: [], total_rows });
+
+check("E1 a frozen 'not played' on a flat slot whose song is now at position 3: one hit flip, n carried, bonus rows skipped",
+  rederiveVerdicts({
+    rows: [
+      { bracket_id: 2, slot: "flat2", songname: "Charlie Song", hit: false, reason: "not played", n: 2 },
+      { bracket_id: 2, slot: "bonus", songname: "Perfect", hit: true, reason: "every pick hit", n: 1 },
+    ],
+    songs: eSongs, format: "standard",
+  }),
+  { 2: { hit_flips: 1, reason_flips: 0,
+    pairs: [{ slot: "flat2", song: "Charlie Song", from: { hit: false, reason: "not played" }, to: { hit: true, reason: "played" }, n: 2 }],
+    total_rows: 2 } });
+
+check("E2 cover1 against a cover: unchanged",
+  rederiveVerdicts({ rows: [{ bracket_id: 1, slot: "cover1", songname: "Cover Tune", hit: true, reason: "cover played", n: 1 }], songs: eSongs, format: "standard" }),
+  { 1: NO_FLIP(1) });
+
+check("E3 rank rows use ranked mode: hit from the played set, no slot reasoning",
+  rederiveVerdicts({
+    rows: [
+      { bracket_id: 2, slot: "rank3", songname: "Bravo Song", hit: true, reason: "played", n: 1 },
+      { bracket_id: 2, slot: "rank4", songname: "Not In This Show", hit: false, reason: "not played", n: 3 },
+    ],
+    songs: eSongs, format: "standard",
+  }),
+  { 2: NO_FLIP(4) });
+
+check("E4 a suffix only: +debut, +cover and no partial credit are stripped, and the rows they split merge",
+  rederiveVerdicts({
+    rows: [
+      { bracket_id: 1, slot: "flat1", songname: "Debut Tune", hit: true, reason: "played +debut", n: 1 },
+      { bracket_id: 1, slot: "flat1", songname: "Debut Tune", hit: true, reason: "played", n: 2 },
+      { bracket_id: 1, slot: "flat3", songname: "Cover Tune", hit: true, reason: "played +cover +debut", n: 1 },
+      { bracket_id: 1, slot: "opener", songname: "Bravo Song", hit: true, reason: "played, wrong slot (no partial credit)", n: 1 },
+    ],
+    songs: eSongs, format: "standard",
+  }),
+  { 1: NO_FLIP(5) });
+
+{
+  const shared = { slot: "flat1", songname: "Charlie Song", n: 1 };
+  const out = rederiveVerdicts({
+    rows: [{ ...shared, bracket_id: 1, hit: true, reason: "played" }, { ...shared, bracket_id: 2, hit: false, reason: "not played" }],
+    songs: eSongs, format: "standard",
+  });
+  check("E5 two brackets' rows are kept apart", [out[1].hit_flips, out[2].hit_flips, Object.keys(out)], [0, 1, ["1", "2"]]);
+}
+
+{
+  const out = rederiveVerdicts({
+    rows: [{ bracket_id: 1, slot: "flat1", songname: "Charlie Song", hit: false, reason: "not played", n: 1,
+      player_id: "00000000-0000-0000-0000-000000000000", player_name: "someone" }],
+    songs: eSongs, format: "standard",
+  });
+  const text = JSON.stringify(out);
+  check("E6 an extra player field on a row is not echoed", [/player/i.test(text), text.includes("00000000"), text.includes("someone"), out[1].hit_flips], [false, false, false, 1]);
+}
+
+{
+  // The frozen verdicts of a real pass against eSongs, in two brackets.
+  const frozen = [
+    { bracket_id: 1, slot: "opener", songname: "Alpha Song", hit: true, reason: "opener — exact", n: 1 },
+    { bracket_id: 1, slot: "flat1", songname: "Charlie Song", hit: true, reason: "played", n: 2 },
+    { bracket_id: 2, slot: "rank1", songname: "Bravo Song", hit: true, reason: "played", n: 2 },
+  ];
+  const sameShow = eSongs.map((s) => ({ ...s, show_id: 777 }));
+  const sameOut = rederiveVerdicts({ rows: frozen, songs: sameShow, format: "standard" });
+  check("E7 fallback rows that are the same show under a new id: zero flips in every bracket",
+    [sameOut[1].hit_flips + sameOut[1].reason_flips, sameOut[2].hit_flips + sameOut[2].reason_flips], [0, 0]);
+  const otherShow = [setRow(1, "Zulu Song"), setRow(2, "Yankee Song")];
+  const otherOut = rederiveVerdicts({ rows: frozen, songs: otherShow, format: "standard" });
+  check("E7 another show's setlist on the stored date: flips in every bracket", [otherOut[1].hit_flips > 0, otherOut[2].hit_flips > 0], [true, true]);
+}
+
 // ---------------------------------------------------------------
 if (failures.length) {
   console.log(`FAIL — ${failures.length} check(s):`);
   for (const f of failures) console.log("  " + f.replace(/\n/g, "\n  "));
   process.exit(1);
 } else {
-  console.log("PASS — all scoring.js fixture checks passed.");
+  console.log("PASS — all scoring.js and setlistCheck.js checks passed.");
   process.exit(0);
 }
