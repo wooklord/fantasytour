@@ -1,6 +1,6 @@
 # Daily setlist check — guard against late Carton edits after final
 
-Decision (2) from the open items found 2026-10-30 (`docs/decisions/scoring-rules.md`). Design locked in Chat 2026-10-31 on a read-only survey of the repo (`docs/history/2026-10-31-setlist-guard-survey.md`). Status: locked, not built. Plan file: to follow.
+Decision (2) from the open items found 2026-10-30 (`docs/decisions/scoring-rules.md`). Design locked in Chat 2026-10-31 on a read-only survey of the repo (`docs/history/2026-10-31-setlist-guard-survey.md`). Status: locked, not built. Plan file: `docs/setlist_check_plan.md`.
 
 ## Problem
 Once a show is final in a league, nothing reads it again. The Carton edits after final (three known cases; one scoring-relevant). Reopen + finalize re-scores every bracket of that league under today's config and can change old points, so it is not a correction tool.
@@ -19,12 +19,22 @@ Starting idea was a daily re-derivation of frozen verdicts comparing hit/reason.
 8. Policy (resolves half of the 2026-10-18 open question): finalized scores do not change when the Carton corrects data unless a player raises it; then the fix is targeted and logged, never reopen/finalize. Precedent: the 2026-08-14 case. "Does FTP count as a debut" stays open.
 9. Schema, Stage Z: league_shows.setlist_hash_scoring and setlist_hash_full (text, nullable); setlist_flags(id, league_id, show_id, kind, carton_hash, detail jsonb, found_at, cleared_at, cleared_by, note), RLS on, no policies; sync_state row daily_setlist_check; RPCs admin_list_setlist_flags(p_name, p_pin, p_league_id) and admin_clear_setlist_flag(p_name, p_pin, p_flag_id); test/stageZ.test.mjs.
 10. Naming after Z: two-letter stages (stage_aa, stage_ab …), tests stageAA.test.mjs. Y stays reserved for Discord Part 2.
+    - Stage Y applied 2026-11-01 (Discord Part 2), so Z follows it directly.
 11. Scheduling and cost: one tick per day, after the daily show sync has run for the day so stored dates are current; 5-wide fetch batches; skipped on live-burst ticks; the show sync's 30-minute retry gate. About 17 date GETs of ~13 KB today, +1 per show. Free-plan edge limits (150 s wall clock per worker, 2 s CPU per request) are not close. Bulk year endpoint rejected for v1: unused by the app, unmeasured, a second mapping path.
 12. First run: full verdict re-derivation over every final show (the 2026-10-31 pass as a job), hashes baselined from that day's Carton, flags reviewed once. The 2026-08-14 show is expected to flag; clearing it is the acknowledgment.
 
 ## Edge cases
 - Date moved after final: show sync flags it and leaves the date; the check fetches by stored date, finds no row with the show's Carton id, raises kind A "show not found at stored date" rather than a hash mismatch.
 - Two Carton shows on one date (2026-09-18): the show_id filter handles it.
+
+## Refinements 2026-11-01 (from the plan)
+Additions made when `docs/setlist_check_plan.md` was approved (two passes, same day); items 5, 9 and 11 above stand as written.
+- **(a) Baseline and dedup.** The baseline is written at finalize and never rewritten; Clear stamps the flag row only. Detection is per hash, independently: scoring hash vs baseline → kind A, deduped on the scoring hash; full hash vs baseline → kind B, deduped on the full hash. `carton_hash` on a flag row is therefore the scoring hash for kind A and the full hash for kind B. Reason: a baseline that moved on Clear would turn an acknowledgment into a silent re-baseline, and a kind B gated on "scoring unchanged" would mask a later display-only edit on a show that already carries a kind A.
+  - **Day-after refinement (second pass):** kind A rows carry the full hash at raise time in `detail.full_hash`, and a kind B candidate is suppressed whenever ANY kind A row for the same (league, show) carries the current full hash, not only when this run raised one. Reason: Chat's literal rule ("suppressed only in a run that raises a kind A") produced one redundant kind B per kind A on the day after — the deduped A raised nothing, so the B went through; found while writing the plan.
+- **(b) Projection text stored beside each hash.** `league_shows` gets two more nullable text columns, `setlist_projection_scoring` and `setlist_projection_full`, written wherever the hashes are; a flag's `detail` carries a field-level diff (added / removed / moved rows, per-field changes keyed by position and `norm(songname)`) from a pure `diffProjections(baseline, current)` in `setlistCheck.js`, never a diff against `setlist_songs`. Reason: a hash alone says that a setlist changed, not what changed, and `setlist_songs` is stale by design (bug (i) in `scoring-rules.md`) and shared across leagues.
+- **Fallback guard, one rule everywhere.** No baseline is ever written from fallback rows (the rows at the stored date when none carries the show's Carton id), in the final pass or in the daily job's null-hash branch. Consequence: such a show stays null, gets one flag per state, and is watched by daily enrichment rather than by hash until the id or the date is fixed.
+- **Enrichment runs on fallback rows, labelled.** That flag carries `detail.reason` naming the fallback and the row count, and its verdict flips. Reason: zero flips reads as "re-created on The Carton, same show", flips in every bracket as "a different show on the stored date"; the reason string alone cannot tell them apart.
+- **Deploy A timing.** The finalize-baseline deploy goes out only after the 2026-11-06 show is final in both leagues (the 08:00 ET auto pass on 2026-11-07, or earlier by hand); Stage Z and the tests may go any time, since the live function reads none of what Stage Z creates. Reason: that deploy changes `scoreShow`, which runs live that night, and 11-06 is also the first real Discord post through the Stage Y path — one new variable on a show night, not two.
 
 ## Rejected 2026-10-31
 Window scope · log-only for kind B · a second header pill · building the adjustment RPC in v1 · correct-on-sight policy · Discord surfacing · reusing shows.sync_flag · date-prefixed migration names · bulk year endpoint for v1.
