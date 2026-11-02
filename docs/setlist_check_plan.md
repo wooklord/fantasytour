@@ -1,7 +1,8 @@
 # BUILD PLAN — daily setlist check (decision (2)) — approved 2026-11-01
 
-> **STATUS: BUILD STEPS 1 AND 2 WRITTEN 2026-11-02; Stage Z APPLIED 2026-11-02**
-> (results in §8 step 1). No `index.ts` change and no deploy. The rest is still
+> **STATUS: BUILD STEPS 1, 2 AND 3 WRITTEN 2026-11-02; Stage Z APPLIED 2026-11-02**
+> (results in §8 step 1). Step 3 is the deploy-A code: committed, NOT deployed,
+> held until 2026-11-06 is final in both leagues (§8 step 3). The rest is still
 > plan. The replay passed 2026-11-02 (§2). Checked locally before the apply,
 > 2026-11-02: the Stage Z file, every
 > footer step and the rehearsal SQL ran clean on throwaway in-memory Postgres
@@ -593,6 +594,14 @@ select jsonb_agg(to_jsonb(x) order by x.showdate, x.league_id) as result from (
 - Response size: `autoFinalize` discards `scoreShow`'s result and
   `finalizeShow` returns `{ok}`, so the cron response in
   `net._http_response` does not grow.
+- **Deploy-A code written 2026-11-02, NOT deployed.** Checked before the commit:
+  the module mapping deep-equal to the inline code as of `3d5c3a7` on all 28 stored
+  shows, the second 2026-09-18 show and 28 forced fallbacks (766 songs, 0
+  mismatches), plus 8 synthetic cases; 24 of 24 mutations caught; `deno check` 0
+  errors; Deno and Node hashes byte-identical on all 28, with 2026-10-23 equal to
+  the values in §2; `index.ts` loads under Deno with dummy env and `Deno.serve`
+  stubbed, no request sent. Not exercised: the final update against the real
+  columns. The first run of that is the rehearsal's manual finalize (§8 step 3).
 
 ---
 

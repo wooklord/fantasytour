@@ -6,10 +6,11 @@
 //
 //   node test/scoring.test.mjs
 
+import { readFileSync } from "node:fs";
 import { deriveSlotFacts, resolveConfigSection, scorePicks, scoreRankedPicks } from "../supabase/functions/carton-sync/scoring.js";
 import {
-  decodeEntities, diffProjections, hashSetlist, mapSetlistRows, parseProjection, projectSetlist,
-  rederiveVerdicts, setlistCheckDue,
+  decodeEntities, diffProjections, finalUpdatePatch, hashSetlist, mapSetlistRows, parseProjection, projectSetlist,
+  rederiveVerdicts, setlistCheckDue, withFinalBaseline,
 } from "../supabase/functions/carton-sync/setlistCheck.js";
 
 const failures = [];
@@ -990,6 +991,75 @@ check("E4 a suffix only: +debut, +cover and no partial credit are stripped, and 
   const otherShow = [setRow(1, "Zulu Song"), setRow(2, "Yankee Song")];
   const otherOut = rederiveVerdicts({ rows: frozen, songs: otherShow, format: "standard" });
   check("E7 another show's setlist on the stored date: flips in every bracket", [otherOut[1].hit_flips > 0, otherOut[2].hit_flips > 0], [true, true]);
+}
+
+// ---------------------------------------------------------------
+// Deploy A, the final pass (docs/setlist_check_plan.md section 3). F is the one
+// update a final pass makes, B is what scoreShow returns, W is the wiring. The
+// helpers prove nothing unless index.ts calls them, and index.ts cannot run here,
+// so W reads its text; deno check and the rehearsal cover what text cannot.
+{
+  const FOUR = ["setlist_hash_scoring", "setlist_hash_full", "setlist_projection_scoring", "setlist_projection_full"];
+  const finalSongs = [
+    { position: 1, setnumber: "1", is_encore: false, songname: "Alpha Song", is_cover: false, footnote: null, segue: false },
+    { position: 2, setnumber: "1", is_encore: false, songname: "Bravo Song", is_cover: null, footnote: null, segue: true },
+  ];
+  const hashed = await hashSetlist(finalSongs);
+
+  // Explicit nulls, not absent keys: an absent key is what leaves an old baseline
+  // in the row, so each key has to exist and hold null.
+  const nullShape = (patch) => [
+    patch.status,
+    FOUR.map((k) => Object.hasOwn(patch, k)),
+    FOUR.map((k) => patch[k]),
+    Object.keys(patch).length,
+  ];
+  const NULLS = ["final", [true, true, true, true], [null, null, null, null], 5];
+
+  check("F1 baseline present: status plus the four values", finalUpdatePatch({ show: 1, baseline: hashed }), { status: "final", ...hashed });
+  check("F1 the four values are text, not nulls", FOUR.map((k) => typeof finalUpdatePatch({ baseline: hashed })[k]), ["string", "string", "string", "string"]);
+  check("F2 baseline null, the fallback: four explicit nulls", nullShape(finalUpdatePatch({ show: 1, songs: 2, baseline: null })), NULLS);
+  check("F3 res null, scoreShow threw: four explicit nulls", nullShape(finalUpdatePatch(null)), NULLS);
+  check("F4 early return, no setlist yet: four explicit nulls", nullShape(finalUpdatePatch({ show: 1, note: "no setlist yet" })), NULLS);
+  check("F4 early return, empty setlist: four explicit nulls", nullShape(finalUpdatePatch({ show: 1, note: "empty setlist" })), NULLS);
+  check("F5 both branches name the columns hashSetlist fills", [Object.keys(finalUpdatePatch(null)), Object.keys(finalUpdatePatch({ baseline: hashed }))],
+    [["status", ...Object.keys(hashed)], ["status", ...Object.keys(hashed)]]);
+
+  // settle turns a rejection into a value, so a mutation fails a named check here
+  // and does not crash the file.
+  const settle = (p) => p.then((v) => v, () => "rejected");
+  const result = { show: 1, songs: 2, new: 0, brackets: [] };
+  for (const matched of [true, false]) {
+    const out = await settle(withFinalBaseline(result, { isFinal: false, matched, songs: finalSongs }));
+    check(`B1 not final, matched ${matched}: the same result, no baseline key`, [out === result, Object.hasOwn(out, "baseline")], [true, false]);
+    // songs: null throws if anything hashes it, so a cron tick is proven not to hash.
+    const noHash = await settle(withFinalBaseline(result, { isFinal: false, matched, songs: null }));
+    check(`B1 not final, matched ${matched}: nothing is hashed`, noHash === result, true);
+  }
+  const good = await settle(withFinalBaseline(result, { isFinal: true, matched: true, songs: finalSongs }));
+  check("B2 final and matched: the result plus the four values", good, { ...result, baseline: hashed });
+  const fallback = await settle(withFinalBaseline(result, { isFinal: true, matched: false, songs: finalSongs }));
+  check("B3 final, not matched: the result plus baseline null, key present", [Object.hasOwn(fallback, "baseline"), fallback.baseline, fallback.show], [true, null, 1]);
+  const fallbackNoHash = await settle(withFinalBaseline(result, { isFinal: true, matched: false, songs: null }));
+  check("B3 final, not matched: nothing is hashed", fallbackNoHash === "rejected", false);
+  check("B4 a hash failure rejects, for the caller's catch", await settle(withFinalBaseline(result, { isFinal: true, matched: true, songs: null })), "rejected");
+  check("B5 matched, through to the update: the four values", finalUpdatePatch(good), { status: "final", ...hashed });
+  check("B5 fallback, through to the update: four nulls", nullShape(finalUpdatePatch(fallback)), NULLS);
+  const caught = await withFinalBaseline(result, { isFinal: true, matched: true, songs: null }).catch(() => null);
+  check("B5 hash failure, through the catch to the update: four nulls", nullShape(finalUpdatePatch(caught)), NULLS);
+
+  const ix = readFileSync(new URL("../supabase/functions/carton-sync/index.ts", import.meta.url), "utf8");
+  const occurs = (needle) => ix.split(needle).length - 1;
+  check("W1 no status literal bypasses the patch", occurs('status: "final"'), 0);
+  check("W1 both final updates go through the patch", occurs(".update(finalUpdatePatch(res))"), 2);
+  check("W2 both final passes catch to null", [occurs(", true).catch(() => null)"), occurs(", true).catch(() => {})")], [2, 0]);
+  check("W3 scoreShow returns through the helper", [occurs("return withFinalBaseline("), occurs("{ isFinal, matched, songs }"), occurs("return { show: show.id, songs: songs.length")], [1, 1, 0]);
+  check("W4 the cron path passes no final flag", occurs("scoreShow(showRows[0].show, showRows)"), 1);
+  check("W5 scoreShow has its definition and exactly three callers", occurs("scoreShow("), 4);
+  check("W6 one definition of the mapping and of decodeEntities", [occurs("mapSetlistRows(show, rows)"), occurs("function decodeEntities"), occurs("const mine ="), occurs(".filter((s: any) => s.songname)")], [1, 0, 0, 0]);
+  check("W7 the import names all four", occurs('import { decodeEntities, mapSetlistRows, finalUpdatePatch, withFinalBaseline } from "./setlistCheck.js";'), 1);
+  check("W8 the fallback warning fires on a final pass only", occurs("if (isFinal && !matched) console.warn("), 1);
+  check("W9 both final updates log their error", occurs("if (error) console.error(`final update failed:"), 2);
 }
 
 // ---------------------------------------------------------------

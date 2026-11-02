@@ -29,8 +29,14 @@ export const FLAG_DEDUP_KEY = "league_id,show_id,kind,carton_hash";
 
 // ---------- The Carton row mapping ----------
 
-// Carton fields arrive HTML-entity-encoded; decoded at the point of mapping,
-// and &amp; last so "&amp;lt;" does not double-decode.
+// Carton's text fields (venue/city/song names/footnotes) arrive with HTML
+// entities already baked in (e.g. "Blues &amp; Brews Festival") — decoding
+// here keeps the DB holding real characters, since the frontend's esc() is
+// the only place display text should ever be HTML-encoded. Left undecoded,
+// esc() re-encodes the leading & of "&amp;" into "&amp;amp;", which the
+// browser then renders as the literal text "&amp;" instead of an ampersand.
+// &amp; is decoded last so it can't cascade into re-triggering the other
+// patterns (none of which decode back into "&", so this order is safe).
 export function decodeEntities(s) {
   if (s == null) return s;
   return s
@@ -61,10 +67,49 @@ export function mapSetlistRows(show, rows) {
       is_cover: r.isoriginal != null ? !Number(r.isoriginal) : null,
       footnote: decodeEntities([r.footnote, Array.isArray(r.footnotes) ? r.footnotes.join("; ") : null]
         .filter(Boolean).join("; ") || null),
+      // Carton's own `transition` text is the connector it would print after
+      // this song ("," no segue, " > " segue, "->" direct segue, or blank at
+      // a set/show break). Keyed on the arrow character itself, not
+      // `transition_id` — that numeric id isn't a stable cross-show enum (the
+      // same "no continuation" case showed up as three different ids across
+      // one real 2-set show, one per set boundary), so it's not safe to
+      // hardcode against. Display-only: doesn't feed slot determination (see
+      // deriveSlotFacts) — set/show boundaries are already known unambiguously
+      // from position/setnumber, and a blank transition can't distinguish
+      // "set's over" from "not transcribed yet".
       segue: />/.test(String(r.transition ?? "")),
     }))
     .filter((s) => s.songname);
   return { songs, matched: mine.length > 0 };
+}
+
+// ---------- The final pass ----------
+
+// What a final pass that produced no baseline writes. All four are named, so a
+// re-finalize after a reopen cannot leave an old baseline behind for the daily
+// check to compare against: the row goes to the null-hash branch instead, which
+// re-derives the frozen verdicts first. Plan section 3, the 2026-11-02 correction.
+const NO_BASELINE = Object.freeze({
+  setlist_hash_scoring: null,
+  setlist_hash_full: null,
+  setlist_projection_scoring: null,
+  setlist_projection_full: null,
+});
+
+// The one update a final pass makes, given what scoreShow returned, or null if
+// it threw. The baseline lands in the same write as the status flip.
+export function finalUpdatePatch(res) {
+  return { status: "final", ...(res?.baseline ?? NO_BASELINE) };
+}
+
+// What scoreShow returns. A cron tick is not final and gets the result untouched,
+// so the cron response keeps its shape and hashes nothing. A final pass adds
+// `baseline`: the four column values when the rows carried the stored id, null
+// when they were the fallback, because no baseline is ever written from fallback
+// rows. A hash failure rejects, which the callers catch to null.
+export async function withFinalBaseline(result, { isFinal, matched, songs }) {
+  if (!isFinal) return result;
+  return { ...result, baseline: matched ? await hashSetlist(songs) : null };
 }
 
 // ---------- Projection and hash ----------

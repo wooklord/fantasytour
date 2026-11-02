@@ -64,12 +64,18 @@
 //     reads only the HTTP status. my_leagues derives discord_live from those
 //     columns; the client's Discord hint and the admin status line read it.
 //     No URL is stored or logged, and no response body is ever read.
+// v11 (setlist check, deploy A): a final pass writes the setlist baseline in
+//     the same update that flips the status, with four explicit nulls when
+//     it has none (finalUpdatePatch, withFinalBaseline). The row mapping and
+//     decodeEntities now live in setlistCheck.js, one definition of each. No
+//     daily job yet; that is deploy B. Plan: docs/setlist_check_plan.md section 3.
 // ============================================================
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { norm, deriveSlotFacts, scorePicks } from "./scoring.js";
 import { dailyGateDue, diffShows, cutoffPlan, appendFlag } from "./showSync.js";
 import { resolveHook, discordBody, postOutcome, statusPatch, NO_KEY } from "./discord.js";
+import { decodeEntities, mapSetlistRows, finalUpdatePatch, withFinalBaseline } from "./setlistCheck.js";
 
 // Instance constant: setlist data source.
 const CARTON = "https://thecarton.net/api/v2";
@@ -95,25 +101,6 @@ async function carton(path: string) {
   catch { throw new Error(`Carton ${path} returned non-JSON: ${text.slice(0, 120)}`); }
   if (body.error) throw new Error(`Carton ${path}: ${body.error_message}`);
   return body.data ?? [];
-}
-
-// Carton's text fields (venue/city/song names/footnotes) arrive with HTML
-// entities already baked in (e.g. "Blues &amp; Brews Festival") — decoding
-// here keeps the DB holding real characters, since the frontend's esc() is
-// the only place display text should ever be HTML-encoded. Left undecoded,
-// esc() re-encodes the leading & of "&amp;" into "&amp;amp;", which the
-// browser then renders as the literal text "&amp;" instead of an ampersand.
-// &amp; is decoded last so it can't cascade into re-triggering the other
-// patterns (none of which decode back into "&", so this order is safe).
-function decodeEntities<T extends string | null | undefined>(s: T): T {
-  if (s == null) return s;
-  return (s as string)
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&") as T;
 }
 
 // Discord is broadcast per league, never personal/DMed. Routing is the
@@ -664,9 +651,10 @@ async function autoFinalize() {
   let n = 0;
   for (const r of rows) {
     if (r.show.showdate >= cut) continue; // not old enough to auto-close yet
-    await scoreShow(r.show, [r], true).catch(() => {}); // one last score against the final setlist
-    await supa.from("league_shows").update({ status: "final" })
+    const res = await scoreShow(r.show, [r], true).catch(() => null); // one last score against the final setlist
+    const { error } = await supa.from("league_shows").update(finalUpdatePatch(res))
       .eq("league_id", r.league_id).eq("show_id", r.show_id);
+    if (error) console.error(`final update failed: league ${r.league_id}, show ${r.show_id}: ${error.message}`);
     n++;
   }
   return n;
@@ -834,32 +822,8 @@ async function scoreShows() {
 // Set 1/Set 2 Closer on the rare show that never gives an earlier signal).
 async function scoreShow(show: any, leagueShowRows: any[], isFinal = false) {
   const rows = await carton(`/setlists/showdate/${show.showdate}.json`);
-  const mine = rows.filter((r: any) => Number(r.show_id) === Number(show.id));
-  const use = mine.length ? mine : rows;
-  if (!use.length) return { show: show.id, note: "no setlist yet" };
-
-  use.sort((a: any, b: any) => Number(a.position) - Number(b.position));
-  const songs = use.map((r: any) => ({
-    show_id: show.id,
-    position: Number(r.position),
-    setnumber: String(r.setnumber ?? ""),
-    is_encore: /e/i.test(String(r.setnumber ?? "")) || /encore/i.test(String(r.settype ?? "")),
-    songname: decodeEntities(r.songname ?? r.song ?? ""),
-    is_cover: r.isoriginal != null ? !Number(r.isoriginal) : null,
-    footnote: decodeEntities([r.footnote, Array.isArray(r.footnotes) ? r.footnotes.join("; ") : null]
-      .filter(Boolean).join("; ") || null),
-    // Carton's own `transition` text is the connector it would print after
-    // this song ("," no segue, " > " segue, "->" direct segue, or blank at
-    // a set/show break). Keyed on the arrow character itself, not
-    // `transition_id` — that numeric id isn't a stable cross-show enum (the
-    // same "no continuation" case showed up as three different ids across
-    // one real 2-set show, one per set boundary), so it's not safe to
-    // hardcode against. Display-only: doesn't feed slot determination (see
-    // deriveSlotFacts) — set/show boundaries are already known unambiguously
-    // from position/setnumber, and a blank transition can't distinguish
-    // "set's over" from "not transcribed yet".
-    segue: />/.test(String(r.transition ?? "")),
-  })).filter((s: any) => s.songname);
+  if (!rows.length) return { show: show.id, note: "no setlist yet" };
+  const { songs, matched } = mapSetlistRows(show, rows);
   if (!songs.length) return { show: show.id, note: "empty setlist" };
 
   // ---- diff against what's stored; write ONLY changes (toast-storm fix) ----
@@ -943,7 +907,11 @@ async function scoreShow(show: any, leagueShowRows: any[], isFinal = false) {
     if (changed) await pingRealtime(lsRow.league_id, lsRow.show_id);
   }
 
-  return { show: show.id, songs: songs.length, new: newSongs.length, brackets: perBracket };
+  if (isFinal && !matched) console.warn(`final pass hashed nothing for show ${show.id} (${show.showdate}): the stored id was not among the rows at that date`);
+  return withFinalBaseline(
+    { show: show.id, songs: songs.length, new: newSongs.length, brackets: perBracket },
+    { isFinal, matched, songs },
+  );
 }
 
 async function scoreBracket(ctx: { show: any; lsRow: any; bracket: any; songs: any[]; slotFacts: any }) {
@@ -1059,9 +1027,10 @@ async function finalizeShow(name: string, pin: string, leagueId: number, showId:
   if (!lsRow) return { ok: false, error: "show not found for this league" };
   const { data: show } = await supa.from("shows").select("*").eq("id", showId).single();
   if (!show) return { ok: false, error: "show not found" };
-  await scoreShow(show, [lsRow], true).catch(() => {}); // best effort — a missing/stale setlist shouldn't block finalizing
-  await supa.from("league_shows").update({ status: "final" })
+  const res = await scoreShow(show, [lsRow], true).catch(() => null); // best effort — a missing/stale setlist shouldn't block finalizing
+  const { error } = await supa.from("league_shows").update(finalUpdatePatch(res))
     .eq("league_id", leagueId).eq("show_id", showId);
+  if (error) console.error(`final update failed: league ${leagueId}, show ${showId}: ${error.message}`);
   await announcements();
   return { ok: true, league_id: leagueId, show_id: showId };
 }
