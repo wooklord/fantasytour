@@ -12,7 +12,8 @@
 // The SQL for both exports selects no player_id, and this script aborts on any
 // export field that names a player. Its output carries counts, dates and ids
 // only: no slot, no song, no player. Plan: docs/setlist_check_plan.md, section
-// 2. Expected on the 2026-10-31 data: exactly one hit flip, 2026-08-14 bracket 2.
+// 2. Expected on the 2026-10-31 data: exactly one hit flip, zero reason flips.
+// The hit flip is 2026-08-14, bracket 2.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

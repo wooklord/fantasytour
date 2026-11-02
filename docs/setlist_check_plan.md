@@ -2,7 +2,8 @@
 
 > **STATUS: BUILD STEPS 1 AND 2 WRITTEN 2026-11-02; Stage Z APPLIED 2026-11-02**
 > (results in §8 step 1). No `index.ts` change and no deploy. The rest is still
-> plan. Checked locally before the apply, 2026-11-02: the Stage Z file, every
+> plan. The replay passed 2026-11-02 (§2). Checked locally before the apply,
+> 2026-11-02: the Stage Z file, every
 > footer step and the rehearsal SQL ran clean on throwaway in-memory Postgres
 > (PGlite 0.5.14 with real pgcrypto, PGlite 0.3.14 with stubs for it) against
 > hand-written stub tables. That says nothing about the rehearsal SQL on the live
@@ -490,6 +491,21 @@ slots or songs. It writes nothing and is not imported by the edge function.
 one hit flip (2026-08-14, bracket 2) and ZERO reason flips.** The prototype's 22
 reason differences were artifacts of today's config. The module infers mode
 from the slot key, so any reason flip is a finding.
+
+**Result, run 2026-11-02 18:55 UTC on the exports Kyle saved that day: PASS.**
+Exports: 1,280 verdict groups summing to 1,657 rows (bracket 1: 428, bracket 2:
+204, bracket 3: 947, bracket 4: 78), no bonus rows; 35 final rows (league 1: 28,
+league 2: 7) on 28 dates. All 35 matched, with no fallback, no date without rows
+and no fetch errors. 19 rows on 17 dates hold frozen verdicts (league 1: 12,
+league 2: 7), which is the first run's expected target count before the shadow
+row. Hit flips 1 (2026-08-14, bracket 2). Reason flips 0, on all six scored
+`one_set` rows too. 2026-09-18 returned 14 rows and 5 matched: the other 9 are the
+second Carton show on that date, which the survey recorded.
+
+**The 2026-10-23 values the rehearsal compares against, from this run:** scoring
+hash `aa933c6afa4a30648ceacea97921a6f34e3431fc788424a4ecf63d7b1c8d66f4`, full hash
+`7afb063eddd92e8fd510703dad2891160d1fd1d87ce1aab54e58596f9efb9b32`, projection
+lengths 266 and 496. A Carton edit to that show after this run moves them.
 
 The exports, read-only. Both name leagues 1 and 2, so the shadow league stays out
 whichever order the rehearsal and a replay happen in. Paste one statement at a time
@@ -1066,7 +1082,8 @@ supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz
   ```
   **Pass:** `final`; both `*_matches_text` true; both hashes equal what
   `tools/replay_setlist_check.mjs` printed for 10-23 (any league's row, since
-  the hash does not depend on the league); `casual_scores` 1; `official_scores`
+  the hash does not depend on the league; the 2026-11-02 values are in §2);
+  `casual_scores` 1; `official_scores`
   0. **Nothing posts:** `announcements` stamps a winner older than 7 days
   without sending, and skips the lock notice on a show that old. **One side
   effect is not isolated:** `scoreShow` writes the global `setlist_songs`, so

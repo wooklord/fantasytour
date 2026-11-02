@@ -532,6 +532,7 @@ and is summarised under "Survey basis" below.
   `notifyLeague: Discord post failed` line in the function log; `http_404`
   or `http_401` also drops `discord_live`, which hides that league's bar on
   the next boot. The 09:00 ET daily check keeps running meanwhile.
+  - **Recorded 2026-11-02:** once the shadow rehearsal league exists (`docs/setlist_check_plan.md` §8 step 0), a third `league_shows` row with `remind_sent` stamped and a third `leagues` row at `discord_status = no_key` are expected, with no failed-post log line. This watch item reads leagues 1 and 2.
 
 ### Corrections to Chat (recorded 2026-10-28)
 
