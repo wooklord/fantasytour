@@ -487,7 +487,10 @@ Fetches each distinct date once from The Carton with Node `fetch`, runs
 prints per row: matched, the four hash and projection lengths, the baseline
 hashes, and the hit and reason flip counts per bracket. It prints counts, not
 slots or songs. It writes nothing and is not imported by the edge function.
-Expected on the 2026-10-31 data: exactly one hit flip, 2026-08-14 bracket 2.
+**Pass/fail on the 2026-10-31 data, sharpened by Kyle's call 2026-11-02: exactly
+one hit flip (2026-08-14, bracket 2) and ZERO reason flips.** The prototype's 22
+reason differences were artifacts of today's config. The module infers mode
+from the slot key, so any reason flip is a finding.
 
 The exports, read-only. Both name leagues 1 and 2, so the shadow league stays out
 whichever order the rehearsal and a replay happen in. Paste one statement at a time
@@ -754,7 +757,7 @@ step 5): targets = league 2's 7 final rows plus league 1's final rows that
 have scores rows — between 12 and 17, the union of bracket 1's 9 and
 bracket 2's 12 shows with scores; 17 distinct dates; exactly ONE flag,
 kind A on league 1's 2026-08-14 row with `flips` showing one hit flip in
-bracket 2 and nothing in bracket 1; zero kind B (no baseline, so no B is
+bracket 2, zero reason flips, and nothing in bracket 1; zero kind B (no baseline, so no B is
 possible on this run); every other target baselined silently; the 08-14
 row baselined after its flag. League 1's 2026-10-23 row (final with no
 picks) has no scores rows and is not a target. The 2026-10-15 footnote
@@ -848,10 +851,12 @@ Every shell example is PowerShell. SQL runs in the Supabase SQL editor
 (or psql read-only via the connection string kept OUTSIDE the repo,
 `CLAUDE.md` → Backups; never paste it anywhere).
 
-**Step 0 — rehearsal fixture (any time before deploy A, Kyle's call
-2026-11-02).** A real, permanent league that takes the whole path on a row no
-player depends on. One date matters: **without SQL, the league must exist and
-a show sync must run by 2026-11-06** (item 3 below). Every code reference here
+**Step 0 — rehearsal fixture (Kyle's call 2026-11-02; created by 2026-11-05).**
+A real, permanent league that takes the whole path on a row no player depends
+on. **Timing, Kyle's call 2026-11-02: the league is created by 2026-11-05, so
+setup stays SQL-free.** The 09:00 ET show sync on 2026-11-06 then creates its
+rows while the 2026-10-23 show is still in the window. The insert in item 3 is
+the fallback if creation slips past 2026-11-06. Every code reference here
 is as of `efb088b`. No player nickname, player id or pick text goes in any
 tracked file; replace `<SHADOW_ID>` in this file with the league id the day
 the league is created, and record that id in the decision record. **Every
@@ -873,9 +878,9 @@ future survey or count excludes this league.**
 3. **The overlay row.** Press "Sync shows", or let the 09:00 ET sync run.
    `syncShows` creates **one `league_shows` row per show in its 14-day window,
    and for every later show**, not the single row the brief describes. The
-   2026-10-23 show is inside that window only through 2026-11-06 (UTC). After
-   that date this is the one step that needs SQL, because nothing else creates
-   an overlay row for an old show:
+   2026-10-23 show is inside that window only through 2026-11-06 (UTC). If
+   creation slips past that date, this is the one step that needs SQL, because
+   nothing else creates an overlay row for an old show:
    ```sql
    insert into league_shows (league_id, show_id, cutoff_at)
    select <SHADOW_ID>, s.id, now() - interval '1 hour' from shows s where s.showdate = '2026-10-23'
@@ -891,21 +896,34 @@ future survey or count excludes this league.**
    `showState` reads a future cutoff as open and `openShow` opens the sheet.
    `submit_picks` accepts it, because its "That show already happened" gate
    sits only in the `voting_override = 'open'` branch, and the default config
-   is `auto`. These PowerShell lines have not been run; the PIN is typed at
-   the prompt and never stored:
+   is `auto`. **The sheet must name at least one song 10-23 actually played,
+   because injection 2b needs one.** These PowerShell lines have not been run.
+   **Credentials, Kyle's call 2026-11-02:** every step that calls
+   `admin_set_cutoff` or the `finalize` action reads the name and PIN at run
+   time with `Read-Host`, with no literal in this file. Run it in `pwsh` 7.1 or
+   later, since Windows PowerShell 5.1 has no `-MaskInput`. Paste the first line
+   alone and answer its two prompts. A multi-line paste can feed the next line
+   to a prompt, which would leave the PIN to be typed at the normal prompt,
+   where PSReadLine keeps it.
+   ```powershell
+   $name = Read-Host "name"; $pin = Read-Host "PIN" -MaskInput
+   ```
    ```powershell
    $base = "https://zdfhglvjxquvkjyvophz.supabase.co"
    $anon = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo"   # public by design: CLAUDE.md, Credentials
    $h = @{ Authorization = "Bearer $anon"; apikey = $anon; "Content-Type" = "application/json" }
-   $name = Read-Host "name"; $pin = Read-Host "PIN"; $league = <SHADOW_ID>
+   $league = <SHADOW_ID>
    $show = (Invoke-RestMethod "$base/rest/v1/shows?showdate=eq.2026-10-23&select=id" -Headers $h).id   # must print ONE id
    $show
    $rows = Invoke-RestMethod -Method Post "$base/rest/v1/rpc/get_league_shows" -Headers $h -Body (@{ p_league_id = $league } | ConvertTo-Json)
    $orig = ($rows | Where-Object show_id -eq $show).cutoff_at
    function Set-Cutoff($iso) { Invoke-RestMethod -Method Post "$base/rest/v1/rpc/admin_set_cutoff" -Headers $h -Body (@{ p_name = $name; p_pin = $pin; p_league_id = $league; p_show_id = $show; p_cutoff = $iso } | ConvertTo-Json) }
    Set-Cutoff (Get-Date).ToUniversalTime().AddDays(1).ToString("o")
-   # submit the sheet in the app, then:
+   ```
+   Submit the sheet in the app, then:
+   ```powershell
    Set-Cutoff $orig
+   Remove-Variable name, pin
    ```
 5. **The row stays unscored until deploy A.** `eligibleLeagueShows` drops any
    show older than a day, and `autoFinalize` reads that list, so the cron
@@ -921,6 +939,15 @@ future survey or count excludes this league.**
   in the daily check's note: `{"checked":3,"ok":2,"no_key":1,"failed":0}`, in
   place of today's two-league note. A monitor reading that note must expect
   it.
+- **The 2026-11-06 reminder (recorded 2026-11-02).** Created by 11-05, this
+  league exists for that show's 22:00 UTC reminder, the Stage Y watch item. Its
+  row for show 1786388218 stamps `remind_sent` with nothing posted, and its
+  `leagues` row reads `no_key`. That is expected and is not the watch item
+  failing: the watch item reads leagues 1 and 2. **No failed post appears in the
+  logs for it.** Kyle's answer said the logs would show failed posts, but
+  `notifyLeague` returns right after recording `no_key`, before its `Discord
+  post failed` line, so the log is silent. That line naming this league would
+  be a finding: it means a secret exists under the league's derived name.
 - **Every show from now on has a shadow row.** It goes live, then final at the
   08:00 ET pass, with no picks and no scores. Reminder, lock and winner stamps
   advance with nothing posted. A shadow row that is final counts in
@@ -957,7 +984,9 @@ note.
 **Step 3 — edge deploy A (§3 only).** **Not before the 2026-11-06 show
 (id 1786388218) is final in BOTH leagues** — the 08:00 ET auto pass on
 2026-11-07, or earlier by hand; confirm with `select league_id, status
-from league_shows where show_id = 1786388218;` (two rows, both `final`).
+from league_shows where show_id = 1786388218 and league_id in (1, 2);` (two
+rows, both `final`; the filter is there because the shadow league has its own
+row for this show by then).
 Reason (second-pass decision): deploy A changes `scoreShow`, which runs
 live that night, and 11-06 is also the first real Discord post through
 the Stage Y path (`docs/decisions/discord-routing.md`) — one new variable
@@ -999,10 +1028,22 @@ supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz
   expect the null-hash branch to handle it after deploy B.
 - **Rehearsal, after this deploy's boot check:** manual finalize on the
   shadow row. The Admin tab cannot reach it for the same 7-day reason as step
-  0, so it is the `finalize` action the button sends (variables from step 0;
-  `requireLeagueAdmin` checks name and PIN):
+  0, so it is the `finalize` action the button sends. `requireLeagueAdmin`
+  checks name and PIN, read the way step 0 reads them: `pwsh` 7.1 or later, the
+  first line pasted alone, and answered at its prompts. This step runs days
+  after step 0, so it sets up its own variables.
   ```powershell
+  $name = Read-Host "name"; $pin = Read-Host "PIN" -MaskInput
+  ```
+  ```powershell
+  $base = "https://zdfhglvjxquvkjyvophz.supabase.co"
+  $anon = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo"   # public by design: CLAUDE.md, Credentials
+  $h = @{ Authorization = "Bearer $anon"; apikey = $anon; "Content-Type" = "application/json" }
+  $league = <SHADOW_ID>
+  $show = (Invoke-RestMethod "$base/rest/v1/shows?showdate=eq.2026-10-23&select=id" -Headers $h).id   # must print ONE id
+  $show
   Invoke-RestMethod -Method Post "$base/functions/v1/carton-sync" -Headers $h -Body (@{ action = "finalize"; p_name = $name; p_pin = $pin; league_id = $league; show_id = $show } | ConvertTo-Json)
+  Remove-Variable name, pin
   ```
   ```sql
   select ls.status, encode(extensions.digest(ls.setlist_projection_scoring, 'sha256'), 'hex') = ls.setlist_hash_scoring as scoring_hash_matches_text,
@@ -1024,7 +1065,13 @@ supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz
   effect is not isolated:** `scoreShow` writes the global `setlist_songs`, so
   if The Carton edited this show since its last pass, this finalize refreshes
   that shared table for both real leagues' setlist views. It re-scores nobody
-  else, since `scoreShow` receives only the shadow's row. If The Carton has a
+  else, since `scoreShow` receives only the shadow's row. **Accepted, Kyle's
+  call 2026-11-02:** the write can only bring the shared 10-23 rows closer to
+  The Carton and never touches scores. As of `efb088b`, `scoreShow` returns
+  before writing when The Carton has no rows, and the only score this finalize
+  writes is the shadow's own Casual sheet. If the write inserts a row because
+  The Carton added a song, open apps in every league get the song toast, since
+  the realtime binding on `setlist_songs` has no league filter. If The Carton has a
   new song name on that show, its "new songs" post also goes to the shadow
   league only, and ends in `no_key`. This does not replace the check on the
   first real final below it.
@@ -1068,7 +1115,8 @@ from _setlist_check_targets();
 ```
 Expect: `daily_setlist_check.ran_at` set with `note` counts matching the
 first query; exactly one flag (league 1, the 2026-08-14 show, kind
-`scoring`, reason `baseline: …`, flips with one hit flip in bracket 2);
+`scoring`, reason `baseline: …`, flips with one hit flip in bracket 2 and zero
+reason flips);
 `baselined` = targets (every target, the 08-14 row included). Record the
 outcome in the decision record as a dated line. If `ran_at` is unset,
 `attempted_at` and `note` are absent: read `setlist_check.error` in the
@@ -1096,11 +1144,38 @@ rows; league 2 and the shadow league show neither; a non-admin sees no
 pill.
 - Rollback: revert the client commit and push; the RPCs stay, unused.
 - **Rehearsal, after this push.** Drift injected by SQL on the shadow row ONLY.
-  Paste, never type (`CLAUDE.md` → Tooling), and run the first query before
-  each one: its two values are the `carton_hash` values the flags must carry.
-  **The order is full-only first, then scoring: the reverse of the brief,
-  because of the second-pass rule in §4 step 4** (§9, item 1). Each injection
-  is judged on the next daily run.
+  Paste, never type (`CLAUDE.md` → Tooling). **The order is full-only first,
+  then scoring (Kyle's call 2026-11-02; the reason is §9, item 1).** Each
+  injection is judged on the next daily run.
+
+  **First, before any injection, save two things to `.scratch/`** (gitignored):
+  the row's four finalize-time values, and the one frozen element 2b will edit.
+  That element holds pick text, so it never goes in a tracked file.
+  ```sql
+  -- Save the one cell this returns as .scratch/shadow_finalize_values.json
+  select to_jsonb(x) as result from (
+    select setlist_hash_scoring, setlist_hash_full, setlist_projection_scoring, setlist_projection_full
+    from league_shows
+    where league_id = <SHADOW_ID> and league_id not in (1, 2)
+      and show_id = (select id from shows where showdate = '2026-10-23')
+  ) x;
+
+  -- Save the one cell this returns as .scratch/shadow_2b_element.json. A frozen
+  -- hit on a real song is a song in the 10-23 setlist. Its idx is <IDX> below.
+  select to_jsonb(x) as result from (
+    select e.ord - 1 as idx, e.elem
+    from scores sc
+    join brackets b on b.id = sc.bracket_id
+    cross join lateral jsonb_array_elements(sc.breakdown) with ordinality e(elem, ord)
+    where b.league_id = <SHADOW_ID> and b.league_id not in (1, 2) and b.kind = 'casual'
+      and sc.show_id = (select id from shows where showdate = '2026-10-23')
+      and e.elem->>'slot' <> 'bonus' and (e.elem->>'hit')::boolean
+      and lower(e.elem->>'songname') <> 'any debut'
+    order by e.ord limit 1
+  ) x;
+  ```
+  Then the injections. Run the first query before each one: its two values are
+  the `carton_hash` values the flags must carry.
   ```sql
   -- Before each injection: note the row's stored hashes. Before injection 1
   -- these equal today's Carton hashes.
@@ -1134,14 +1209,15 @@ pill.
   where league_id = <SHADOW_ID> and league_id not in (1, 2)
     and show_id = (select id from shows where showdate = '2026-10-23');
 
-  -- Injection 2b, optional, SAME DAY as 2a (§9, item 2): make the first frozen
-  -- verdict on the shadow sheet the opposite of what today's Carton says.
+  -- Injection 2b, SAME DAY as 2a (§9, item 2), shadow sheet only: the saved
+  -- element becomes hit false, reason "not played". Its points stay, since
+  -- enrichment never reads them.
   update scores sc
-  set breakdown = jsonb_set(jsonb_set(sc.breakdown, '{0,hit}', to_jsonb(not (sc.breakdown->0->>'hit')::boolean)),
-                            '{0,reason}', to_jsonb(case when (sc.breakdown->0->>'hit')::boolean then 'not played' else 'played' end))
+  set breakdown = jsonb_set(jsonb_set(sc.breakdown, '{<IDX>,hit}', 'false'::jsonb), '{<IDX>,reason}', '"not played"'::jsonb)
   from brackets b
   where b.id = sc.bracket_id and b.league_id = <SHADOW_ID> and b.league_id not in (1, 2)
-    and b.kind = 'casual' and sc.show_id = (select id from shows where showdate = '2026-10-23');
+    and b.kind = 'casual' and sc.show_id = (select id from shows where showdate = '2026-10-23')
+    and (sc.breakdown-><IDX>->>'hit')::boolean;
   ```
   The projection text comes back from `jsonb::text` with spaces after commas,
   so it is no longer byte-canonical. That is harmless: the hash is recomputed
@@ -1154,15 +1230,61 @@ pill.
   | **`carton_hash`** | the full hash noted before it | the scoring hash noted before it |
   | **`detail.diff`** | `changed` is one entry, position 3, `field: "songname"`, `from` with the trailing space, `to` without; the other three lists empty | `added` is one entry, position 3, the norm name; the other three lists empty |
   | **`detail.full_hash`** | absent | today's Carton full hash: the full hash noted before injection 1 |
-  | **`detail.flips`** | absent | the Casual bracket only: `hit_flips` 0, `reason_flips` 0, `pairs` empty. With 2b: `hit_flips` 1, `reason_flips` 0, one pair, `n` 1 |
+  | **`detail.flips`** | absent | the shadow Casual bracket and nothing else: `hit_flips` 1, `reason_flips` 0, one pair, `n` 1 |
   | **`note`** | `flagged_drift` 1 | `flagged_scoring` 1, `suppressed_drift` 1 (the altered full baseline is still a kind B candidate, and this kind A carries the current full hash) |
-  | **Admin tab, shadow league** | pill 1; one notice in the block above the dated rows, since 10-23 is outside the 7-day list; kind B copy | same, kind A copy, with the flip line if 2b ran |
+  | **Admin tab, shadow league** | pill 1; one notice in the block above the dated rows, since 10-23 is outside the 7-day list; kind B copy | same, kind A copy, with the flip line |
   | **Clear** | notice and pill go; `cleared_at` and `cleared_by` set | same |
   | **The next daily run** | no new row, `deduped` 1 | no new row, `deduped` 1 and `suppressed_drift` 1 |
 
-  Any other result is a failure to record in the decision record. The altered
-  baselines stay, so those last two counts appear in the daily `note` every
-  day until the row is restored (§9, item 3).
+  Any other result is a failure to record in the decision record. Those last
+  two counts appear in the daily `note` every day until the restore below.
+
+  **Restore, Kyle's call 2026-11-02 (§9, item 3).** After the last rehearsal
+  flag is cleared, write the saved element back, then null the four columns, in
+  that order. §6's null-hash branch re-derives first, so an element left edited
+  would raise a flag instead of a baseline.
+  ```sql
+  -- Pass: 0. Do not restore until this reads 0.
+  select count(*) from setlist_flags
+  where league_id = <SHADOW_ID> and league_id not in (1, 2) and cleared_at is null;
+
+  -- Restore 1. From .scratch/shadow_2b_element.json: idx replaces <IDX>, and the
+  -- "elem" value goes between the dollar quotes, which survive an apostrophe.
+  update scores sc
+  set breakdown = jsonb_set(sc.breakdown, '{<IDX>}', $el$<SAVED_ELEM>$el$::jsonb)
+  from brackets b
+  where b.id = sc.bracket_id and b.league_id = <SHADOW_ID> and b.league_id not in (1, 2)
+    and b.kind = 'casual' and sc.show_id = (select id from shows where showdate = '2026-10-23');
+
+  -- Restore 2. This one row only: the shadow league's other final rows keep their baselines.
+  update league_shows
+  set setlist_hash_scoring = null, setlist_hash_full = null,
+      setlist_projection_scoring = null, setlist_projection_full = null
+  where league_id = <SHADOW_ID> and league_id not in (1, 2)
+    and show_id = (select id from shows where showdate = '2026-10-23');
+
+  -- After the next daily run: save the one cell this returns as .scratch/shadow_rebaseline_values.json
+  select to_jsonb(x) as result from (
+    select setlist_hash_scoring, setlist_hash_full, setlist_projection_scoring, setlist_projection_full
+    from league_shows
+    where league_id = <SHADOW_ID> and league_id not in (1, 2)
+      and show_id = (select id from shows where showdate = '2026-10-23')
+  ) x;
+  ```
+  ```powershell
+  $a = Get-Content .scratch\shadow_finalize_values.json -Raw | ConvertFrom-Json
+  $b = Get-Content .scratch\shadow_rebaseline_values.json -Raw | ConvertFrom-Json
+  foreach ($k in 'setlist_hash_scoring','setlist_hash_full','setlist_projection_scoring','setlist_projection_full') { "{0,-28} {1}" -f $k, ($a.$k -ceq $b.$k) }
+  "lengths {0} {1}" -f $b.setlist_projection_scoring.Length, $b.setlist_projection_full.Length
+  ```
+  **Pass/fail is this equality.** On that next daily run: no new flag; `baselined`
+  in the `note` up by 1; all four lines above `True`; and
+  `tools/replay_setlist_check.mjs`, run the same day, prints the same two hashes
+  on its 10-23 `baseline:` line and the same two projection lengths on its
+  `lengths:` line. The replay prints no projection text, so those are the values
+  it is compared on. If The Carton edited 10-23 after the finalize, the equality
+  fails and league 2's 10-23 row carries a flag too. That is a Carton edit, not a
+  rehearsal failure, and it goes in the decision record as one.
 
 **Step 7 — acknowledge.** Clear the 08-14 flag from the Admin tab. Expect
 the notice and the pill to go, and in SQL `cleared_at`/`cleared_by` set
@@ -1190,29 +1312,62 @@ and their reasons):
 
 Nothing was open from this plan as of its approval.
 
-**Added 2026-11-02 with the rehearsal. These change what the brief asked for
-or leave a choice for the rehearsal day; none blocks a build step:**
+**Added 2026-11-02 with the rehearsal and answered the same day (Kyle's calls,
+folded into §2, §6 and §8). Nothing here is open, and none of it blocks a build
+step:**
 
-1. **Injection order reversed (assumption written in).** The brief ran scoring
-   first, then full-only. Under the second-pass rule the second injection then
-   raises nothing: the kind A row already holds today's full hash in
-   `detail.full_hash`, and that suppresses the kind B candidate whether or not
-   the kind A was cleared. Full-only first raises both, needs no extra SQL and
-   no behaviour change, and also exercises the suppression, since injection
-   2a's run reports `suppressed_drift` 1. To keep the brief's order instead,
-   the kind A row has to be deleted by SQL before the full-only injection.
-2. **Kind A flips need 2b.** The brief expected flips if Kyle's sheet named the
-   dropped song. A baseline edit cannot produce any: enrichment compares the
-   frozen verdicts with today's Carton, and neither changes, so `flips` is
-   present and zero whatever the sheet says. Injection 2b edits one frozen
-   verdict on the shadow sheet to exercise a non-zero flip. It must land the
-   same day as 2a, because a deduped kind A never re-runs enrichment. The
-   table records both results; running 2b is the dev's call on the day.
-3. **Restoring the row afterwards.** The brief says no cleanup, so none is
-   written into the steps, and the daily `note` carries this row's `deduped`
-   and `suppressed_drift` from then on. If that noise matters, restoring the
-   four columns from league 2's 10-23 row removes it, since the hash does not
-   depend on the league.
+1. **2026-11-02 — Injection order: full-only first, then scoring. Approved.**
+   The brief ran scoring first. The injections move the baseline instead of The
+   Carton, so The Carton's full hash never changes during the rehearsal. A
+   scoring injection first would raise a kind A carrying that unchanged full
+   hash, and the second-pass rule would then suppress the later kind B by its
+   own logic. The reversal works around the simulation method, not a flaw in
+   the rule. It needs no extra SQL and no behaviour change, and it also
+   exercises the suppression, since injection 2a's run reports
+   `suppressed_drift` 1.
+2. **2026-11-02 — Injection 2b: yes, shadow sheet only.** A baseline edit cannot
+   produce a flip, because enrichment compares the frozen verdicts with today's
+   Carton and neither changes. 2b edits one element whose song is in the 10-23
+   setlist: hit false, reason "not played", points left alone, since enrichment
+   never reads them. The guard joins `scores` to `brackets` and requires
+   `brackets.league_id = <SHADOW_ID>` and `league_id not in (1, 2)`. The
+   original element is saved to `.scratch/` first; it holds pick text, so never
+   a tracked file. The save takes the sheet's first frozen hit that is not an
+   "Any Debut" pick: `scorePicks` sets `hit` true for any played song, wrong
+   slot included (as of `efb088b`), so that element's song is in the setlist. 2b
+   lands the same day as 2a, because a deduped kind A never re-runs enrichment.
+   Expected: the scoring injection's kind A carries `detail.flips` with
+   `hit_flips` 1 in the shadow Casual bracket and nothing else.
+3. **2026-11-02 — Restore afterward: yes, by re-baseline.** Before any rehearsal
+   injection, the shadow row's four finalize-time values are saved to
+   `.scratch/`. After the last rehearsal flag is cleared, the saved 2b element
+   is written back, then the shadow row's four columns are nulled. Next daily
+   run, expected: no flag, baselined +1, and the four new values equal both the
+   saved finalize-time values and the replay's 10-23 output. Pass/fail is that
+   equality. The replay prints the two hashes and the two projection lengths,
+   not the text, so those are the values it is compared on. The league itself
+   stays, as step 0 says.
+4. **2026-11-02 — Credentials.** Every PowerShell step that calls
+   `admin_set_cutoff` or the `finalize` action reads the name and PIN at run
+   time with `Read-Host`, `-MaskInput` for the PIN. No nickname or PIN literal
+   in this file, and none typed where PSReadLine history keeps it. Two steps were
+   fixed: the cutoff step had no `-MaskInput`, and the finalize step borrowed
+   step 0's variables from days earlier. `-MaskInput` needs `pwsh` 7.1 or later;
+   checked locally, `pwsh` 7.6.9 has it and Windows PowerShell 5.1 does not.
+5. **2026-11-02 — Timing.** The shadow league is created by 2026-11-05 so setup
+   stays SQL-free, and the templated insert stays as the fallback if creation
+   slips past 2026-11-06. Its traces on the 2026-11-06 reminder are expected and
+   are not the Stage Y watch item failing. They are a stamped `remind_sent` and
+   `no_key`, not failed posts in the logs as the answer put it: §8 step 0, "What
+   the fixture does on its own". The deploy A gate query now names leagues 1 and
+   2, because a third row would otherwise break its "two rows".
+6. **2026-11-02 — Replay pass/fail, sharpened.** Exactly one hit flip
+   (2026-08-14, bracket 2) and ZERO reason flips. The prototype's 22 reason
+   differences were artifacts of today's config. The module infers mode from the
+   slot key, so any reason flip is a finding.
+7. **2026-11-02 — The shadow finalize's write to the shared `setlist_songs` is
+   accepted.** It can only bring the shared 10-23 rows closer to The Carton and
+   never touches scores (§8 step 3).
 
 ## Files
 
