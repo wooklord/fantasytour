@@ -905,8 +905,8 @@ setup stays SQL-free.** The 09:00 ET show sync on 2026-11-06 then creates its
 rows while the 2026-10-23 show is still in the window. The insert in item 3 is
 the fallback if creation slips past 2026-11-06. Every code reference here
 is as of `efb088b`. No player nickname, player id or pick text goes in any
-tracked file; replace `<SHADOW_ID>` in this file with the league id the day
-the league is created, and record that id in the decision record. **Every
+tracked file. **The league is id 11, "Test League Ignore", created 2026-11-03**
+(recorded in the decision record), filled in below. **Every
 future survey or count excludes this league.**
 
 1. **Create the league** in the Global console, under a name Kyle picks that
@@ -930,8 +930,8 @@ future survey or count excludes this league.**
    nothing else creates an overlay row for an old show:
    ```sql
    insert into league_shows (league_id, show_id, cutoff_at)
-   select <SHADOW_ID>, s.id, now() - interval '1 hour' from shows s where s.showdate = '2026-10-23'
-     and <SHADOW_ID> not in (1, 2);
+   select 11, s.id, now() - interval '1 hour' from shows s where s.showdate = '2026-10-23'
+     and 11 not in (1, 2);
    ```
 4. **The pick sheet, with no SQL.** Move the cutoff to tomorrow, submit the
    sheet in the app, move the cutoff back. The Admin tab cannot do the cutoff
@@ -959,7 +959,7 @@ future survey or count excludes this league.**
    $base = "https://zdfhglvjxquvkjyvophz.supabase.co"
    $anon = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo"   # public by design: CLAUDE.md, Credentials
    $h = @{ Authorization = "Bearer $anon"; apikey = $anon; "Content-Type" = "application/json" }
-   $league = <SHADOW_ID>
+   $league = 11
    $show = (Invoke-RestMethod "$base/rest/v1/shows?showdate=eq.2026-10-23&select=id" -Headers $h).id   # must print ONE id
    $show
    $rows = Invoke-RestMethod -Method Post "$base/rest/v1/rpc/get_league_shows" -Headers $h -Body (@{ p_league_id = $league } | ConvertTo-Json)
@@ -1003,7 +1003,7 @@ future survey or count excludes this league.**
 - **Kyle's switcher carries the league** from step 2 onward.
 
 **Where its rows live, for a future one-off deletion.** `delete from leagues
-where id = <SHADOW_ID>` cascades to `brackets`, `league_members`,
+where id = 11` cascades to `brackets`, `league_members`,
 `league_shows`, `setlist_flags`, `banned_names` and `realtime_pings`;
 `brackets` cascades to `seasons`, `picks` and `scores`. Global `shows` and
 `setlist_songs` do not cascade, and `sync_state` notes are not rewritten.
@@ -1094,7 +1094,7 @@ supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz
   $base = "https://zdfhglvjxquvkjyvophz.supabase.co"
   $anon = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo"   # public by design: CLAUDE.md, Credentials
   $h = @{ Authorization = "Bearer $anon"; apikey = $anon; "Content-Type" = "application/json" }
-  $league = <SHADOW_ID>
+  $league = 11
   $show = (Invoke-RestMethod "$base/rest/v1/shows?showdate=eq.2026-10-23&select=id" -Headers $h).id   # must print ONE id
   $show
   Invoke-RestMethod -Method Post "$base/functions/v1/carton-sync" -Headers $h -Body (@{ action = "finalize"; p_name = $name; p_pin = $pin; league_id = $league; show_id = $show } | ConvertTo-Json)
@@ -1109,7 +1109,7 @@ supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz
          (select count(*) from scores sc join brackets b on b.id = sc.bracket_id
           where b.league_id = ls.league_id and b.kind = 'official' and sc.show_id = ls.show_id) as official_scores
   from league_shows ls
-  where ls.league_id = <SHADOW_ID> and ls.league_id not in (1, 2)
+  where ls.league_id = 11 and ls.league_id not in (1, 2)
     and ls.show_id = (select id from shows where showdate = '2026-10-23');
   ```
   **Pass:** `final`; both `*_matches_text` true; both hashes equal what
@@ -1146,8 +1146,8 @@ observable until the next gate.
 - **Rehearsal, on the next daily run:** the shadow row is a target, its
   baseline equals today's Carton, and it raises nothing.
   ```sql
-  select count(*) from setlist_flags where league_id = <SHADOW_ID>;   -- pass: 0
-  select count(*) from _setlist_check_targets() where league_id = <SHADOW_ID>;   -- pass: 1
+  select count(*) from setlist_flags where league_id = 11;   -- pass: 0
+  select count(*) from _setlist_check_targets() where league_id = 11;   -- pass: 1
   ```
   A flag here is only a failure if the stored hashes differ with no Carton
   edit behind them; a real Carton edit to 10-23 would flag this row and show
@@ -1212,7 +1212,7 @@ pill.
   select to_jsonb(x) as result from (
     select setlist_hash_scoring, setlist_hash_full, setlist_projection_scoring, setlist_projection_full
     from league_shows
-    where league_id = <SHADOW_ID> and league_id not in (1, 2)
+    where league_id = 11 and league_id not in (1, 2)
       and show_id = (select id from shows where showdate = '2026-10-23')
   ) x;
 
@@ -1223,7 +1223,7 @@ pill.
     from scores sc
     join brackets b on b.id = sc.bracket_id
     cross join lateral jsonb_array_elements(sc.breakdown) with ordinality e(elem, ord)
-    where b.league_id = <SHADOW_ID> and b.league_id not in (1, 2) and b.kind = 'casual'
+    where b.league_id = 11 and b.league_id not in (1, 2) and b.kind = 'casual'
       and sc.show_id = (select id from shows where showdate = '2026-10-23')
       and e.elem->>'slot' <> 'bonus' and (e.elem->>'hit')::boolean
       and lower(e.elem->>'songname') <> 'any debut'
@@ -1236,7 +1236,7 @@ pill.
   -- Before each injection: note the row's stored hashes. Before injection 1
   -- these equal today's Carton hashes.
   select setlist_hash_scoring, setlist_hash_full from league_shows
-  where league_id = <SHADOW_ID> and league_id not in (1, 2)
+  where league_id = 11 and league_id not in (1, 2)
     and show_id = (select id from shows where showdate = '2026-10-23');
 
   -- Injection 1, kind B: a trailing space on the third row's raw name in the stored full baseline.
@@ -1246,10 +1246,10 @@ pill.
   from (
     select 'setlist-v1:' || jsonb_set(j, '{2,6}', to_jsonb((j #>> '{2,6}') || ' '))::text as txt
     from (select substr(setlist_projection_full, 12)::jsonb as j from league_shows
-          where league_id = <SHADOW_ID> and league_id not in (1, 2)
+          where league_id = 11 and league_id not in (1, 2)
             and show_id = (select id from shows where showdate = '2026-10-23')) q
   ) inj
-  where league_id = <SHADOW_ID> and league_id not in (1, 2)
+  where league_id = 11 and league_id not in (1, 2)
     and show_id = (select id from shows where showdate = '2026-10-23');
 
   -- Injection 2a, kind A: drop the third row from the stored scoring baseline.
@@ -1259,10 +1259,10 @@ pill.
   from (
     select 'setlist-v1:' || (j - 2)::text as txt
     from (select substr(setlist_projection_scoring, 12)::jsonb as j from league_shows
-          where league_id = <SHADOW_ID> and league_id not in (1, 2)
+          where league_id = 11 and league_id not in (1, 2)
             and show_id = (select id from shows where showdate = '2026-10-23')) q
   ) inj
-  where league_id = <SHADOW_ID> and league_id not in (1, 2)
+  where league_id = 11 and league_id not in (1, 2)
     and show_id = (select id from shows where showdate = '2026-10-23');
 
   -- Injection 2b, SAME DAY as 2a (§9, item 2), shadow sheet only: the saved
@@ -1271,7 +1271,7 @@ pill.
   update scores sc
   set breakdown = jsonb_set(jsonb_set(sc.breakdown, '{<IDX>,hit}', 'false'::jsonb), '{<IDX>,reason}', '"not played"'::jsonb)
   from brackets b
-  where b.id = sc.bracket_id and b.league_id = <SHADOW_ID> and b.league_id not in (1, 2)
+  where b.id = sc.bracket_id and b.league_id = 11 and b.league_id not in (1, 2)
     and b.kind = 'casual' and sc.show_id = (select id from shows where showdate = '2026-10-23')
     and (sc.breakdown-><IDX>->>'hit')::boolean;
   ```
@@ -1302,28 +1302,28 @@ pill.
   ```sql
   -- Pass: 0. Do not restore until this reads 0.
   select count(*) from setlist_flags
-  where league_id = <SHADOW_ID> and league_id not in (1, 2) and cleared_at is null;
+  where league_id = 11 and league_id not in (1, 2) and cleared_at is null;
 
   -- Restore 1. From .scratch/shadow_2b_element.json: idx replaces <IDX>, and the
   -- "elem" value goes between the dollar quotes, which survive an apostrophe.
   update scores sc
   set breakdown = jsonb_set(sc.breakdown, '{<IDX>}', $el$<SAVED_ELEM>$el$::jsonb)
   from brackets b
-  where b.id = sc.bracket_id and b.league_id = <SHADOW_ID> and b.league_id not in (1, 2)
+  where b.id = sc.bracket_id and b.league_id = 11 and b.league_id not in (1, 2)
     and b.kind = 'casual' and sc.show_id = (select id from shows where showdate = '2026-10-23');
 
   -- Restore 2. This one row only: the shadow league's other final rows keep their baselines.
   update league_shows
   set setlist_hash_scoring = null, setlist_hash_full = null,
       setlist_projection_scoring = null, setlist_projection_full = null
-  where league_id = <SHADOW_ID> and league_id not in (1, 2)
+  where league_id = 11 and league_id not in (1, 2)
     and show_id = (select id from shows where showdate = '2026-10-23');
 
   -- After the next daily run: save the one cell this returns as .scratch/shadow_rebaseline_values.json
   select to_jsonb(x) as result from (
     select setlist_hash_scoring, setlist_hash_full, setlist_projection_scoring, setlist_projection_full
     from league_shows
-    where league_id = <SHADOW_ID> and league_id not in (1, 2)
+    where league_id = 11 and league_id not in (1, 2)
       and show_id = (select id from shows where showdate = '2026-10-23')
   ) x;
   ```
@@ -1386,7 +1386,7 @@ step:**
    Carton and neither changes. 2b edits one element whose song is in the 10-23
    setlist: hit false, reason "not played", points left alone, since enrichment
    never reads them. The guard joins `scores` to `brackets` and requires
-   `brackets.league_id = <SHADOW_ID>` and `league_id not in (1, 2)`. The
+   `brackets.league_id = 11` and `league_id not in (1, 2)`. The
    original element is saved to `.scratch/` first; it holds pick text, so never
    a tracked file. The save takes the sheet's first frozen hit that is not an
    "Any Debut" pick: `scorePicks` sets `hit` true for any played song, wrong
