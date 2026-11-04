@@ -909,6 +909,14 @@ tracked file. **The league is id 11, "Test League Ignore", created 2026-11-03**
 (recorded in the decision record), filled in below. **Every
 future survey or count excludes this league.**
 
+**Done 2026-11-03 (Kyle).** "Sync shows" created league 11's overlay rows: 12,
+including the 2026-10-23 show (status `upcoming`, cutoff
+`2026-10-23T22:00:00+00:00`). Item 4 ran in the sequence now written there, and
+the restore was verified. The read-only check in the SQL editor afterwards
+(counts only) had every value at its pass value: `league_row` 1, `brackets` 2,
+`seasons` 0, `members` 1, `admins` 1, `casual_sheet` 6 (one row per pick; the
+sheet is in), `scores` 0, `row_state` "upcoming | 2026-10-23 22:00:00+00".
+
 1. **Create the league** in the Global console, under a name Kyle picks that
    no one can mistake for play, and that does not derive to an existing
    secret (`webhookEnvKey`). `global_create_league` **always creates two
@@ -944,17 +952,28 @@ future survey or count excludes this league.**
    `submit_picks` accepts it, because its "That show already happened" gate
    sits only in the `voting_override = 'open'` branch, and the default config
    is `auto`. **The sheet must name at least one song 10-23 actually played,
-   because injection 2b needs one.** These PowerShell lines have not been run.
+   because injection 2b needs one.** **Run 2026-11-03 by Kyle, in the sequence
+   below.** The lines restate that sequence; the exact lines Kyle ran were not
+   copied into this file. Two changes from the first draft came out of the run:
+   (a) the first draft's read (`Invoke-RestMethod`, then `Where-Object`) came
+   back with a blank `$orig` although the row existed. The cause was not found;
+   run locally the same day, that read returned a PowerShell `DateTime` on the
+   local clock, not a blank. The cutoff is now read fresh with
+   `Invoke-WebRequest` and `ConvertFrom-Json -DateKind String`, which keeps the
+   stored value as the exact ISO string (`2026-10-23T22:00:00+00:00`) instead of
+   a `DateTime`. (b) The setup is split: `$orig` is printed and checked BEFORE
+   `Set-Cutoff` moves anything, and the restore re-reads the row and compares.
    **Credentials, Kyle's call 2026-11-02:** every step that calls
    `admin_set_cutoff` or the `finalize` action reads the name and PIN at run
-   time with `Read-Host`, with no literal in this file. Run it in `pwsh` 7.1 or
-   later, since Windows PowerShell 5.1 has no `-MaskInput`. Paste the first line
-   alone and answer its two prompts. A multi-line paste can feed the next line
-   to a prompt, which would leave the PIN to be typed at the normal prompt,
-   where PSReadLine keeps it.
+   time with `Read-Host`, with no literal in this file. Run it in `pwsh` 7.5 or
+   later: `-MaskInput` needs 7.1 and `ConvertFrom-Json -DateKind` needs 7.5.
+   Paste the first line alone and answer its two prompts. A multi-line paste can
+   feed the next line to a prompt, which would leave the PIN to be typed at the
+   normal prompt, where PSReadLine keeps it.
    ```powershell
    $name = Read-Host "name"; $pin = Read-Host "PIN" -MaskInput
    ```
+   Setup. It reads and moves nothing:
    ```powershell
    $base = "https://zdfhglvjxquvkjyvophz.supabase.co"
    $anon = "sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo"   # public by design: CLAUDE.md, Credentials
@@ -962,16 +981,32 @@ future survey or count excludes this league.**
    $league = 11
    $show = (Invoke-RestMethod "$base/rest/v1/shows?showdate=eq.2026-10-23&select=id" -Headers $h).id   # must print ONE id
    $show
-   $rows = Invoke-RestMethod -Method Post "$base/rest/v1/rpc/get_league_shows" -Headers $h -Body (@{ p_league_id = $league } | ConvertTo-Json)
-   $orig = ($rows | Where-Object show_id -eq $show).cutoff_at
+   function Get-Cutoff {
+     $r = Invoke-WebRequest -Method Post "$base/rest/v1/rpc/get_league_shows" -Headers $h -Body (@{ p_league_id = $league } | ConvertTo-Json)
+     ($r.Content | ConvertFrom-Json -DateKind String | Where-Object show_id -eq $show).cutoff_at
+   }
    function Set-Cutoff($iso) { Invoke-RestMethod -Method Post "$base/rest/v1/rpc/admin_set_cutoff" -Headers $h -Body (@{ p_name = $name; p_pin = $pin; p_league_id = $league; p_show_id = $show; p_cutoff = $iso } | ConvertTo-Json) }
-   Set-Cutoff (Get-Date).ToUniversalTime().AddDays(1).ToString("o")
+   $orig = Get-Cutoff
+   "orig: [$orig]"   # must print the stored ISO string; blank means STOP, nothing has moved
    ```
-   Submit the sheet in the app, then:
+   Only once `orig` printed a value, move the cutoff to tomorrow:
+   ```powershell
+   if (-not $orig) { throw "orig is blank: stop, nothing has moved" }
+   Set-Cutoff (Get-Date).ToUniversalTime().AddDays(1).ToString("o")
+   "moved to: [$(Get-Cutoff)]"
+   ```
+   Submit the sheet in the app, then restore, re-read and compare:
    ```powershell
    Set-Cutoff $orig
+   $back = Get-Cutoff
+   "restored: [$back]; same instant as orig: $([DateTimeOffset]::Parse($back) -eq [DateTimeOffset]::Parse($orig))"   # must print True
    Remove-Variable name, pin
    ```
+   **Restore verified 2026-11-03:** the row reads 2026-10-23 22:00 UTC again.
+   The read-only half here (`Get-Cutoff`, the print, the compare) was run
+   locally the same day against league 11 and returned
+   `[2026-10-23T22:00:00+00:00]` as a string; neither `Set-Cutoff` call was run
+   from here.
 5. **The row stays unscored until deploy A.** `eligibleLeagueShows` drops any
    show older than a day, and `autoFinalize` reads that list, so the cron
    never touches it.
