@@ -2273,6 +2273,7 @@ export async function runWhosPickedScenario({ html, scripts, mode }){
       return {
         summary: r?.querySelector("p.muted")?.textContent || "",
         on: r ? [...r.querySelectorAll(".switcher-btn.on")].map(b => b.textContent) : [],
+        chips: r ? [...r.querySelectorAll(".switcher-btn")].map(b => b.textContent) : [],
         rows: r ? [...r.querySelectorAll(".roster-row")].map(x => ({
           name: x.querySelector(".nm")?.textContent, status: x.dataset.status,
           pill: x.querySelector(".pill")?.textContent, pillClass: x.querySelector(".pill")?.className ?? "",
@@ -2312,6 +2313,22 @@ export async function runWhosPickedScenario({ html, scripts, mode }){
   clickTab(a.w, "admin");
   await tick(); await tick(); await tick(); await tick();
   const afterRerender = a.read();
+  // Done chip (admin-panel.md → Who's Picked, refinement 2026-11-04).
+  // Show 1 has two partial pickers and nobody done: Done is empty and must
+  // say "No one has finished", not "No one's picked".
+  await a.selectShow(1);
+  a.w.setRosterFilter("done");
+  await tick(); await tick(); await tick();
+  const show1Done = a.read();
+  // A show-select change keeps Done; show 2 has exactly one 5-of-5 player.
+  await a.selectShow(2);
+  const show2Done = a.read();
+  // A real tab load from Done reopens on Needs picks.
+  clickTab(a.w, "shows");
+  await tick(); await tick();
+  clickTab(a.w, "admin");
+  await tick(); await tick(); await tick(); await tick();
+  const afterRerenderDone = a.read();
   // Everyone done: p1 is the only member and has 5 of 5 on show 2.
   const b = await load(t => { t.league_members = t.league_members.filter(m => m.player_id === "p1"); });
   await b.selectShow(2);
@@ -2319,7 +2336,15 @@ export async function runWhosPickedScenario({ html, scripts, mode }){
   b.w.setRosterFilter("all");
   await tick(); await tick(); await tick();
   const everyoneDoneAll = b.read();
-  return { show1Needs, show2Needs, show2All, afterRerender, everyoneDone, everyoneDoneAll };
+  // Nobody has picked: every show-1 pick removed, so Done is empty with
+  // zero partials — the "No one's picked yet" branch.
+  const c = await load(t => { t.picks = t.picks.filter(p => p.show_id !== 1); });
+  await c.selectShow(1);
+  c.w.setRosterFilter("done");
+  await tick(); await tick(); await tick();
+  const nobodyPickedDone = c.read();
+  return { show1Needs, show2Needs, show2All, afterRerender, everyoneDone, everyoneDoneAll,
+    show1Done, show2Done, afterRerenderDone, nobodyPickedDone };
 }
 
 // Registration length cap (standings-ux.md 4): 21 characters rejected

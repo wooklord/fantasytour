@@ -1820,7 +1820,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"14b071b-de691c7"}</p>
+      <p class="colophon buildid">build ${"f5ed220-7335f5b"}</p>
     </div>
   </div>`;
   }
@@ -2643,7 +2643,7 @@ Switch anyway?`
   }
   var rosterFilter = "needs";
   function setRosterFilter(f) {
-    rosterFilter = f === "all" ? "all" : "needs";
+    rosterFilter = f === "all" || f === "done" ? f : "needs";
     loadRoster();
   }
   async function loadRoster() {
@@ -2659,11 +2659,12 @@ Switch anyway?`
       const PILL = { done: ["done", "Done"], partial: ["partial", "Partial"], none: ["waiting", "Waiting on"] };
       const MARK = { done: "\u2714", partial: "\u2713", none: "\u2014" };
       const total = rows.length, done = rows.filter((r) => r.picks_count > 0).length;
-      const shown = rosterFilter === "all" ? rows : rows.filter((r) => statusOf(r) !== "done");
+      const shown = rosterFilter === "all" ? rows : rosterFilter === "done" ? rows.filter((r) => statusOf(r) === "done") : rows.filter((r) => statusOf(r) !== "done");
       const chip = `<div class="chiprow"><span class="lbl">Show</span><div class="switcher">
         <button class="linkbtn switcher-btn${rosterFilter === "needs" ? " on" : ""}" onclick="setRosterFilter('needs')">Needs picks</button>
+        <button class="linkbtn switcher-btn${rosterFilter === "done" ? " on" : ""}" onclick="setRosterFilter('done')">Done</button>
         <button class="linkbtn switcher-btn${rosterFilter === "all" ? " on" : ""}" onclick="setRosterFilter('all')">All</button></div></div>`;
-      const empty = !rows.length ? '<p class="muted" id="roster-empty">No members in this league yet.</p>' : '<p class="muted" id="roster-empty">Everyone has picks in \u2014 nobody to chase.</p>';
+      const empty = !rows.length ? '<p class="muted" id="roster-empty">No members in this league yet.</p>' : rosterFilter !== "done" ? '<p class="muted" id="roster-empty">Everyone has picks in \u2014 nobody to chase.</p>' : rows.some((r) => statusOf(r) === "partial") ? '<p class="muted" id="roster-empty">No one has finished their picks yet.</p>' : `<p class="muted" id="roster-empty">No one's picked yet for this show.</p>`;
       $("#roster").innerHTML = `
       <p class="muted" style="margin-bottom:6px"><b style="color:var(--mint)">${done}</b> of ${total} players have picks in</p>
       ${chip}

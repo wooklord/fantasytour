@@ -224,6 +224,14 @@ same day, before any code; sibling record for the same batch:
   `.pill.none` absent. Mutation result: the pill re-added to the dim
   list failed the static check in both modes; revert byte-identical,
   bundle matched the index after the rebuild.
+- **Refinement 2026-11-04 (settled in Chat): a third Show chip, `Done`,
+  ordered `Needs picks · Done · All`, default and non-persistence
+  unchanged, no chip counts; it filters on `statusOf` in `loadRoster`
+  (`src/features/admin.js`, as of 7335f5b) `=== "done"`, the same
+  predicate that renders the Done pill, so partial pickers stay under
+  `Needs picks`; an empty Done reads "No one has finished their picks
+  yet." when anyone is partial, else "No one's picked yet for this
+  show."**
 
 ---
 

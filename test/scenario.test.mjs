@@ -1246,6 +1246,26 @@ async function runMode(mode){
     wp.everyoneDone.rows.length === 0 && /Everyone has picks in/.test(wp.everyoneDone.empty)
       && wp.everyoneDoneAll.rows.length === 1 && wp.everyoneDoneAll.empty === "",
     `empty: "${wp.everyoneDone.empty}" rows: ${wp.everyoneDone.rows.length} all: ${wp.everyoneDoneAll.rows.length}`);
+  // Done chip (admin-panel.md → Who's Picked, refinement 2026-11-04).
+  check("the Show chip reads Needs picks · Done · All, in that order",
+    JSON.stringify(wp.show1Needs.chips) === JSON.stringify(["Needs picks", "Done", "All"]),
+    `chips: ${JSON.stringify(wp.show1Needs.chips)}`);
+  check("Done filters on the Done-pill status, not 'has any picks': with two partial pickers and nobody done, Done lists no rows and says 'No one has finished their picks yet.'",
+    wp.show1Done.on.length === 1 && wp.show1Done.on[0] === "Done" && wp.show1Done.rows.length === 0
+      && wp.show1Done.empty === "No one has finished their picks yet.",
+    `on: ${JSON.stringify(wp.show1Done.on)} rows: ${JSON.stringify(wp.show1Done.rows.map(r => [r.name, r.status]))} empty: "${wp.show1Done.empty}"`);
+  check("Done survives a show-select change and lists exactly the 5-of-5 player with the Done pill; summary line unchanged",
+    wp.show2Done.on.length === 1 && wp.show2Done.on[0] === "Done" && wp.show2Done.rows.length === 1
+      && rowOf(wp.show2Done, "Wooklord")?.status === "done" && rowOf(wp.show2Done, "Wooklord")?.pill === "Done"
+      && wp.show2Done.empty === "" && /^1 of 3 players have picks in/.test(wp.show2Done.summary),
+    `on: ${JSON.stringify(wp.show2Done.on)} rows: ${JSON.stringify(wp.show2Done.rows.map(r => [r.name, r.status]))} summary: ${wp.show2Done.summary}`);
+  check("when nobody has any picks, Done says 'No one's picked yet for this show.'",
+    wp.nobodyPickedDone.on[0] === "Done" && wp.nobodyPickedDone.rows.length === 0
+      && wp.nobodyPickedDone.empty === "No one's picked yet for this show.",
+    `rows: ${wp.nobodyPickedDone.rows.length} empty: "${wp.nobodyPickedDone.empty}"`);
+  check("a tab load from Done reopens on Needs picks",
+    wp.afterRerenderDone.on.length === 1 && wp.afterRerenderDone.on[0] === "Needs picks",
+    `on after re-render: ${JSON.stringify(wp.afterRerenderDone.on)}`);
   // Refinement 2026-10-26 (admin-panel.md → Who's Picked): names at full
   // color on every row; dim only the status parts. CSS is checked
   // statically (jsdom cannot compute opacity); the DOM facts prove the

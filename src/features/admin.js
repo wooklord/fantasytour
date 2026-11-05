@@ -1008,18 +1008,25 @@ export async function toggleFormat(showId, next){
     renderAdmin();
   }catch(e){ toast(esc(e.message)); }
 }
-// Who's Picked (admin-panel.md → "Who's Picked", LOCKED 2026-10-25). Two
-// lines per row: name + status pill, then the saved text. Status is derived
-// EXACTLY the way shows.js's pickButtonInfo does it — saved count against
-// slotDefs(format).length, with "done" meaning saved >= target — so this
-// panel and the pick button can never disagree about "done". The Show chip
-// is a chase list: module state, reset to "needs" by every renderAdmin (so
-// each load, and each realtime re-render, opens on the people still to
-// chase), kept only across show-select changes within one render. Never
-// persisted. The RPC returns every league member (left join), so "needs"
-// is a filter over a complete list, not a separate query.
+// Who's Picked (admin-panel.md → "Who's Picked", LOCKED 2026-10-25; Done
+// chip 2026-11-04). Two lines per row: name + status pill, then the saved
+// text. Status is derived EXACTLY the way shows.js's pickButtonInfo does
+// it — saved count against slotDefs(format).length, with "done" meaning
+// saved >= target — so this panel and the pick button can never disagree
+// about "done". statusOf is the ONE predicate for the pill AND every chip
+// filter: Done = statusOf "done", Needs picks = everything else, so a
+// partial picker stays under Needs picks. Never filter on the summary
+// line's `done` count, which is picks_count > 0 and includes partials.
+// The Show chip (needs / done / all) is a chase list: module state, reset
+// to "needs" by every renderAdmin — a tab load, a foreground
+// (refreshCurrent), a desktop renderAll, and the admin actions that
+// re-render the panel. No realtime event reaches renderAdmin (nothing
+// subscribes to picks), so the list does not live-update on a save either.
+// Kept across the loadRoster-only paths: show select, chip taps, a boot.
+// Never persisted. The RPC returns every league member (left join), so
+// each chip is a filter over a complete list, not a separate query.
 let rosterFilter = "needs";
-export function setRosterFilter(f){ rosterFilter = f === "all" ? "all" : "needs"; loadRoster(); }
+export function setRosterFilter(f){ rosterFilter = (f === "all" || f === "done") ? f : "needs"; loadRoster(); }
 export async function loadRoster(){
   const showId = Number($("#roster-show").value);
   if (!showId) return;
@@ -1037,15 +1044,24 @@ export async function loadRoster(){
     const PILL = { done: ["done", "Done"], partial: ["partial", "Partial"], none: ["waiting", "Waiting on"] };
     const MARK = { done: "✔", partial: "✓", none: "—" };
     const total = rows.length, done = rows.filter(r => r.picks_count > 0).length;
-    const shown = rosterFilter === "all" ? rows : rows.filter(r => statusOf(r) !== "done");
+    const shown = rosterFilter === "all" ? rows
+      : rosterFilter === "done" ? rows.filter(r => statusOf(r) === "done")
+      : rows.filter(r => statusOf(r) !== "done");
     const chip = `<div class="chiprow"><span class="lbl">Show</span><div class="switcher">
         <button class="linkbtn switcher-btn${rosterFilter==="needs"?" on":""}" onclick="setRosterFilter('needs')">Needs picks</button>
+        <button class="linkbtn switcher-btn${rosterFilter==="done"?" on":""}" onclick="setRosterFilter('done')">Done</button>
         <button class="linkbtn switcher-btn${rosterFilter==="all"?" on":""}" onclick="setRosterFilter('all')">All</button></div></div>`;
-    // An empty chase list must SAY so, not render nothing (the empty-set
-    // rule): everyone done is good news, no members is a different fact.
+    // An empty list must SAY so, not render nothing (the empty-set rule):
+    // everyone done is good news, no members is a different fact. Done is
+    // empty only when nobody is done, and that splits two ways (2026-11-04):
+    // some partial pickers, or nobody has picked at all.
     const empty = !rows.length
       ? '<p class="muted" id="roster-empty">No members in this league yet.</p>'
-      : '<p class="muted" id="roster-empty">Everyone has picks in — nobody to chase.</p>';
+      : rosterFilter !== "done"
+        ? '<p class="muted" id="roster-empty">Everyone has picks in — nobody to chase.</p>'
+        : rows.some(r => statusOf(r) === "partial")
+          ? '<p class="muted" id="roster-empty">No one has finished their picks yet.</p>'
+          : `<p class="muted" id="roster-empty">No one's picked yet for this show.</p>`;
     // Line two keeps the original "n picks · saved <when>" text verbatim,
     // bar one grammar fix: a single pick reads "1 pick", not "1 picks".
     $("#roster").innerHTML = `
