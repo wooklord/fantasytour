@@ -2271,7 +2271,21 @@ export async function runWhosPickedScenario({ html, scripts, mode }){
     const read = () => {
       const r = w.document.getElementById("roster");
       return {
-        summary: r?.querySelector("p.muted")?.textContent || "",
+        summary: w.document.getElementById("roster-sum")?.textContent || "",
+        // Collapsible section (2026-11-07): the body, its toggle, the stored
+        // map, where the picker and summary sit, every section's state, and
+        // the Collapse all button with what follows it.
+        collapsed: w.document.getElementById("sec-whospicked")?.classList.contains("hidden") ?? null,
+        toggle: w.document.getElementById("sec-btn-whospicked")?.textContent ?? null,
+        stored: (() => { try { return JSON.parse(w.localStorage.getItem("ft_admin_sections") || "{}"); } catch { return null; } })(),
+        pickerOutside: !!w.document.querySelector("#whospicked #roster-show") && !w.document.querySelector("#sec-whospicked #roster-show"),
+        summaryOutside: !!w.document.querySelector("#whospicked #roster-sum") && !w.document.querySelector("#sec-whospicked #roster-sum"),
+        chipLabel: r?.querySelector(".chiprow .lbl")?.textContent ?? null,
+        sections: [...w.document.querySelectorAll('[id^="sec-btn-"]')].map(b => { const k = b.id.slice("sec-btn-".length);
+          return { key: k, label: b.textContent, hidden: w.document.getElementById("sec-" + k)?.classList.contains("hidden") ?? null }; }),
+        collapseAll: w.document.getElementById("collapse-all")?.textContent ?? null,
+        collapseAllClass: w.document.getElementById("collapse-all")?.className ?? null,
+        collapseAllNext: w.document.getElementById("collapse-all-row")?.nextElementSibling?.querySelector(".scopeline-label")?.textContent ?? null,
         on: r ? [...r.querySelectorAll(".switcher-btn.on")].map(b => b.textContent) : [],
         chips: r ? [...r.querySelectorAll(".switcher-btn")].map(b => b.textContent) : [],
         rows: r ? [...r.querySelectorAll(".roster-row")].map(x => ({
@@ -2302,6 +2316,11 @@ export async function runWhosPickedScenario({ html, scripts, mode }){
     t.picks.push({ player_id: "p2", bracket_id: ids.CASUAL_ID, show_id: 1, slot: "opener", songname: "Distraction" });
   });
   const show1Needs = a.read();
+  // Collapsible (admin-panel.md → Who's Picked, refinement 2026-11-07):
+  // first visit collapsed; open it, and the state must ride through a show
+  // select, a chip tap and a tab re-render via ft_admin_sections.
+  a.w.toggleSection("whospicked");
+  const afterOpen = a.read();
   await a.selectShow(2);
   const show2Needs = a.read();
   a.w.setRosterFilter("all");
@@ -2329,7 +2348,19 @@ export async function runWhosPickedScenario({ html, scripts, mode }){
   clickTab(a.w, "admin");
   await tick(); await tick(); await tick(); await tick();
   const afterRerenderDone = a.read();
-  // Everyone done: p1 is the only member and has 5 of 5 on show 2.
+  // Collapse all / Expand all (admin-panel.md → section order, 2026-11-07):
+  // collapse everything, expand everything, then collapse everything and
+  // reopen one section by hand — the label must follow each time.
+  a.w.toggleAllSections();
+  const allCollapsed = a.read();
+  a.w.toggleAllSections();
+  const allExpanded = a.read();
+  a.w.toggleAllSections();
+  a.w.toggleSection("whospicked");
+  const oneReopened = a.read();
+  // Everyone done: p1 is the only member and has 5 of 5 on show 2 — read
+  // with the section still collapsed (a fresh window), so this is also the
+  // "summary updates while collapsed" case.
   const b = await load(t => { t.league_members = t.league_members.filter(m => m.player_id === "p1"); });
   await b.selectShow(2);
   const everyoneDone = b.read();
@@ -2343,7 +2374,7 @@ export async function runWhosPickedScenario({ html, scripts, mode }){
   c.w.setRosterFilter("done");
   await tick(); await tick(); await tick();
   const nobodyPickedDone = c.read();
-  return { show1Needs, show2Needs, show2All, afterRerender, everyoneDone, everyoneDoneAll,
+  return { afterOpen, allCollapsed, allExpanded, oneReopened, show1Needs, show2Needs, show2All, afterRerender, everyoneDone, everyoneDoneAll,
     show1Done, show2Done, afterRerenderDone, nobodyPickedDone };
 }
 

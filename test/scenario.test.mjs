@@ -350,6 +350,9 @@ async function runMode(mode){
   check("a genuine global admin (no league-admin flag) sees Admin content",
     /id="sec-master"/.test(globalAdmin.adminHtml) && /id="whospicked"/.test(globalAdmin.adminHtml),
     `adminHtml present: ${!!globalAdmin.adminHtml}`);
+  check("the Collapse all button renders for a global admin too (admin-panel.md → section order, 2026-11-07)",
+    /id="collapse-all"/.test(globalAdmin.adminHtml),
+    `adminHtml has collapse-all: ${/id="collapse-all"/.test(globalAdmin.adminHtml)}`);
   check("a genuine global admin's shared tab is labeled Admin, not Settings",
     globalAdmin.sharedTabLabel === "Admin",
     `sharedTabLabel: "${globalAdmin.sharedTabLabel}"`);
@@ -1285,6 +1288,37 @@ async function runMode(mode){
       && /\.pill\.waiting\{border-color:var\(--coral\);color:var\(--coral\)\}/.test(css)
       && !/\.pill\.none\{/.test(css),
     "styles.css: .pickres.miss / .pickres.roster-row.miss / .pill.waiting rules");
+
+  // Collapsible Who's Picked and Collapse all (admin-panel.md, 2026-11-07).
+  const allKeys = r => r.sections.map(s => s.key);
+  check("Who's Picked is a collapsible() section: first visit collapsed (#sec-whospicked hidden, toggle 'show', no stored key), the panel keeps id=whospicked, and the show picker and the summary sit OUTSIDE the collapsed body",
+    wp.show1Needs.collapsed === true && wp.show1Needs.toggle === "show" && !("whospicked" in (wp.show1Needs.stored || {}))
+      && wp.show1Needs.pickerOutside === true && wp.show1Needs.summaryOutside === true
+      && /^2 of 3 players have picks in$/.test(wp.show1Needs.summary),
+    `collapsed: ${wp.show1Needs.collapsed} toggle: ${wp.show1Needs.toggle} stored: ${JSON.stringify(wp.show1Needs.stored)} picker: ${wp.show1Needs.pickerOutside} summary: ${wp.show1Needs.summaryOutside} "${wp.show1Needs.summary}"`);
+  check("toggleSection('whospicked') opens it (toggle 'hide', ft_admin_sections.whospicked true) and the state rides through a show select, a chip tap and a tab re-render",
+    wp.afterOpen.collapsed === false && wp.afterOpen.toggle === "hide" && wp.afterOpen.stored?.whospicked === true
+      && wp.show2Needs.collapsed === false && wp.show2All.collapsed === false
+      && wp.afterRerender.collapsed === false && wp.afterRerender.toggle === "hide" && wp.afterRerender.stored?.whospicked === true,
+    `afterOpen: ${wp.afterOpen.collapsed}/${wp.afterOpen.toggle} show2Needs: ${wp.show2Needs.collapsed} show2All: ${wp.show2All.collapsed} afterRerender: ${wp.afterRerender.collapsed}/${wp.afterRerender.toggle}`);
+  check("the summary still updates while collapsed: a fresh window stays collapsed and a show select rewrites #roster-sum",
+    wp.everyoneDone.collapsed === true && /^1 of 1 players have picks in$/.test(wp.everyoneDone.summary),
+    `collapsed: ${wp.everyoneDone.collapsed} summary: "${wp.everyoneDone.summary}"`);
+  check("the chip row is labelled Filter (was Show); the three chips are unchanged",
+    wp.show1Needs.chipLabel === "Filter" && JSON.stringify(wp.show1Needs.chips) === JSON.stringify(["Needs picks", "Done", "All"]),
+    `label: ${wp.show1Needs.chipLabel}`);
+  check("Collapse all: every rendered section hidden with toggle 'show', every key stored false, button reads 'Expand all'; Expand all reverses it and reads 'Collapse all'",
+    wp.allCollapsed.sections.length >= 8 && wp.allCollapsed.sections.every(s => s.hidden === true && s.label === "show")
+      && allKeys(wp.allCollapsed).every(k => wp.allCollapsed.stored?.[k] === false) && wp.allCollapsed.collapseAll === "Expand all"
+      && wp.allExpanded.sections.every(s => s.hidden === false && s.label === "hide")
+      && allKeys(wp.allExpanded).every(k => wp.allExpanded.stored?.[k] === true) && wp.allExpanded.collapseAll === "Collapse all",
+    `collapsed: ${JSON.stringify(wp.allCollapsed.sections)} label ${wp.allCollapsed.collapseAll}; expanded label ${wp.allExpanded.collapseAll}`);
+  check("after Collapse all, reopening one section by hand flips the button back to 'Collapse all' with exactly one section open",
+    wp.oneReopened.sections.filter(s => s.hidden === false).length === 1 && wp.oneReopened.collapsed === false && wp.oneReopened.collapseAll === "Collapse all",
+    `open: ${JSON.stringify(wp.oneReopened.sections.filter(s => !s.hidden).map(s => s.key))} label ${wp.oneReopened.collapseAll}`);
+  check("the Collapse all button renders for a LEAGUE admin as .btn.ghost.small, directly above the 'Your account' divider — and on a first visit, with every section collapsed by default, it already reads 'Expand all'",
+    wp.show1Needs.collapseAll === "Expand all" && wp.show1Needs.collapseAllClass === "btn ghost small" && wp.show1Needs.collapseAllNext === "Your account",
+    `label: ${wp.show1Needs.collapseAll} class: ${wp.show1Needs.collapseAllClass} next: ${wp.show1Needs.collapseAllNext}`);
 
   // (4) registration cap
   const reg = await runRegisterLengthScenario({ html, scripts, mode });

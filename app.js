@@ -1823,7 +1823,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"4f32aa1-6e239f7"}</p>
+      <p class="colophon buildid">build ${"f9ad326-9a4d534"}</p>
     </div>
   </div>`;
   }
@@ -1957,11 +1957,34 @@ Save anyway?`)) return;
     const body = $("#sec-" + key), btn = $("#sec-btn-" + key);
     if (body) body.classList.toggle("hidden", !sectionState[key]);
     if (btn) btn.textContent = sectionState[key] ? "hide" : "show";
+    syncCollapseAll();
   }
-  function collapsible(key, title, bodyHtml, alwaysVisible = "") {
+  function renderedSectionKeys() {
+    return [...document.querySelectorAll('[id^="sec-btn-"]')].map((b) => b.id.slice("sec-btn-".length));
+  }
+  function syncCollapseAll() {
+    const btn = $("#collapse-all");
+    if (!btn) return;
+    const keys = renderedSectionKeys();
+    btn.textContent = keys.length && keys.every((k) => !sectionOpen(k)) ? "Expand all" : "Collapse all";
+  }
+  function toggleAllSections() {
+    const keys = renderedSectionKeys();
+    const open = keys.every((k) => !sectionOpen(k));
+    for (const key of keys) {
+      sectionState[key] = open;
+      const body = $("#sec-" + key), btn = $("#sec-btn-" + key);
+      if (body) body.classList.toggle("hidden", !open);
+      if (btn) btn.textContent = open ? "hide" : "show";
+    }
+    localStorage.setItem("ft_admin_sections", JSON.stringify(sectionState));
+    syncCollapseAll();
+  }
+  function collapsible(key, title, bodyHtml, alwaysVisible = "", { id, qualifier } = {}) {
     const open = sectionOpen(key);
-    return `<div class="panel">
-    <div class="row"><h2 style="margin:0">${title}</h2>
+    const badge = qualifier ? `<span class="section-scope">: ${esc(qualifier)}</span>` : "";
+    return `<div class="panel"${id ? ` id="${id}"` : ""}>
+    <div class="row"><h2 style="margin:0">${title}${badge}</h2>
       <button class="linkbtn" id="sec-btn-${key}" onclick="toggleSection('${key}')" style="margin-left:auto">${open ? "hide" : "show"}</button></div>
     ${alwaysVisible}
     <div id="sec-${key}" class="${open ? "" : "hidden"}">${bodyHtml}</div>
@@ -2128,7 +2151,7 @@ Relay this to them now \u2014 it will not be shown again.`);
     $("#rules-region").innerHTML = rulesRegionHtml(state.cfg, $("#c-mode").value);
   }
   async function renderAdmin() {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     clearTimersFor("admin");
     state.tab = "admin";
     markTab();
@@ -2160,16 +2183,13 @@ Relay this to them now \u2014 it will not be shown again.`);
       <div class="scopeline-note">These affect every league, not just this one.</div>
     </div>`;
     const accountLine = `<div class="scopeline"><div class="scopeline-label">Your account</div></div>`;
-    const bracketBadge = currentBracket() ? `<span class="section-scope">: ${esc(currentBracket().bracket_name)}</span>` : "";
     $("#main").innerHTML = `
-    <div class="panel" id="whospicked">
-      <h2>Who's picked${bracketBadge}</h2>
+    ${collapsible("whospicked", "Who's picked", `<div id="roster"><p class="muted">Pick a show.</p></div>`, `
       <div class="field"><label>Show</label>
         <select id="roster-show" onchange="loadRoster()">
           ${(shows || []).map((sh) => `<option value="${sh.id}" ${nextShow && sh.id === nextShow.id ? "selected" : ""}>${fmtDate(sh.showdate)} \u2014 ${esc(sh.venue || "TBA")}</option>`).join("")}
         </select></div>
-      <div id="roster"><p class="muted">Pick a show.</p></div>
-    </div>
+      <div id="roster-sum"></div>`, { id: "whospicked", qualifier: (_a = currentBracket()) == null ? void 0 : _a.bracket_name })}
     ${collapsible("shows", "Shows: cutoffs &amp; finalizing", `
       <p class="muted">Cutoffs are shown and edited in each show's venue-local time. New shows default to 6 PM venue-local.</p>
       ${(shows || []).map((sh) => {
@@ -2207,9 +2227,9 @@ Relay this to them now \u2014 it will not be shown again.`);
       <p class="muted">Shown to players on the "not in a league yet" screen. These apply to the whole league, both brackets.
         Anyone with the app can read them, so use a Discord invite you're willing to rotate.</p>
       <div class="field"><label>Facebook group URL</label>
-        <input id="lc-fb" type="url" placeholder="https://\u2026" value="${esc(((_a = currentBracket()) == null ? void 0 : _a.fb_url) || "")}" autocomplete="off"></div>
+        <input id="lc-fb" type="url" placeholder="https://\u2026" value="${esc(((_b = currentBracket()) == null ? void 0 : _b.fb_url) || "")}" autocomplete="off"></div>
       <div class="field"><label>Discord invite URL</label>
-        <input id="lc-discord" type="url" placeholder="https://\u2026" value="${esc(((_b = currentBracket()) == null ? void 0 : _b.discord_url) || "")}" autocomplete="off"></div>
+        <input id="lc-discord" type="url" placeholder="https://\u2026" value="${esc(((_c = currentBracket()) == null ? void 0 : _c.discord_url) || "")}" autocomplete="off"></div>
       <p class="muted" id="lc-discord-status">${esc(discordStatusLine(currentBracket()))}</p>
       <button class="btn ghost small" onclick="saveLeagueConfig()">Save links</button>
       <div class="err" id="lc-err"></div>
@@ -2251,7 +2271,7 @@ Relay this to them now \u2014 it will not be shown again.`);
       <button class="btn ghost small" id="add-rule-btn" onclick="addCustomRule()"
         ${(cfg.custom_rules || []).length >= CUSTOM_RULES_MAX ? "disabled" : ""}>+ add rule</button>
     `)}
-    ${((_c = currentBracket()) == null ? void 0 : _c.bracket_kind) === "official" ? collapsible("tiebreakers", "Season tiebreakers", `
+    ${((_d = currentBracket()) == null ? void 0 : _d.bracket_kind) === "official" ? collapsible("tiebreakers", "Season tiebreakers", `
       <p class="muted">Applies only to Official's season standings, when a season ends with players tied on points. Tried in order \u2014 the first layer that separates two players decides. Leave all "None", or exhaust every layer without a difference, and they share the placing \u2014 same as a per-show tie.</p>
       <div class="grid2">
         ${[0, 1, 2].map((i) => tiebreakerSelectRow(i, (cfg.tiebreakers || [])[i] || "")).join("")}
@@ -2277,9 +2297,11 @@ Relay this to them now \u2014 it will not be shown again.`);
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
     `) : ""}
     ${globalConsoleHtml()}
+    <div class="row" id="collapse-all-row" style="justify-content:flex-end;margin:2px 0 4px"><button class="btn ghost small" id="collapse-all" onclick="toggleAllSections()">Collapse all</button></div>
     ${accountLine}
     ${settingsPanelHtml()}
     ${footerHtml()}`;
+    syncCollapseAll();
     if ((shows || []).length) loadRoster();
     loadMembers();
     if (state.session.is_global_admin) loadGlobalLeagues();
@@ -2663,13 +2685,13 @@ Switch anyway?`
       const MARK = { done: "\u2714", partial: "\u2713", none: "\u2014" };
       const total = rows.length, done = rows.filter((r) => r.picks_count > 0).length;
       const shown = rosterFilter === "all" ? rows : rosterFilter === "done" ? rows.filter((r) => statusOf(r) === "done") : rows.filter((r) => statusOf(r) !== "done");
-      const chip = `<div class="chiprow"><span class="lbl">Show</span><div class="switcher">
+      const chip = `<div class="chiprow"><span class="lbl">Filter</span><div class="switcher">
         <button class="linkbtn switcher-btn${rosterFilter === "needs" ? " on" : ""}" onclick="setRosterFilter('needs')">Needs picks</button>
         <button class="linkbtn switcher-btn${rosterFilter === "done" ? " on" : ""}" onclick="setRosterFilter('done')">Done</button>
         <button class="linkbtn switcher-btn${rosterFilter === "all" ? " on" : ""}" onclick="setRosterFilter('all')">All</button></div></div>`;
       const empty = !rows.length ? '<p class="muted" id="roster-empty">No members in this league yet.</p>' : rosterFilter !== "done" ? '<p class="muted" id="roster-empty">Everyone has picks in \u2014 nobody to chase.</p>' : rows.some((r) => statusOf(r) === "partial") ? '<p class="muted" id="roster-empty">No one has finished their picks yet.</p>' : `<p class="muted" id="roster-empty">No one's picked yet for this show.</p>`;
+      $("#roster-sum").innerHTML = `<b style="color:var(--mint)">${done}</b> of ${total} players have picks in`;
       $("#roster").innerHTML = `
-      <p class="muted" style="margin-bottom:6px"><b style="color:var(--mint)">${done}</b> of ${total} players have picks in</p>
       ${chip}
       ${shown.map((r) => {
         const st = statusOf(r);
@@ -2682,6 +2704,7 @@ Switch anyway?`
       </div>`;
       }).join("") || empty}`;
     } catch (e) {
+      $("#roster-sum").innerHTML = "";
       $("#roster").innerHTML = `<p class="err">${esc(e.message)}</p>`;
     }
   }
@@ -3229,6 +3252,7 @@ Switch anyway?`
     toggleRoster,
     setRosterMember,
     toggleSection,
+    toggleAllSections,
     addCustomRule,
     checkRuleCap,
     resetMemberPin,

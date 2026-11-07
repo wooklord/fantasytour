@@ -152,6 +152,17 @@ which is no longer true):
   reassembly should be verified to be an identical multiset of lines.
   That is how the 2026-08-17 reorder was done; a piecemeal edit attempt
   during it did briefly cross the `shows` and `master` bodies.
+- **2026-11-07 — a "Collapse all" / "Expand all" button sits directly ABOVE
+  the "Your account" divider, after Global console, rendered for EVERY admin
+  (the dev's call: outside the Administrator gate, so league admins get it
+  too). It is a device-local VIEW CONTROL, not a scoped section: it acts on
+  the `collapsible()` sections rendered at the time, through the same
+  `ft_admin_sections` map (a section hidden by gating keeps its stored
+  state), and reads "Expand all" only when all of them are collapsed. The
+  dividers' claims do not cover it and its position is not a scope
+  statement — do not "fix" the order by moving it under one.
+  `.btn.ghost.small`, right-aligned in its own row (`#collapse-all-row`).
+  Who's picked is included (see its 2026-11-07 refinement below).**
 
 ---
 
@@ -232,6 +243,19 @@ same day, before any code; sibling record for the same batch:
   `Needs picks`; an empty Done reads "No one has finished their picks
   yet." when anyone is partial, else "No one's picked yet for this
   show."**
+- **Refinement 2026-11-07 (the dev's calls): Who's picked is now a standard
+  `collapsible()` section — same helper, same `ft_admin_sections`
+  persistence (so it stays however it was left across tab switches and
+  reloads), same lowercase show/hide toggle, first visit collapsed. The
+  show picker and the "<n> of <m> players have picks in" summary ride in
+  the helper's alwaysVisible slot, so both are always visible; the summary
+  is `#roster-sum` (1rem, `--cream`, count mint bold) and is rewritten on
+  every `loadRoster`, open or not. The body (`#roster`) is the chip row and
+  the rows / empty message. The helper gained a trailing `{ id, qualifier }`
+  option for the panel id and the escaped bracket badge, so `title` stays
+  a plain string at every call site. The chip label reads `Filter` (was
+  `Show`, which collided with the show picker's label two lines above and
+  with the new toggle); the three chips and their behaviour are unchanged.**
 
 ---
 

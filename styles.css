@@ -561,6 +561,11 @@ html[data-theme="light"] .panel.live-halo{
    row is listed, so a dimmed name only cost legibility. */
 .pickres.roster-row.miss > span:first-child,.pickres.roster-row.miss .roster-l2{opacity:.55}
 .pickres.roster-row.miss .nm{opacity:1;color:var(--cream)}
+/* Who's Picked summary ("<n> of <m> players have picks in"), OUTSIDE the
+   collapsible body (admin-panel.md → Who's Picked, 2026-11-07): 1rem cream
+   so it reads at a glance while the list is collapsed; the count keeps its
+   inline mint bold. */
+#roster-sum{font-size:1rem;color:var(--cream);margin:2px 0 6px}
 /* Members list rows (docs/decisions/admin-panel.md → "Members panel
    cleanup", LOCKED 2026-10-26, ROWS A): two lines. The name is .mname,
    deliberately NOT .nm — admin lists never truncate, the live

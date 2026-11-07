@@ -60,8 +60,9 @@ function readCustomRules(){
 // localStorage-backed map read once at module load, written back on every
 // toggle. Every section wired through collapsible() below defaults to
 // collapsed (a missing key is falsy), so there's no separate "defaults"
-// list to maintain — "Who's picked" and Settings never call collapsible()
-// at all, since they're always expanded and have no toggle.
+// list to maintain. Who's picked joined the helper on 2026-11-07 (its show
+// picker and summary ride in the alwaysVisible slot); Settings is the one
+// panel that never calls collapsible() — always expanded, no toggle.
 let sectionState = {};
 try{ sectionState = JSON.parse(localStorage.getItem("ft_admin_sections") || "{}"); }catch(e){ sectionState = {}; }
 function sectionOpen(key){ return !!sectionState[key]; }
@@ -71,6 +72,37 @@ export function toggleSection(key){
   const body = $("#sec-"+key), btn = $("#sec-btn-"+key);
   if (body) body.classList.toggle("hidden", !sectionState[key]);
   if (btn) btn.textContent = sectionState[key] ? "hide" : "show";
+  syncCollapseAll();
+}
+// Collapse all / Expand all (admin-panel.md → section order, 2026-11-07):
+// one button, directly above the "Your account" divider, for EVERY admin.
+// It acts on the sections RENDERED right now (found by their sec-btn- ids)
+// and writes each key through the same map, so a section hidden by gating
+// (Season tiebreakers while the switcher shows Casual) keeps its stored
+// state. The label reads "Expand all" only when every rendered section is
+// collapsed; toggleSection re-syncs it, so collapsing the last open section
+// by hand flips it too. A device-local view control — NOT a scoped section;
+// the dividers' claims do not cover it.
+function renderedSectionKeys(){
+  return [...document.querySelectorAll('[id^="sec-btn-"]')].map(b => b.id.slice("sec-btn-".length));
+}
+function syncCollapseAll(){
+  const btn = $("#collapse-all");
+  if (!btn) return;
+  const keys = renderedSectionKeys();
+  btn.textContent = keys.length && keys.every(k => !sectionOpen(k)) ? "Expand all" : "Collapse all";
+}
+export function toggleAllSections(){
+  const keys = renderedSectionKeys();
+  const open = keys.every(k => !sectionOpen(k));
+  for (const key of keys){
+    sectionState[key] = open;
+    const body = $("#sec-"+key), btn = $("#sec-btn-"+key);
+    if (body) body.classList.toggle("hidden", !open);
+    if (btn) btn.textContent = open ? "hide" : "show";
+  }
+  localStorage.setItem("ft_admin_sections", JSON.stringify(sectionState));
+  syncCollapseAll();
 }
 // Collapsing only toggles a CSS class (.hidden => display:none) on the body
 // div — the section's inputs/selects stay in the DOM with their values
@@ -79,10 +111,16 @@ export function toggleSection(key){
 // slot for content that must stay visible even when collapsed (the
 // Official-no-season warning) — it renders between the header and the
 // collapsible body, never inside it.
-function collapsible(key, title, bodyHtml, alwaysVisible = ""){
+// Trailing options (2026-11-07, for Who's picked): `id` goes on the panel
+// (the tests key on it); `qualifier` is a PLAIN STRING rendered as the
+// heading's bracket badge (.section-scope) and escaped HERE, so `title`
+// stays a plain string at every call site and this helper still cannot
+// carry an unescaped interpolation.
+function collapsible(key, title, bodyHtml, alwaysVisible = "", { id, qualifier } = {}){
   const open = sectionOpen(key);
-  return `<div class="panel">
-    <div class="row"><h2 style="margin:0">${title}</h2>
+  const badge = qualifier ? `<span class="section-scope">: ${esc(qualifier)}</span>` : "";
+  return `<div class="panel"${id ? ` id="${id}"` : ""}>
+    <div class="row"><h2 style="margin:0">${title}${badge}</h2>
       <button class="linkbtn" id="sec-btn-${key}" onclick="toggleSection('${key}')" style="margin-left:auto">${open ? "hide" : "show"}</button></div>
     ${alwaysVisible}
     <div id="sec-${key}" class="${open ? "" : "hidden"}">${bodyHtml}</div>
@@ -383,23 +421,24 @@ export async function renderAdmin(){
   // peer job in scopeLine above (bracket · league), so reusing it here would
   // imply the same relationship and mislead.
   //
-  // Were a collapsible() section ever to need the same, do NOT make its
-  // `title` accept markup — it is a plain string at all 11 call sites, so
-  // escaping is nobody's problem today; making it HTML invites an unescaped
-  // interpolation into a function that currently cannot have that bug. Fold
-  // `alwaysVisible` and a qualifier into a trailing options object instead.
-  const bracketBadge = currentBracket()
-    ? `<span class="section-scope">: ${esc(currentBracket().bracket_name)}</span>`
-    : "";
+  // Since 2026-11-07 the section goes through collapsible() like the rest
+  // (admin-panel.md → Who's Picked, refinement 2026-11-07). The badge is the
+  // helper's `qualifier` option — a plain string the helper escapes, so
+  // `title` is still a plain string at every call site and the helper still
+  // cannot carry an unescaped interpolation. The show picker and the
+  // "<n> of <m> players have picks in" summary (#roster-sum) ride in the
+  // alwaysVisible slot, so both read whether or not the list is open; the
+  // body (#roster: the Filter chips and the rows / empty message) collapses.
+  // The collapse class lives on #sec-whospicked, which loadRoster never
+  // rewrites, so a chip tap or a show select cannot disturb the stored
+  // state, and every renderAdmin re-reads it from the map like any section.
   $("#main").innerHTML = `
-    <div class="panel" id="whospicked">
-      <h2>Who's picked${bracketBadge}</h2>
+    ${collapsible("whospicked", "Who's picked", `<div id="roster"><p class="muted">Pick a show.</p></div>`, `
       <div class="field"><label>Show</label>
         <select id="roster-show" onchange="loadRoster()">
           ${(shows||[]).map(sh => `<option value="${sh.id}" ${nextShow && sh.id===nextShow.id ? "selected" : ""}>${fmtDate(sh.showdate)} — ${esc(sh.venue||"TBA")}</option>`).join("")}
         </select></div>
-      <div id="roster"><p class="muted">Pick a show.</p></div>
-    </div>
+      <div id="roster-sum"></div>`, { id: "whospicked", qualifier: currentBracket()?.bracket_name })}
     ${collapsible("shows", "Shows: cutoffs &amp; finalizing", `
       <p class="muted">Cutoffs are shown and edited in each show's venue-local time. New shows default to 6 PM venue-local.</p>
       ${(shows||[]).map(sh => {
@@ -523,9 +562,11 @@ export async function renderAdmin(){
       <p class="muted" style="margin-top:8px">Scoring also runs automatically on the cron schedule. These are manual overrides.</p>
     `) : ""}
     ${globalConsoleHtml()}
+    <div class="row" id="collapse-all-row" style="justify-content:flex-end;margin:2px 0 4px"><button class="btn ghost small" id="collapse-all" onclick="toggleAllSections()">Collapse all</button></div>
     ${accountLine}
     ${settingsPanelHtml()}
     ${footerHtml()}`;
+  syncCollapseAll();
   if ((shows||[]).length) loadRoster();
   loadMembers();
   if (state.session.is_global_admin) loadGlobalLeagues();
@@ -1017,7 +1058,9 @@ export async function toggleFormat(showId, next){
 // filter: Done = statusOf "done", Needs picks = everything else, so a
 // partial picker stays under Needs picks. Never filter on the summary
 // line's `done` count, which is picks_count > 0 and includes partials.
-// The Show chip (needs / done / all) is a chase list: module state, reset
+// The Filter chip (needs / done / all; labelled "Show" until 2026-11-07,
+// which collided with the show picker's label and the new section toggle)
+// is a chase list: module state, reset
 // to "needs" by every renderAdmin — a tab load, a foreground
 // (refreshCurrent), a desktop renderAll, and the admin actions that
 // re-render the panel. No realtime event reaches renderAdmin (nothing
@@ -1047,7 +1090,7 @@ export async function loadRoster(){
     const shown = rosterFilter === "all" ? rows
       : rosterFilter === "done" ? rows.filter(r => statusOf(r) === "done")
       : rows.filter(r => statusOf(r) !== "done");
-    const chip = `<div class="chiprow"><span class="lbl">Show</span><div class="switcher">
+    const chip = `<div class="chiprow"><span class="lbl">Filter</span><div class="switcher">
         <button class="linkbtn switcher-btn${rosterFilter==="needs"?" on":""}" onclick="setRosterFilter('needs')">Needs picks</button>
         <button class="linkbtn switcher-btn${rosterFilter==="done"?" on":""}" onclick="setRosterFilter('done')">Done</button>
         <button class="linkbtn switcher-btn${rosterFilter==="all"?" on":""}" onclick="setRosterFilter('all')">All</button></div></div>`;
@@ -1064,8 +1107,11 @@ export async function loadRoster(){
           : `<p class="muted" id="roster-empty">No one's picked yet for this show.</p>`;
     // Line two keeps the original "n picks · saved <when>" text verbatim,
     // bar one grammar fix: a single pick reads "1 pick", not "1 picks".
+    // The summary lives OUTSIDE the collapsible body (#roster-sum, in the
+    // section's alwaysVisible slot) so it reads while the list is collapsed;
+    // rewritten on every load, open or not.
+    $("#roster-sum").innerHTML = `<b style="color:var(--mint)">${done}</b> of ${total} players have picks in`;
     $("#roster").innerHTML = `
-      <p class="muted" style="margin-bottom:6px"><b style="color:var(--mint)">${done}</b> of ${total} players have picks in</p>
       ${chip}
       ${shown.map(r => { const st = statusOf(r); return `<div class="pickres roster-row ${st==="none"?"miss":"hit"}" data-status="${st}">
         <span>${MARK[st]}</span>
@@ -1076,7 +1122,7 @@ export async function loadRoster(){
             : "no picks yet"}</div>
         </div>
       </div>`; }).join("") || empty}`;
-  }catch(e){ $("#roster").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+  }catch(e){ $("#roster-sum").innerHTML = ""; $("#roster").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
 // Player-facing labels are fixed/code-owned (src/core/slotTypes.js) — the
 // admin only ever picks a TYPE and a point value now. The dropdown option

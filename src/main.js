@@ -13,7 +13,7 @@ import { joinDiscord, dismissDiscord, toggleDiscordHow, setDiscordTips } from ".
 import {
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
   toggleFormat, saveCutoff, finalizeShow, reopenShow, toggleBans, unban, runEdge, bootPlayer,
-  searchMembers, addMember, toggleRoster, setRosterMember, toggleSection,
+  searchMembers, addMember, toggleRoster, setRosterMember, toggleSection, toggleAllSections,
   addCustomRule, checkRuleCap, resetMemberPin,
   onModeChange, addRankRow, renumberRanks, saveMasterSwitch,
   globalCreateLeague, globalSearchPlayers, globalAppointAdmin, globalResetPin,
@@ -26,7 +26,7 @@ Object.assign(window, {
   toggleTheme, logout, doLogin, doRegister, submitForcedPinChange, changeOwnPin, openShow, setScoresView, renderShows, setBoardSeason, toggleTieGroup, setStatsSort,
   loadRoster, addSeasonRow, saveSeason, deleteSeason, addSlot, saveConfig,
   toggleFormat, saveCutoff, finalizeShow, reopenShow, toggleBans, unban, runEdge, bootPlayer,
-  searchMembers, addMember, toggleRoster, setRosterMember, toggleSection,
+  searchMembers, addMember, toggleRoster, setRosterMember, toggleSection, toggleAllSections,
   addCustomRule, checkRuleCap, resetMemberPin,
   onModeChange, addRankRow, renumberRanks, saveMasterSwitch,
   globalCreateLeague, globalSearchPlayers, globalAppointAdmin, globalResetPin,
