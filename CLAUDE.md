@@ -239,6 +239,9 @@ in the file each one names.
   multi-row-insert failure in `activateSeasons()` (fixed: upsert + stamp only
   on success; watch for an unguarded batch write followed by an unconditional
   "done" stamp anywhere) and the still-open unit test for its error path.
+  Same family, 2026-11-07: `sync_songs` failed on EVERY press since
+  2026-07-18 (a duplicate Carton title sank the whole upsert; the error read
+  "[object Object]"); fixed in code, deploy pending with the 3-hour reminder.
 - **✅ Ranked-choice deploy batch and first production run (2026-08-14/15).**
   If ranked scores ever look uniform and low, check the deployed `scoring.js`
   has `scoreRankedPicks` first; recovery is `reopen` → fix → `finalize`.

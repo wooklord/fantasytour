@@ -89,6 +89,33 @@ export function mapSetlistRows(show, rows) {
 // re-finalize after a reopen cannot leave an old baseline behind for the daily
 // check to compare against: the row goes to the null-hash branch instead, which
 // re-derives the frozen verdicts first. Plan section 3, the 2026-11-02 correction.
+// The Carton's /songs.json → songs_cache rows (moved here from index.ts
+// 2026-11-07 so the dedupe is unit-tested: test/catalogSync.test.mjs). The
+// Carton can list one title twice — "When I Paint My Masterpiece " sits
+// under two ids since 2026-07-18 — and a multi-row upsert that meets the
+// same conflict key twice is Postgres error 21000 ("cannot affect row a
+// second time"), which sinks the WHOLE statement: every press of Sync song
+// catalog from 2026-07-18 to 2026-11-07 wrote zero rows that way
+// (docs/decisions/edge-function.md, 2026-11-07). First occurrence wins. The
+// key is the exact decoded name, trailing space included, because that is
+// the column the upsert conflicts on and what the stopgap rows carry.
+export function mapSongRows(rows) {
+  const out = [];
+  const seen = new Set();
+  for (const r of rows ?? []) {
+    const songname = decodeEntities(r.name ?? r.songname);
+    if (!songname || seen.has(songname)) continue;
+    seen.add(songname);
+    out.push({
+      songname,
+      times_played: Number(r.times_played ?? 0) || null,
+      last_played: r.last_played || null,
+      is_original: r.isoriginal != null ? Boolean(Number(r.isoriginal)) : null,
+    });
+  }
+  return out;
+}
+
 const NO_BASELINE = Object.freeze({
   setlist_hash_scoring: null,
   setlist_hash_full: null,

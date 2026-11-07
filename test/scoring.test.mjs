@@ -1057,7 +1057,7 @@ check("E4 a suffix only: +debut, +cover and no partial credit are stripped, and 
   check("W4 the cron path passes no final flag", occurs("scoreShow(showRows[0].show, showRows)"), 1);
   check("W5 scoreShow has its definition and exactly three callers", occurs("scoreShow("), 4);
   check("W6 one definition of the mapping and of decodeEntities", [occurs("mapSetlistRows(show, rows)"), occurs("function decodeEntities"), occurs("const mine ="), occurs(".filter((s: any) => s.songname)")], [1, 0, 0, 0]);
-  check("W7 the import names all four", occurs('import { decodeEntities, mapSetlistRows, finalUpdatePatch, withFinalBaseline } from "./setlistCheck.js";'), 1);
+  check("W7 the import names all five (mapSongRows joined 2026-11-07, the songs_cache dedupe)", occurs('import { decodeEntities, mapSetlistRows, mapSongRows, finalUpdatePatch, withFinalBaseline } from "./setlistCheck.js";'), 1);
   check("W8 the fallback warning fires on a final pass only", occurs("if (isFinal && !matched) console.warn("), 1);
   check("W9 both final updates log their error", occurs("if (error) console.error(`final update failed:"), 2);
 }

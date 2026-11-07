@@ -557,7 +557,12 @@ and is summarised under "Survey basis" below.
   scratch copy), then confirm `main` carries the same change so A cannot
   regress it. Flag which path applies at the time; no deploy without the
   dev. Tonight's reminder (show 1786388257, cutoff 23:00 UTC) fires at the
-  old 1 hour.
+  old 1 hour. **Updated 2026-11-07 (Kyle's call): the hotfix branch now
+  carries TWO changes — this reminder AND the `songs_cache` sync fix (the
+  `mapSongRows` dedupe plus `errorText`; `docs/decisions/edge-function.md`,
+  2026-11-07). Both ride with deploy A if A is ready; otherwise both go on
+  the branch off `829ca6a`, where `index.ts` does not yet import
+  `setlistCheck.js`, so that import and `errorText.js` are added by hand.**
 
 ### Corrections to Chat (recorded 2026-10-28)
 

@@ -50,6 +50,49 @@
   intentional there — a dead Discord webhook correctly shouldn't retry-storm
   forever, unlike a roster real players get scored against. Nothing else in
   the file currently matches the dangerous version of this shape.
+- **2026-11-07 — The same family, found live: `sync_songs` had failed on
+  EVERY press since 2026-07-18, writing zero rows, and the error was
+  hidden.** The Carton's `/songs.json` lists "When I Paint My Masterpiece "
+  (trailing space) under two ids (created 2026-07-18 00:26 and 00:38 UTC).
+  `syncSongs` upserted all 370 rows in one statement with
+  `onConflict: "songname"`; one statement meeting the same conflict key
+  twice is Postgres error 21000 ("ON CONFLICT DO UPDATE command cannot
+  affect row a second time"), and the whole statement rolls back — so
+  `songs_cache` froze at 363 of 370 (newest Carton title present: created
+  2026-05-15; the seven absent: the duplicate pair, And It Stoned Me, Wild
+  Mountain Honey, The Wreck of the Edmund Fitzgerald, Codex, Fire on the
+  Mountain). The handler returned `{ ok: false, error: String(e) }`, and
+  String() of a PostgrestError — a plain object, not an Error — is
+  "[object Object]", which is all the admin toast ever said. Found when a
+  player could not pick The Wreck of the Edmund Fitzgerald on the night of
+  2026-11-07 (reproduced from the CLI: HTTP 500, that body; count 363
+  before and after a press). **Scoring was never affected**: nothing but
+  this sync reads or writes `songs_cache` — scoring matches
+  `setlist_songs` against picks through `norm()` — so a title typed in full
+  always scored; only the autocomplete and the not-in-catalog warning were
+  wrong. **Stopgap, run by Kyle in the SQL editor that night:** an insert of
+  the six distinct missing titles (the duplicate pair collapses to one) with
+  the Carton's EXACT names, trailing spaces included, `times_played`/
+  `last_played` null, `is_original` false, `on conflict (songname) do
+  nothing` — count 369 afterwards. The trailing spaces are deliberate: they
+  are the conflict key, so a later successful sync upserts cleanly OVER
+  those rows instead of adding a second spelling beside them; the
+  autocomplete's `normSong` is whitespace-insensitive and `savePicks` trims
+  the value, so players never see the space. **Fix, committed 2026-11-07,
+  NOT deployed:** `mapSongRows` in `setlistCheck.js` dedupes by exact
+  decoded name, first occurrence wins (test/catalogSync.test.mjs carries the
+  real Carton shape); `errorText` in `errorText.js` replaces `String(e)` in
+  the handler (message + code + details, JSON fallback) and the 500 path
+  logs it; the response adds `carton_rows` beside `songs` so the duplicate
+  count is visible. **Deploy sequencing (Kyle's call):** ships with the
+  3-hour reminder — with deploy A if A is ready on 2026-11-08, else on the
+  daylight hotfix branch off `829ca6a` (discord-routing.md, the 2026-11-07
+  note). Cherry-pick caveat for that branch: at `829ca6a` `index.ts` does
+  not import `setlistCheck.js` and defines `decodeEntities` itself, so the
+  hotfix adds the import (and `errorText.js`) by hand. The generalisation
+  for the pattern above: a batch write can fail on the DATA, not only on a
+  conflict with existing rows, and an error that is thrown but stringified
+  badly is as invisible as one never checked.
 
 ---
 

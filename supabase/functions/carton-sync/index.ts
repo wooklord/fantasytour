@@ -75,7 +75,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { norm, deriveSlotFacts, scorePicks } from "./scoring.js";
 import { dailyGateDue, diffShows, cutoffPlan, appendFlag } from "./showSync.js";
 import { resolveHook, discordBody, postOutcome, statusPatch, NO_KEY } from "./discord.js";
-import { decodeEntities, mapSetlistRows, finalUpdatePatch, withFinalBaseline } from "./setlistCheck.js";
+import { decodeEntities, mapSetlistRows, mapSongRows, finalUpdatePatch, withFinalBaseline } from "./setlistCheck.js";
+import { errorText } from "./errorText.js";
 
 // Instance constant: setlist data source.
 const CARTON = "https://thecarton.net/api/v2";
@@ -548,18 +549,17 @@ async function dailyDiscordCheckSafe(live: boolean) {
 // ---------- sync songs (global catalog — unchanged by the multi-tenant split) ----------
 async function syncSongs() {
   const rows = await carton(`/songs.json`);
-  const upserts = rows.map((r: any) => ({
-    songname: decodeEntities(r.name ?? r.songname),
-    times_played: Number(r.times_played ?? 0) || null,
-    last_played: r.last_played || null,
-    is_original: r.isoriginal != null ? Boolean(Number(r.isoriginal)) : null,
-  })).filter((r: any) => r.songname);
+  // mapSongRows (setlistCheck.js) dedupes by exact name: the Carton's
+  // duplicate "When I Paint My Masterpiece " sank every batch from
+  // 2026-07-18 to 2026-11-07 (docs/decisions/edge-function.md, 2026-11-07).
+  const upserts = mapSongRows(rows);
   for (let i = 0; i < upserts.length; i += 500) {
     const { error } = await supa.from("songs_cache")
       .upsert(upserts.slice(i, i + 500), { onConflict: "songname" });
     if (error) throw error;
   }
-  return { songs: upserts.length };
+  // carton_rows − songs = how many duplicates the Carton is carrying.
+  return { songs: upserts.length, carton_rows: rows.length };
 }
 
 // ---------- season activation ----------
@@ -1051,6 +1051,11 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true, ...out }, { headers: cors });
   } catch (e) {
     const status = (e instanceof AuthError || e instanceof ForbiddenError) ? e.status : 500;
-    return Response.json({ ok: false, error: String(e) }, { status, headers: cors });
+    // errorText, not String(e): a PostgrestError is a plain object and
+    // String() of it is "[object Object]", which hid the songs_cache
+    // failure for four months (docs/decisions/edge-function.md, 2026-11-07).
+    const error = errorText(e);
+    if (status === 500) console.error("carton-sync failed:", error);
+    return Response.json({ ok: false, error }, { status, headers: cors });
   }
 });
