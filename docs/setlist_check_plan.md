@@ -1082,6 +1082,14 @@ live that night, and 11-06 is also the first real Discord post through
 the Stage Y path (`docs/decisions/discord-routing.md`) — one new variable
 on a show night, not two. Steps 1 and 2 can run any time before it: the
 live function reads none of what Stage Z creates.
+**Held 2026-11-07 (Kyle's call).** Gate 0 ran at 18:43 UTC: show 1786388218
+read `final` in both league 1 and league 2 (anon `get_league_shows`), but the
+same read found show 1786388257, dated 2026-11-07, `upcoming` in both leagues
+with cutoff 23:00 UTC that night. Same reasoning as the 11-06 hold: deploy A's
+`scoreShow` would get its first live run on a real show night. Deploy A is held
+until 1786388257 is final in BOTH leagues (the 08:00 ET pass on 2026-11-08, or
+earlier by hand). Only gate 0 ran: no step 1 check, no rollback-target download,
+no deploy. The deploy prompt is re-run from gate 0.
 ```powershell
 supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz
 ```
