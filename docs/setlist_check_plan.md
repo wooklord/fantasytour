@@ -1085,11 +1085,16 @@ live function reads none of what Stage Z creates.
 **Held 2026-11-07 (Kyle's call).** Gate 0 ran at 18:43 UTC: show 1786388218
 read `final` in both league 1 and league 2 (anon `get_league_shows`), but the
 same read found show 1786388257, dated 2026-11-07, `upcoming` in both leagues
-with cutoff 23:00 UTC that night. Same reasoning as the 11-06 hold: deploy A's
-`scoreShow` would get its first live run on a real show night. Deploy A is held
-until 1786388257 is final in BOTH leagues (the 08:00 ET pass on 2026-11-08, or
+with cutoff 23:00 UTC that night. Kyle's call: hold, chosen over a time-boxed
+same-day deploy (deploy, then the league 11 rehearsal by 22:00 UTC, else roll
+back before the cutoff). Holding keeps deploy A off a live show until the
+rehearsal has proved it, at the cost of a day. Deploy A is held until
+1786388257 is final in BOTH leagues (the 08:00 ET pass on 2026-11-08, or
 earlier by hand). Only gate 0 ran: no step 1 check, no rollback-target download,
-no deploy. The deploy prompt is re-run from gate 0.
+no deploy. The deploy prompt is re-run from gate 0. *Corrected the same day
+(`ba89c72` first gave the reason as the 11-06 one-variable rule; that reason no
+longer applied, as gate 0 itself noted, since tonight has no first-time Discord
+path).*
 ```powershell
 supabase functions deploy carton-sync --project-ref zdfhglvjxquvkjyvophz
 ```
