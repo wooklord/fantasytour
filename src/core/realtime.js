@@ -39,8 +39,8 @@ async function handlePing(showId){
     let mine = [];
     try{ mine = await rpc("get_my_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:sh.id }); }catch(e){}
     toast(mine.length
-      ? `⏰ 1 hour to cutoff — ${esc(sh.venue||sh.showdate)}. Your picks are in ✔`
-      : `⏰ 1 hour to cutoff — ${esc(sh.venue||sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
+      ? `⏰ Picks lock soon — ${esc(sh.venue||sh.showdate)}. Your picks are in ✔`
+      : `⏰ Picks lock soon — ${esc(sh.venue||sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
   }
   if (sh && ls && fresh(ls.lock_sent))
     toast(`\u{1F512} All picks locked — ${esc(sh.venue||sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);

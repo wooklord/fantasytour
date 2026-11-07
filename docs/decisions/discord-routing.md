@@ -113,7 +113,7 @@ and is summarised under "Survey basis" below.
   - Green Eggs gets its own copy of the song posts for a show on both
     schedules.
 - **The posts** (none names its league):
-  - the 1-hour reminder, naming members who haven't picked;
+  - the lock reminder, naming members who haven't picked — 3 hours before cutoff from the next edge deploy, 1 hour until then (the 2026-11-07 note under Part 2 status);
   - the lock;
   - the show winner, per bracket;
   - the season champion;
@@ -511,7 +511,7 @@ and is summarised under "Survey basis" below.
   the build id. In each league: (1) Shows with the install bar or the
   welcome card up shows NO Discord bar, and dismissing those does not
   summon it until the next render (switch tabs and back); (2) the bar reads
-  "Get show reminders and scores in Discord" with Join · How? · ✕; (3) How?
+  "Get push notification reminders & scores from Discord" (reworded 2026-11-07, `6e239f7`; the run used the earlier "Get show reminders and scores in Discord") with Join · How? · ✕; (3) How?
   opens the All Messages tip and closes again; (4) Join opens the invite in
   a new tab, and on return the bar is gone and stays gone through tab
   switches, a reopen, logout and re-login; (5) Settings → "Show Discord
@@ -533,6 +533,31 @@ and is summarised under "Survey basis" below.
   or `http_401` also drops `discord_live`, which hides that league's bar on
   the next boot. The 09:00 ET daily check keeps running meanwhile.
   - **Recorded 2026-11-02:** once the shadow rehearsal league exists (`docs/setlist_check_plan.md` §8 step 0), a third `league_shows` row with `remind_sent` stamped and a third `leagues` row at `discord_status = no_key` are expected, with no failed-post log line. This watch item reads leagues 1 and 2.
+
+- **2026-11-07 — Lock reminder moves from 1 hour to 3 hours before cutoff
+  (the dev's call). COMMITTED, edge NOT deployed.** `soonIso` in
+  `announcements()` is now 180 minutes; the two post strings read
+  "⏰ **3 hours to lock**"; `remind_sent` stays the dedupe, unrenamed. For the
+  two leagues' 23:00 UTC cutoffs the post lands at 20:00 UTC instead of
+  22:00. The in-app toast (`realtime.js`, fired off a fresh `remind_sent`)
+  drops the number — "⏰ Picks lock soon —" — so it cannot disagree with the
+  post while the client and the function ship on different days. Window
+  behavior is otherwise unchanged: the row leaves the query the moment it is
+  stamped, so the width changes neither double-fire nor miss; a cutoff set or
+  moved to under 3 hours out fires at the next tick saying "3 hours"
+  regardless, and a cutoff edit inside the window re-fires at once (both the
+  same shape as the 1-hour version). **Deploy is PENDING, not held by this
+  change but by deploy A:** the function's HEAD (`131bfd2`) carries deploy A's
+  `scoreShow` changes, and the live function is `829ca6a`'s (verified by
+  download and diff 2026-11-07 19:20 UTC), so a deploy from `main` ships A.
+  The dev's sequence for 2026-11-08: if deploy A is ready (offline replay
+  run, shadow-league rehearsal done) the reminder rides along with it; if A
+  is NOT ready, a daylight hotfix — branch off `829ca6a`, apply ONLY the
+  180-minute window and the two post strings, deploy from that branch (not a
+  scratch copy), then confirm `main` carries the same change so A cannot
+  regress it. Flag which path applies at the time; no deploy without the
+  dev. Tonight's reminder (show 1786388257, cutoff 23:00 UTC) fires at the
+  old 1 hour.
 
 ### Corrections to Chat (recorded 2026-10-28)
 

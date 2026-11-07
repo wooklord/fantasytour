@@ -1823,7 +1823,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"3f70e0d-4e14bfa"}</p>
+      <p class="colophon buildid">build ${"4f32aa1-6e239f7"}</p>
     </div>
   </div>`;
   }
@@ -3013,7 +3013,7 @@ Switch anyway?`
         mine = await rpc("get_my_picks", { p_name: state.session.name, p_pin: state.session.pin, p_bracket_id: state.currentBracketId, p_show_id: sh.id });
       } catch (e) {
       }
-      toast(mine.length ? `\u23F0 1 hour to cutoff \u2014 ${esc(sh.venue || sh.showdate)}. Your picks are in \u2714` : `\u23F0 1 hour to cutoff \u2014 ${esc(sh.venue || sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
+      toast(mine.length ? `\u23F0 Picks lock soon \u2014 ${esc(sh.venue || sh.showdate)}. Your picks are in \u2714` : `\u23F0 Picks lock soon \u2014 ${esc(sh.venue || sh.showdate)}. You haven't voted!`, "", `remind:${sh.id}`);
     }
     if (sh && ls && fresh(ls.lock_sent))
       toast(`\u{1F512} All picks locked \u2014 ${esc(sh.venue || sh.showdate)}. Boards are public.`, "", `lock:${sh.id}`);

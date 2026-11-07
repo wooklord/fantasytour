@@ -663,11 +663,11 @@ async function autoFinalize() {
 // ---------- announcements (per league) ----------
 async function announcements() {
   const nowIso = new Date().toISOString();
-  const soonIso = new Date(Date.now() + 60 * 60_000).toISOString();
+  const soonIso = new Date(Date.now() + 180 * 60_000).toISOString(); // 3 hours (was 1, until 2026-11-07)
   const { data: leagues } = await supa.from("leagues").select("id,name");
   const leagueName = new Map((leagues ?? []).map((l: any) => [l.id, l.name]));
 
-  // (a) 1-hour warning, naming whoever hasn't picked in either bracket yet
+  // (a) 3-hour warning, naming whoever hasn't picked in either bracket yet
   {
     const { data: lsRows } = await supa.from("league_shows").select("*")
       .is("remind_sent", null).gt("cutoff_at", nowIso).lte("cutoff_at", soonIso).neq("status", "final");
@@ -686,8 +686,8 @@ async function announcements() {
         .map((m: any) => pn[m.player_id]).filter(Boolean);
       const label = show?.venue ?? show?.showdate ?? `show ${ls.show_id}`;
       await notifyLeague(ls.league_id, leagueName.get(ls.league_id) ?? "", missing.length
-        ? `⏰ **1 hour to lock** — ${label}. Still waiting on: ${missing.join(", ")}`
-        : `⏰ **1 hour to lock** — ${label}. Everyone's in \u{1F95A}`);
+        ? `⏰ **3 hours to lock** — ${label}. Still waiting on: ${missing.join(", ")}`
+        : `⏰ **3 hours to lock** — ${label}. Everyone's in \u{1F95A}`);
       await supa.from("league_shows").update({ remind_sent: nowIso })
         .eq("league_id", ls.league_id).eq("show_id", ls.show_id);
       await pingRealtime(ls.league_id, ls.show_id);
