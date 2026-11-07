@@ -422,7 +422,7 @@ export async function savePicks(){
   // player and a dead pick.
   const wildcardLive = state.cfg.mode !== "ranked_choice";
   const unknown = picks.filter(p => !(wildcardLive && isWildcard(p.songname)) && !state.songList.some(s => normSong(s.songname) === normSong(p.songname)));
-  if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):\n${unknown.map(u=>u.songname).join("\n")}\n\nSave anyway?`)) return;
+  if (unknown.length && !confirm(`Not in the catalog (typo, comment, or a bold call?):\n\n${unknown.map(u=>u.songname).join("\n")}\n\nExact song title match required to score.\n\nSave anyway?`)) return;
   try{
     await rpc("submit_picks", { p_name:state.session.name, p_pin:state.session.pin, p_bracket_id:state.currentBracketId, p_show_id:state.currentShow.id, p_picks:picks });
     localStorage.removeItem(draftKey(state.currentShow.id));

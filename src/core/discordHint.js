@@ -59,7 +59,7 @@ export function discordHintApplies({ row, dismissed, installOnScreen, welcomeOnS
 export function discordTipsPossible(row = currentBracket()){ return !!discordLinkOf(row); }
 
 const DONT = "Don't show again";
-export const DISCORD_BAR_TEXT = "Get show reminders and scores in Discord";
+export const DISCORD_BAR_TEXT = "Get push notification reminders & scores from Discord";
 // D3: a plain-text tip in the "How?" expander; the role ping stays deferred.
 export const DISCORD_TIP = "After you join, open the channel's notification settings and pick All Messages. Discord only buzzes for mentions otherwise.";
 // Join is an anchor, never window.open (the dev's call 4: in-app browsers

@@ -784,8 +784,11 @@
     const picks = [...document.querySelectorAll(".slotline input")].map((i) => ({ slot: i.dataset.slot, songname: i.value.trim() })).filter((p) => p.songname);
     const wildcardLive = state.cfg.mode !== "ranked_choice";
     const unknown = picks.filter((p) => !(wildcardLive && isWildcard(p.songname)) && !state.songList.some((s) => normSong(s.songname) === normSong(p.songname)));
-    if (unknown.length && !confirm(`Not in the catalog (typo, or a bold debut call?):
+    if (unknown.length && !confirm(`Not in the catalog (typo, comment, or a bold call?):
+
 ${unknown.map((u) => u.songname).join("\n")}
+
+Exact song title match required to score.
 
 Save anyway?`)) return;
     try {
@@ -1065,7 +1068,7 @@ Save anyway?`)) return;
     return !!discordLinkOf(row);
   }
   var DONT2 = "Don't show again";
-  var DISCORD_BAR_TEXT = "Get show reminders and scores in Discord";
+  var DISCORD_BAR_TEXT = "Get push notification reminders & scores from Discord";
   var DISCORD_TIP = "After you join, open the channel's notification settings and pick All Messages. Discord only buzzes for mentions otherwise.";
   function barHtml2(url) {
     return `<div class="installbar discordbar"><span class="ib-text">${DISCORD_BAR_TEXT}</span>
@@ -1820,7 +1823,7 @@ Save anyway?`)) return;
       <p>Setlist data from <a href="https://thecarton.net" target="_blank" rel="noopener">The Carton</a>.</p>
       <p class="merch-plug"><a href="https://shop.eggymusic.com/" target="_blank" rel="noopener">Grab some merch</a> \u2014 it goes a long way toward keeping the band on the road.</p>
       <p class="colophon">Created by Kyle McKinley</p>
-      <p class="colophon buildid">build ${"f5ed220-7335f5b"}</p>
+      <p class="colophon buildid">build ${"3f70e0d-4e14bfa"}</p>
     </div>
   </div>`;
   }

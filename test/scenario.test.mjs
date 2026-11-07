@@ -1584,7 +1584,7 @@ async function runMode(mode){
 
   // ---------- Discord hint (docs/decisions/discord-routing.md, Part 2, the dev's seven calls of 2026-11-01) ----------
   const dh = await runDiscordHintScenario({ html, scripts, mode });
-  const DH_TEXT = "Get show reminders and scores in Discord";
+  const DH_TEXT = "Get push notification reminders & scores from Discord";
   const DH_TIP = "After you join, open the channel's notification settings and pick All Messages. Discord only buzzes for mentions otherwise.";
   const DH_LINK = "https://example.invalid/discord-invite", DH_LINK2 = "https://example.invalid/discord-invite-2";
   const noBar = r => r.bar === false && r.bars === 0;
