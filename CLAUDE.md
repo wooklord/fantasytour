@@ -595,7 +595,8 @@ matches — full text in `scoring-rules`) · `deploy-cache` ·
 DST bug) · `postgres-rules` · `realtime` · `score-corrections` (Stage AA +
 first targeted fix: APPLIED 2026-11-15; open: reopen gap, backups) · `scoring-modes` ·
 `scoring-rules` · `setlist-check` (decision (2), the daily setlist check:
-LOCKED 2026-10-31, not built) · `standings-ux` · `testing-harness` · `tooling`.
+LOCKED 2026-10-31, not built; item 8 scope 2026-11-15: not scorer/deploy bugs,
+whose repair is the dev's alone (Global)) · `standings-ux` · `testing-harness` · `tooling`.
 
 `docs/history/` (resolved, dated): `2026-08-14-format-toggle-orphans` ·
 `2026-08-15-nickname-redaction` · `2026-08-16-stage-p` (gate #7) ·

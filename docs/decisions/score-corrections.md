@@ -287,6 +287,44 @@ raises on purpose so its before/after shows in the SQL editor's error panel
    row, Finalize on a row past cutoff, for shows of the last seven days. Three
    accounts pass that guard in Green Eggs. A direct request with a name and
    PIN reaches any show, with no seven-day limit.
+
+   **Scope question, ANSWERED 2026-11-15 (the dev's call).** A read-only
+   survey that day found the reopen-then-finalize remedy still written down
+   for two different causes, a Carton correction and a scorer or deploy bug,
+   and no record said whether `setlist-check.md` item 8 reached the second.
+   The answer, at the weight given: **the 2026-10-31 rule (item 8: Carton
+   corrections never go through reopen/finalize; the fix is targeted and
+   logged) does NOT cover scorer or deploy bugs, and repairing a scorer or
+   deploy bug is the dev's alone (Global).** It is recorded under item 8 as
+   "Scope, 2026-11-15".
+
+   **What that answer does not do.** It chooses none of the five options
+   above; all five stay open. It changes no code and no copy: Reopen, its
+   confirm text and the guard on the edge actions are exactly as they were,
+   so a league admin can still reach both actions. It does not say how a
+   scorer or deploy bug is to be repaired, only whose repair it is.
+
+   **The survey's nine passages are left as they are** (the dev's call,
+   2026-11-15: not to be rewritten yet). Listed here so the list does not
+   live only in a conversation; nothing below was changed:
+   - `src/features/admin.js`: `reopenShow`'s confirm text, and the comment
+     above it. The comment cites `CLAUDE.md` for the workflow, and `CLAUDE.md`
+     never held that wording.
+   - `CLAUDE.md` → "Postgres / Supabase gotchas" → the ranked-choice deploy
+     stub ("recovery is …").
+   - `scoring-rules.md`, three: the "Already-finalized shows" repair path
+     under the `slotDetermined` bullet; "Reopen is the only path back" under
+     "Debut detection"; paragraph (b) under "OPEN RULES DECISIONS", which
+     stands above its own 2026-10-31 decision.
+   - `docs/history/2026-08-ranked-choice-deploy.md`, two: the "Recovery if"
+     lines in the RESOLVED bullet, and the one in the VERIFIED bullet.
+   - `docs/history/pre-2.0-pending-work.md`: the "Reopen button" bullet, the
+     text the `admin.js` comment paraphrases.
+
+   The same wording also sits in code outside that count: the edge function's
+   header comment, the comments on `reopenShow` and the "Scores reopened"
+   Discord post text (`index.ts`), a comment above `scorePicks`
+   (`scoring.js`), and a comment in the unapplied Stage R.
 5. **Backups. Follow-up pending.** Found on 2026-11-15, nothing changed:
    - **Nothing schedules `dump.sh`.** No scheduled task on the dev's machine
      names it (36 non-Microsoft tasks listed), the database's one pg_cron job
