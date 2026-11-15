@@ -592,7 +592,8 @@ matches — full text in `scoring-rules`) · `deploy-cache` ·
 `discord-routing` · `edge-function` · `frontend-css` ·
 `multi-league-switcher` · `official-opt-in-default` · `onboarding` ·
 `post-first-show-batch` (the 🚨 overlay entry, LOCKED list, batch (a)–(f),
-DST bug) · `postgres-rules` · `realtime` · `scoring-modes` ·
+DST bug) · `postgres-rules` · `realtime` · `score-corrections` (Stage AA +
+first targeted fix: APPROVED 2026-11-15, NOT APPLIED) · `scoring-modes` ·
 `scoring-rules` · `setlist-check` (decision (2), the daily setlist check:
 LOCKED 2026-10-31, not built) · `standings-ux` · `testing-harness` · `tooling`.
 
