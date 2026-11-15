@@ -226,8 +226,10 @@ raises on purpose so its before/after shows in the SQL editor's error panel
 3. **The 2026-11-13 show in Green Eggs was reopened and re-finalized on
    2026-11-15 at 15:13 UTC.** Per the dev: done by a league admin, not a
    correction the dev approved, and the path the 2026-10-31 policy rules out.
-   **The dev is asking that league admin directly what Carton change prompted
-   it. Platform logs are not being pursued for now** (the dev's call,
+   **Confirmed by the dev on 2026-11-15: it was the same league admin who
+   finalized the 2026-11-14 show by hand (item 6).** **STILL OPEN: what
+   Carton change prompted it.** The dev is asking that league admin directly.
+   **Platform logs are not being pursued for now** (the dev's call,
    2026-11-15; the one attempt to read them, through the CLI's stored login,
    was refused by the session's permission layer and not worked around). What
    the data showed on 2026-11-15:
@@ -258,7 +260,8 @@ raises on purpose so its before/after shows in the SQL editor's error panel
      names the top scorer(s) and the top score. Compared with the second
      post, it answers whether the show's laurel changed hands.
    - **No record says who called either action.** `reopen` and `finalize`
-     write no audit row.
+     write no audit row. The identification above is the dev's, not the
+     data's.
 4. **Closing the reopen gap. Five options are recorded; the dev has not
    chosen, and nothing is built.**
    1. Limit Reopen to Global, in the edge action and on the button.
@@ -298,8 +301,11 @@ raises on purpose so its before/after shows in the SQL editor's error panel
    - **There is no PITR**, and the platform lists no backups
      (`supabase backups list`: empty).
    - The restore path is still untested (`backups.md`).
-6. **Green Eggs is finalized by hand, show after show.** Ten of its eleven
+6. **ANSWERED 2026-11-15, closed: who finalized the 2026-11-14 show by hand
+   at 11:51 UTC.** The dev says it was the same league admin who reopened the
+   2026-11-13 show (item 3). **It was a routine hand finalize, not a
+   problem.** The answer is the dev's; no record names the caller, and it
+   covers that one press. The pattern it fits: ten of Green Eggs' eleven
    shows from 2026-10-15 to 2026-11-14 carry a finalize stamp at an hour the
-   08:00 ET auto pass never runs; the eleventh, 2026-11-13, lost its first
-   stamp to the reopen. Who presses it is not recorded, so the 2026-11-14
-   press at 11:51 UTC stays unconfirmed: the data cannot name the caller.
+   08:00 ET auto pass never runs, and the eleventh, 2026-11-13, lost its
+   first stamp to the reopen. Row kept so the numbering holds.
