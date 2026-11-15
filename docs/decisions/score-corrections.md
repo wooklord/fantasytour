@@ -2,23 +2,22 @@
 
 Decision record, binding. Opened 2026-11-15.
 
-> **STATUS: APPROVED 2026-11-15 (the dev's calls), NOT APPLIED.** Stage AA is
-> written and tested locally, not applied. The correction is an untracked
-> transaction, not run, not even as a dry run. Nothing in the live database has
-> changed. On the dev's instruction the outcome is recorded here AFTER the
-> apply; until then this file holds the decisions, the state and the open
-> questions, so none of it lives only in a conversation.
+> **STATUS: APPLIED 2026-11-15.** The dev applied Stage AA and then the
+> correction in the Supabase SQL editor; the correction committed at 20:52
+> UTC and was verified read-only afterwards ("Outcome"). The items under
+> "Open" are open questions and pending follow-ups, **not decisions**.
 
 Standing rule (`CLAUDE.md` → Conventions): no player nickname, no player id, no
 pick contents and no score totals in this file. League, bracket and show ids are
-fine. Code is cited by function name plus "as of <sha>".
+fine, and so is the id of a log row. Code is cited by function name plus "as of
+<sha>".
 
 ## What this is
 
 One pick on one sheet in Green Eggs Official (league 2, bracket 3) on the
-2026-11-14 show (1786388366) is to be changed after cutoff, and that sheet's
-score with it: +2 points. The show is not reopened and not re-finalized, and
-no other row changes.
+2026-11-14 show (1786388366) was changed after cutoff, and that sheet's score
+with it: +2 points. The show was not reopened and not re-finalized, and no
+other row changed.
 
 ## The weight (the dev's call, 2026-11-15, recorded as given)
 
@@ -45,17 +44,13 @@ reopen/finalize). The permission is the exception above and nothing else.
    and the stored setlist still lacks the song. "Precedent: the 2026-08-14
    case" in item 8 names the case the POLICY came from, not a performed fix.
    There was no method, no template file, no RPC and no log record to follow:
-   **this is the first targeted correction this project has prepared.**
+   **this was the first targeted correction this project has made.**
 2. **The brief named `C:\Users\kylem\scripts\backup-fantasyeggy.ps1` as the
    backup script. That file does not exist, and neither does the folder.** The
    backup tool is `dump.sh` in the backups folder outside the repo
-   (`backups.md`). It was run on 2026-11-15 at 20:01 UTC and completed with
-   its row counts printed. The dump before that was 2026-08-16, the day the
-   script was written: no scheduled task on the dev's machine runs it (36
-   non-Microsoft tasks listed, none names it), the database has one pg_cron
-   job (scoring), and the platform lists no backups (`supabase backups list`:
-   empty, PITR off). **Dumps are manual, and there have been two.** Reported;
-   nothing was changed. The restore path is still untested.
+   (`backups.md`). It was run on 2026-11-15 at 20:01 UTC, before anything was
+   applied, and completed with its row counts printed. What that turned up
+   about backups is under "Open".
 
 ## Decisions locked 2026-11-15 (the dev's calls)
 
@@ -87,10 +82,9 @@ reopen/finalize). The permission is the exception above and nothing else.
      `setlistCheck.js` and the replay tool never read it. No view, policy,
      index or trigger mentions either column. With no reader, the time of the
      last write is the honest value, and the old one is kept in the log row.
-4. **Apply order:** the backup (done, see above; run it again first if the
-   apply is not the same day), Stage AA STEP 0, Stage AA, STEP 2, the dry run,
-   the real copy. Each is the dev's to run; nothing is applied without the
-   dev's go.
+4. **Apply order:** the backup, Stage AA STEP 0, Stage AA, STEP 2, the dry
+   run, the real copy, each run by the dev. Followed on 2026-11-15
+   ("Outcome").
 5. **`admin_adjust_verdict`: its build trigger has fired** (item 7: "the first
    real use of the template"). **It is not built now** (the dev's call).
 
@@ -109,8 +103,8 @@ reopen/finalize). The permission is the exception above and nothing else.
   reason "played", with no cover or debut bonus and no Perfect row. +2.
 - **The gap, stated plainly.** No snapshot of the setlist as Green Eggs'
   finalize saw it exists. Deploy A is not live, so the four setlist-check
-  columns are null on every `league_shows` row (there are no hashes to
-  disturb, and the correction writes none). `setlist_songs` is shared across
+  columns are null on every `league_shows` row (there were no hashes to
+  disturb, and the correction wrote none). `setlist_songs` is shared across
   leagues and rewritten by any league's scoring pass: Green Eggs was finalized
   by hand at 11:51 UTC on 2026-11-15, and the other two leagues' final passes
   ran at 13:00 UTC, 68 minutes later. The stored rows are therefore "as of the
@@ -131,14 +125,15 @@ reopen/finalize). The permission is the exception above and nothing else.
   are computed on read (`computeStandings` in `src/core/tiebreak.js` as of
   `1080130`, from `get_bracket_scores`); no table stores them and no SQL
   function writes `scores`. The league's Casual bracket has no entries on this
-  show, so there is no second row to keep in step.
+  show, so there was no second row to keep in step.
 
 ## The transaction (untracked)
 
-Two copies, real and dry run, in the repo's gitignored `.scratch/` folder.
-They name the player, so they are never committed. The DO block is identical in
-both but for one constant; the dry run raises on purpose so its before/after
-shows in the SQL editor's error panel (the STEP 2B idiom), then `rollback`.
+Two copies, real and dry run, kept in the repo's gitignored `.scratch/` folder
+(`2026-11-15-pick-correction/`). They name the player, so they are never
+committed. The DO block is identical in both but for one constant; the dry run
+raises on purpose so its before/after shows in the SQL editor's error panel
+(the STEP 2B idiom), then `rollback`.
 
 - **Snapshots** (temp tables): all of `scores`, `picks`, `league_shows`,
   `setlist_songs`, `admin_audit_log`, and the per-entry points for the show
@@ -159,70 +154,151 @@ shows in the SQL editor's error panel (the STEP 2B idiom), then `rollback`.
   pick changed in its song alone; unless the score row changed in one element
   alone, with points equal to the computed total, to the sum of the breakdown
   and to old points plus the element's change.
-- **Tested 2026-11-15 on a throwaway local Postgres 18.6**, stub tables built
-  from the live column lists and loaded with the real 19 sheets: 63 of 63.
-  Stage AA's steps before and after, its rollback, and its refusal to roll
-  back once a correction is logged; the dry run three ways with the database
-  byte-identical afterwards; 17 deliberate stray writes, each raising and
-  persisting nothing; 11 wrong starting states refused; the real copy changing
-  exactly the two rows plus the log; a second run refusing. `stageAA.test.mjs`:
-  11 of 11 mutations killed. **Not run on the live database (17.6), and not
-  through the SQL editor.**
-- **Not done by it:** no realtime ping, no Discord post. The player sees the
-  score on their next load.
+- **Tested before the apply, 2026-11-15, on a throwaway local Postgres 18.6**
+  with stub tables built from the live column lists and loaded with the real
+  19 sheets: 63 of 63. Stage AA's steps before and after, its rollback, and
+  its refusal to roll back once a correction is logged; the dry run three ways
+  with the database byte-identical afterwards; 17 deliberate stray writes,
+  each raising and persisting nothing; 11 wrong starting states refused; the
+  real copy changing exactly the two rows plus the log; a second run refusing.
+  `stageAA.test.mjs`: 11 of 11 mutations killed. Its first run on the live
+  database (17.6) and through the SQL editor was the dev's dry run below.
 
-## Open
+## Outcome (applied 2026-11-15)
+
+**As the dev reported it, run by the dev in the SQL editor, in this order:**
+
+1. The backup: `dump.sh`, 20:01 UTC, completed with row counts.
+2. Stage AA STEP 0: 3 of 3 ok. Stage AA: applied. STEP 2: 4 of 4 ok, the
+   table holding one `remove_account` row and nothing else.
+3. The dry run: `DRY RUN OK`. 19 entries on the show in the league, 1 changed,
+   the target; the pick's song old to new with its saved-at unchanged; the
+   verdict from not played to played at flat points; +2, the points equal to
+   the sum of the breakdown; the bracket's top score for the show the same
+   before and after; the show still final. It used log id 4, since identity
+   values are not rolled back.
+4. The real copy: committed. Log row id 5, `logged_at` 2026-11-15 20:52:32
+   UTC, action `adjust_verdict`; the pick, points and verdict before and after
+   as expected; the pick's saved-at unchanged; the show final; the four
+   setlist-check columns still null.
+
+**Verified afterwards, read-only (20:54 UTC, a session that cannot write):**
+
+- **The pick row:** the new song, the same slot, the same saved-at. The
+  sheet's other five picks are untouched.
+- **The score row:** one breakdown element differs from before, in place; six
+  elements, no bonus row; points equal the sum of the breakdown and the old
+  points plus 2; `updated_at` equals the log row's `logged_at`.
+- **The show:** final in all three leagues, each league's `winner_sent`
+  unchanged, the four setlist-check columns null in each.
+- **The other 18 entries on the show:** identical to the read taken at 19:29
+  UTC, before anything was applied, in points, every breakdown element,
+  `updated_at` and picks. All 18 still carry the 11:51 UTC final-pass time.
+- **Table-wide:** exactly one `scores` row has been written since the 20:01
+  backup, the target; no `picks` row has been saved since it; `scores`,
+  `picks` and `league_shows` hold the row counts the dump printed, and
+  `setlist_songs` the count read before the apply. The stored setlist's md5
+  and both bracket configs are unchanged.
+- **`admin_audit_log`:** ids 3 and 5. Exactly one `adjust_verdict` row, id 5;
+  id 4 is absent, used by the dry run. The row's actor is the Global admin,
+  its target the player, its league 2; its `detail` holds the pick, the
+  verdict and the points before and after and both timestamps. The check
+  reads the two-value list, validated.
+- **The scorer agrees with what is stored:** `scorePicks` reproduces all 19
+  stored rows from the stored setlist, the corrected one included, and every
+  sheet's `picks` rows and breakdown name the same pairs. So the daily
+  setlist check's re-derivation, when it is built, has nothing to flag here.
+
+**What follows from it:**
+
+- No Discord post and no realtime ping were made. The posted winner is
+  unchanged and still right; the player sees the score on their next load.
+- Stage AA's STEP 2 now reads AA2.4 false, as its own comment says it will,
+  and STEP R can no longer land: the log row holds the new action.
+- The log row is readable only in the SQL editor (RLS on, no policy). It is
+  the one place that says who and what; the `.scratch/` files are the other.
+
+## Open (questions and pending follow-ups, NOT decisions)
 
 1. **Are post-cutoff pick corrections allowed in general?** OPEN. See "The
    weight".
-2. **`admin_adjust_verdict`.** Trigger fired, not built.
-3. **Platform API logs were not read.** The check was asked for; reading the
-   CLI's stored login to call the Management API was refused by the session's
-   permission layer and was not worked around. Free-plan log retention is
-   short, so the 2026-11-15 calls may be gone before anyone looks.
-4. **The 2026-11-13 show in Green Eggs was reopened and re-finalized on
-   2026-11-15 at 15:13 UTC.** Reported the same day; no decision yet. Per the
-   dev: done by a league admin, not a correction the dev approved, and the
-   path the 2026-10-31 policy rules out. What the data shows:
+2. **`admin_adjust_verdict`.** Its trigger has fired; it is not built.
+3. **The 2026-11-13 show in Green Eggs was reopened and re-finalized on
+   2026-11-15 at 15:13 UTC.** Per the dev: done by a league admin, not a
+   correction the dev approved, and the path the 2026-10-31 policy rules out.
+   **The dev is asking that league admin directly what Carton change prompted
+   it. Platform logs are not being pursued for now** (the dev's call,
+   2026-11-15; the one attempt to read them, through the CLI's stored login,
+   was refused by the session's permission layer and not worked around). What
+   the data showed on 2026-11-15:
    - All 19 score rows were rewritten at 15:13:38–41 UTC and `winner_sent`
      re-stamped at 15:13:41. **A second winner post went out:** the league's
      `discord_ok_at` reads 15:13:44, after the "Scores reopened" post
      `reopenShow` sends.
    - **The first finalize's values are not preserved anywhere readable.**
-     `reopenShow` deletes the rows; the last dump was 2026-08-16; the platform
-     holds no backups; cron responses carry no points and are kept six hours;
-     Postgres logs DDL only. The deleted row versions may still sit in the
-     table (its last autovacuum was 2026-11-14 04:25 UTC), but reading them
-     needs `pageinspect`, which is not installed and whose raw-page functions
-     need a superuser, which the project's role is not. Not attempted.
+     `reopenShow` deletes the rows; the last dump before it was 2026-08-16;
+     the platform holds no backups; cron responses carry no points and are
+     kept six hours; Postgres logs DDL only. The deleted row versions may
+     still sit in the table (its last autovacuum was 2026-11-14 04:25 UTC),
+     but reading them needs `pageinspect`, which is not installed and whose
+     raw-page functions need a superuser, which the project's role is not.
+     Not attempted.
    - **So whether any score moved is unknown.** What is known: the rows now
      stored equal a replay against the stored setlist and against that day's
      Carton, 19 of 19 both ways; picks were last saved before the cutoff; The
      Carton's row ids show no row added after the next night's show began.
      Bracket config, format and roster keep no history.
+   - **A what-if scan, speculative:** of seven single Carton corrections
+     tried, five would have moved no score; a "Debut" footnote later corrected
+     to a first-time-played cover would have moved one sheet by 2 and left the
+     laurel where it is; an encore first entered as part of set 2 would have
+     moved four sheets by 3 each and changed the laurel. It says what the
+     league admin's answer would imply, not what happened.
    - **The one surviving witness is the first Discord winner post**, which
      names the top scorer(s) and the top score. Compared with the second
      post, it answers whether the show's laurel changed hands.
-   - **Who can do this:** the edge actions `reopen` and `finalize`, each
-     behind `requireLeagueAdmin` (as of `b9f3ee6`: `_auth_player`, then
-     `_is_league_admin_or_global`), so a league admin of that league or
-     Global. In the UI: Admin tab → "Shows: cutoffs & finalizing" → Reopen on
-     a final row, Finalize on a row past cutoff, for shows of the last seven
-     days. Three accounts pass that guard in Green Eggs. A direct request
-     with a name and PIN reaches any show, with no seven-day limit.
-   - **No record says who called either action.** Neither writes an audit
-     row; `admin_audit_log` held one `remove_account` row.
-   - **The app itself tells an admin to do it.** `reopenShow`'s confirm text
-     and the comment above it in `src/features/admin.js` (as of `7361c72`)
-     describe reopen then finalize as the workflow for a Carton correction.
-     The 2026-10-31 policy was recorded in this repo and never reached the UI
-     or the league admins.
-   - **Options put to the dev, none chosen, nothing built:** Reopen limited to
-     Global (the edge action and the button); the confirm dialog stating the
-     policy and what a reopen destroys; `reopen` and `finalize` writing to
-     `admin_audit_log`; `reopenShow` saving the rows it deletes; a refusal to
-     reopen a show older than the cron's one-day floor.
-5. **Green Eggs is finalized by hand, show after show.** Ten of its eleven
+   - **No record says who called either action.** `reopen` and `finalize`
+     write no audit row.
+4. **Closing the reopen gap. Five options are recorded; the dev has not
+   chosen, and nothing is built.**
+   1. Limit Reopen to Global, in the edge action and on the button.
+   2. Rewrite the Reopen confirm text to state the policy and what a reopen
+      destroys.
+   3. Log `reopen` and `finalize` to `admin_audit_log`.
+   4. Have `reopenShow` save the rows it deletes, so a reopen can be compared
+      and undone.
+   5. Refuse a reopen on a show older than the cron's one-day floor, unless
+      Global.
+
+   **The Reopen confirm text currently tells admins to reopen after a Carton
+   correction** ("use this after correcting the setlist on The Carton, then
+   Finalize once it's right"; `reopenShow` in `src/features/admin.js` as of
+   `7361c72`, and the comment above it says the same). The dev's note: that is
+   why it happened. The 2026-10-31 policy was recorded in this repo and never
+   reached the UI or the league admins.
+
+   Who can reach the actions today: the edge actions `reopen` and `finalize`,
+   each behind `requireLeagueAdmin` (as of `b9f3ee6`: `_auth_player`, then
+   `_is_league_admin_or_global`), so a league admin of that league or Global.
+   In the UI: Admin tab → "Shows: cutoffs & finalizing" → Reopen on a final
+   row, Finalize on a row past cutoff, for shows of the last seven days. Three
+   accounts pass that guard in Green Eggs. A direct request with a name and
+   PIN reaches any show, with no seven-day limit.
+5. **Backups. Follow-up pending.** Found on 2026-11-15, nothing changed:
+   - **Nothing schedules `dump.sh`.** No scheduled task on the dev's machine
+     names it (36 non-Microsoft tasks listed), the database's one pg_cron job
+     is scoring, and nothing failed, because nothing was ever set to run. It
+     has been run twice: 2026-08-16, the day it was written, and 2026-11-15.
+   - **Its table list predates `admin_audit_log` and the newer tables.** It
+     dumps twelve of the twenty tables in `public`. Not dumped:
+     `admin_audit_log`, `admin_signup_clears`, `banned_names`,
+     `global_banned_names`, `realtime_pings`, `setlist_flags`,
+     `sync_flag_clears`, `sync_state`. So the log row of this correction is in
+     no backup.
+   - **There is no PITR**, and the platform lists no backups
+     (`supabase backups list`: empty).
+   - The restore path is still untested (`backups.md`).
+6. **Green Eggs is finalized by hand, show after show.** Ten of its eleven
    shows from 2026-10-15 to 2026-11-14 carry a finalize stamp at an hour the
    08:00 ET auto pass never runs; the eleventh, 2026-11-13, lost its first
    stamp to the reopen. Who presses it is not recorded, so the 2026-11-14
