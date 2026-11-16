@@ -113,7 +113,7 @@ and is summarised under "Survey basis" below.
   - Green Eggs gets its own copy of the song posts for a show on both
     schedules.
 - **The posts** (none names its league):
-  - the lock reminder, naming members who haven't picked — 3 hours before cutoff from the next edge deploy, 1 hour until then (the 2026-11-07 note under Part 2 status);
+  - the lock reminder, naming members who haven't picked — 3 hours before cutoff (live since the 2026-11-16 hotfix deploy, 1 hour before that: the 2026-11-07 and 2026-11-16 notes under Part 2 status);
   - the lock;
   - the show winner, per bracket;
   - the season champion;
@@ -563,6 +563,30 @@ and is summarised under "Survey basis" below.
   2026-11-07). Both ride with deploy A if A is ready; otherwise both go on
   the branch off `829ca6a`, where `index.ts` does not yet import
   `setlistCheck.js`, so that import and `errorText.js` are added by hand.**
+
+- **2026-11-16 — The 3-hour reminder is LIVE (edge only, from the hotfix
+  branch). Deploy A did NOT ship with it.** Deployed 14:52 UTC as function
+  version 35 from `hotfix/reminder-catalog` at `0f889a8`, the path the
+  2026-11-07 note calls the daylight hotfix; the full deploy record is
+  `docs/decisions/edge-function.md`, 2026-11-16. The client needed nothing:
+  the "Picks lock soon" toast has been live since `9a4d534`. **Rehearsed on
+  the test league (league 11) the same hour.** Its row for show 1794509576
+  (2027-06-03) had `cutoff_at` moved by direct SQL to 170 minutes ahead at
+  14:55:27 UTC. The 14:56 tick stamped `remind_sent` (14:56:01) with the
+  cutoff 169 minutes away, which the old 60-minute window could not have
+  matched. Nothing was posted: league 11 has no secret and its
+  `discord_status` stayed `no_key`. One `realtime_pings` row was written,
+  for league 11; the client's ping channel filters on its own league
+  (`subscribeRealtime` in `src/core/realtime.js` as of `9a4d534`; the
+  filter has been there since the channel was introduced in `60f9372`), so
+  no other league's client received it, and the only member of league 11
+  is the dev. No other row in any league was stamped. The row was
+  restored at 14:56:13 UTC (`cutoff_at` 2027-06-03 22:00 UTC, `remind_sent`
+  null) and read back identical to the pre-move snapshot on all 13 columns.
+  `admin_set_cutoff` was not used for the move, because it sets
+  `cutoff_set_by_admin` to true and leaves it there. **First real use:
+  2026-11-20 at 20:00 UTC, for the 23:00 UTC cutoffs in both leagues and
+  the test league.**
 
 ### Corrections to Chat (recorded 2026-10-28)
 

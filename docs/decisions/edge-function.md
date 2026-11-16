@@ -172,6 +172,54 @@
     (c) where Reopen gets built: on the hotfix branch (the assistant's
     suggestion), or after moving deploy A's wiring onto its own branch so
     `main` is deployable again. The Reopen survey lays out both.
+- **2026-11-16 — DEPLOYED 14:52 UTC: the catalog fix and the 3-hour
+  reminder are LIVE, from the hotfix branch. Deploy A is NOT live.**
+  - **What is live:** function version 35 (it was 34, deployed
+    2026-11-01), built from branch `hotfix/reminder-catalog` at `0f889a8`,
+    which is `829ca6a` plus `8d76eaa` (the reminder: `soonIso` 180 minutes
+    and the two "3 hours to lock" strings) plus `0f889a8` (`mapSongRows`,
+    `errorText`, `carton_rows` in the response). Six files went up and each
+    is byte-identical to that commit by download: the four that were live
+    plus `setlistCheck.js` and `errorText.js`. The function's settings were
+    read before and after and are unchanged (local notes hold the detail).
+  - **Checked before the deploy:** the full suite on the branch (13 files)
+    and `deno check` on its `index.ts`; a fresh download showing the live
+    function was still `829ca6a`'s; no `league_shows` row in any league,
+    the test league included, with a cutoff inside 3 hours and
+    `remind_sent` null (the next cutoff anywhere was 2026-11-20 23:00 UTC).
+  - **Checked after:** the 14:53, 14:54 and 14:55 UTC cron ticks each
+    returned 200 with `{"ok":true,...}`, so the two modules new to the
+    bundle resolve. The reminder was rehearsed on the test league and the
+    row restored (`discord-routing.md`, 2026-11-16).
+  - **The rename ran first** (Kyle, SQL editor): the seven trailing-space
+    rows now carry the Carton's trimmed names; total 372, three rows still
+    end in a space, the three the Carton stores that way. Read back before
+    the press: zero Carton names absent by exact match.
+  - **The press, 14:56 UTC:** one `sync_songs` call returned HTTP 200,
+    `{"ok":true,"songs":372,"carton_rows":373}`. `songs_cache` held 372
+    rows before and after; by exact name no Carton title is absent and no
+    row lacks a Carton title; no existing row's values changed. It is the
+    first successful catalog sync since 2026-07-18.
+  - **`main` carries both fixes** (checked the same hour: `syncSongs`,
+    `mapSongRows`, the reminder block and `errorText.js` are the same text
+    on `main` and on the branch; `9a4d534` and `efaafa3` are ancestors of
+    `origin/main`), so a later deploy from `main` cannot regress them.
+    **The branch is never merged into `main`:** its one import line differs
+    by design (it imports only `mapSongRows`, because `829ca6a`'s
+    `index.ts` does not import `setlistCheck.js`), and its client files are
+    `829ca6a`'s.
+  - **Deploying from a fresh checkout, found that day:** a checkout on this
+    machine writes the function files with CRLF and the CLI uploads the
+    bytes on disk, while every earlier live copy was LF. The worktree's six
+    files were rewritten to LF and each proven equal to the commit's blob
+    before the deploy. `main`'s own working copies are LF.
+  - **Rollback, if ever needed:** redeploy `829ca6a`'s tree. The catalog
+    rows stay and are harmless.
+  - **Still true:** only the admin button calls `syncSongs`, so a new
+    Carton title appears after someone presses Sync song catalog, which now
+    works. Candidates (a) to (c) above are still not decided. `CLAUDE.md`'s
+    stub for this file still reads "deploy pending": it was left untouched
+    on 2026-11-16 on Kyle's instruction and is now out of date.
 
 ---
 
