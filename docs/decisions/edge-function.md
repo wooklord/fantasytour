@@ -138,6 +138,40 @@
   rows and not of these seven. What to do about the seven (delete the stale
   rows after the first good sync, or dedupe the list in the client) is NOT
   decided.
+- **2026-11-16, later the same day — the stopgap's outcome, and DECISIONS
+  (Kyle's calls).** This supersedes three phrases in the two bullets above:
+  "NOT run as of this line", "Deploy path NOT decided as of this line" and
+  "is NOT decided".
+  - **Stopgap APPLIED** by Kyle in the SQL editor, the three titles only. A
+    read at 13:58 UTC found 372 rows with "Seven Bridges Road" present; the
+    seven trimmed Carton names were still absent by exact match, as
+    expected.
+  - **A correction to Chat, recorded.** Chat's stopgap wording that morning
+    asked for "every missing title". By exact name that was TEN rows. It was
+    narrowed to the three truly missing, because the other seven were
+    already in the table under a trailing space and would each have shown
+    twice in the autocomplete.
+  - **1. Path (i) APPROVED:** a hotfix branch off `829ca6a` carrying ONLY
+    the 3-hour reminder, the catalog dedupe (`mapSongRows`) and `errorText`.
+    Deploy A and the Reopen change are not on it. No deploy without Kyle's
+    word.
+  - **2. The seven trailing-space rows get RENAMED to the Carton's trimmed
+    names BEFORE the first good sync**, not deleted afterwards, so that
+    sync lands at 372 rows instead of 379. The rename matches the exact
+    stored strings and leaves alone every row whose trailing space still
+    matches the Carton's current name ("When I Paint My Masterpiece ",
+    "Wild Mountain Honey " and "The Wreck of the Edmund Fitzgerald ", the
+    11-07 stopgap rows). No `sync_songs` press before the rename has run.
+  - **3. The second 2026-11-16 bullet above stays.** It corrects the 11-07
+    record.
+  - **4. NOT DECIDED. Candidates only, written down so they are not lost:**
+    (a) song sync on the existing daily tick, so the catalog refreshes
+    itself (today only the admin button calls `syncSongs`); (b) whether the
+    sync should also reconcile rows the Carton renamed or removed (it
+    upserts and never deletes, which is how the seven rows went stale);
+    (c) where Reopen gets built: on the hotfix branch (the assistant's
+    suggestion), or after moving deploy A's wiring onto its own branch so
+    `main` is deployable again. The Reopen survey lays out both.
 
 ---
 
