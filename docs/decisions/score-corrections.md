@@ -5,7 +5,9 @@ Decision record, binding. Opened 2026-11-15.
 > **STATUS: APPLIED 2026-11-15.** The dev applied Stage AA and then the
 > correction in the Supabase SQL editor; the correction committed at 20:52
 > UTC and was verified read-only afterwards ("Outcome"). The items under
-> "Open" are open questions and pending follow-ups, **not decisions**.
+> "Open" are open questions and pending follow-ups, **not decisions**, except
+> where a row says so: **item 4, the reopen gap, was DECIDED on 2026-11-15
+> and is NOT BUILT.**
 
 Standing rule (`CLAUDE.md` → Conventions): no player nickname, no player id, no
 pick contents and no score totals in this file. League, bracket and show ids are
@@ -218,7 +220,7 @@ raises on purpose so its before/after shows in the SQL editor's error panel
 - The log row is readable only in the SQL editor (RLS on, no policy). It is
   the one place that says who and what; the `.scratch/` files are the other.
 
-## Open (questions and pending follow-ups, NOT decisions)
+## Open (questions and pending follow-ups; NOT decisions unless a row says DECIDED)
 
 1. **Are post-cutoff pick corrections allowed in general?** OPEN. See "The
    weight".
@@ -262,8 +264,11 @@ raises on purpose so its before/after shows in the SQL editor's error panel
    - **No record says who called either action.** `reopen` and `finalize`
      write no audit row. The identification above is the dev's, not the
      data's.
-4. **Closing the reopen gap. Five options are recorded; the dev has not
-   chosen, and nothing is built.**
+4. **Closing the reopen gap. DECIDED 2026-11-15 (the dev's calls), NOT
+   BUILT.** Options 1, 3 and 4 are chosen, option 2 follows from option 1,
+   option 5 is not chosen. The decision is at the end of this item; the
+   paragraphs between were written earlier the same day, before it. The five
+   options as they were put:
    1. Limit Reopen to Global, in the edge action and on the button.
    2. Rewrite the Reopen confirm text to state the policy and what a reopen
       destroys.
@@ -303,10 +308,14 @@ raises on purpose so its before/after shows in the SQL editor's error panel
    confirm text and the guard on the edge actions are exactly as they were,
    so a league admin can still reach both actions. It does not say how a
    scorer or deploy bug is to be repaired, only whose repair it is.
+   *Superseded in part later the same day: the options have since been chosen
+   (the decision below). Still true: no code and no copy has changed.*
 
    **The survey's nine passages are left as they are** (the dev's call,
-   2026-11-15: not to be rewritten yet). Listed here so the list does not
-   live only in a conversation; nothing below was changed:
+   2026-11-15: not to be rewritten yet; per the dev, their rewrite comes with
+   the dialog change, which is option 2 in the decision below). Listed here
+   so the list does not live only in a conversation; nothing below was
+   changed:
    - `src/features/admin.js`: `reopenShow`'s confirm text, and the comment
      above it. The comment cites `CLAUDE.md` for the workflow, and `CLAUDE.md`
      never held that wording.
@@ -325,6 +334,46 @@ raises on purpose so its before/after shows in the SQL editor's error panel
    header comment, the comments on `reopenShow` and the "Scores reopened"
    Discord post text (`index.ts`), a comment above `scorePicks`
    (`scoring.js`), and a comment in the unapplied Stage R.
+
+   **DECISION 2026-11-15 (the dev's calls). NOT BUILT.**
+   - **Option 1 CHOSEN: Reopen is Global-only.** The edge action refuses
+     anyone else, and the button is hidden for non-Global admins.
+   - **Option 3 CHOSEN:** reopen and finalize presses write a row to
+     `admin_audit_log` (who, when, league, show).
+   - **Option 4 CHOSEN:** reopen saves the score rows it deletes before
+     deleting them, so a reopen can be compared or undone.
+   - **Option 2 follows from option 1:** the confirm text gets rewritten for
+     the one person who can still see it.
+   - **Option 5 (the age limit): NOT chosen.**
+   - **Finalize stays available to league admins;** routine hand finalizes
+     are fine.
+   - **Wanted live before the 2026-11-20 23:00 UTC cutoff.**
+   - **NOT BUILT.** The survey and the change plan come next session,
+     review-before-edit. Until it is built and live, "Who can reach the
+     actions today" above still describes the app as it runs: a league admin
+     can reach Reopen, and nothing logs either press.
+
+   **For next session's survey: facts checked on 2026-11-15 and questions
+   they raise. These are notes, not the dev's calls, and nothing in them is
+   decided:**
+   - `admin_audit_log.action` allows two values, `remove_account` and
+     `adjust_verdict`, so option 3 needs new ones. That is a schema change
+     (decision 2 at the top put the last one in a tracked stage, applied
+     first).
+   - The table's `target_id` and `target_name` are NOT NULL and describe a
+     player. A reopen or a finalize has a league and a show and no player
+     target.
+   - Where option 4 keeps the rows it saves is not stated.
+   - The live edge function is `829ca6a`'s. `main` carries three undeployed
+     edge commits on top of it (`131bfd2` deploy A, `9a4d534` the 3-hour
+     reminder, `efaafa3` the catalog sync fix), so a deploy from `main` ships
+     all three with this change unless the work is branched from the live
+     commit. `discord-routing.md` and `edge-function.md` hold the notes on
+     that hotfix branch.
+   - The 08:00 ET auto pass (`autoFinalize`) is not a press. Whether it is
+     logged is not stated.
+   - The "Scores reopened" Discord post text and the nine passages above
+     describe the old workflow.
 5. **Backups. Follow-up pending.** Found on 2026-11-15, nothing changed:
    - **Nothing schedules `dump.sh`.** No scheduled task on the dev's machine
      names it (36 non-Microsoft tasks listed), the database's one pg_cron job

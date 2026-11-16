@@ -592,8 +592,8 @@ matches — full text in `scoring-rules`) · `deploy-cache` ·
 `discord-routing` · `edge-function` · `frontend-css` ·
 `multi-league-switcher` · `official-opt-in-default` · `onboarding` ·
 `post-first-show-batch` (the 🚨 overlay entry, LOCKED list, batch (a)–(f),
-DST bug) · `postgres-rules` · `realtime` · `score-corrections` (Stage AA +
-first targeted fix: APPLIED 2026-11-15; open: reopen gap, backups) · `scoring-modes` ·
+DST bug) · `postgres-rules` · `realtime` · `score-corrections` (Stage AA + first fix APPLIED 2026-11-15;
+Reopen Global-only + audit log DECIDED, NOT BUILT, wanted by 11-20; backups open) · `scoring-modes` ·
 `scoring-rules` · `setlist-check` (decision (2), the daily setlist check:
 LOCKED 2026-10-31, not built; item 8 scope 2026-11-15: not scorer/deploy bugs,
 whose repair is the dev's alone (Global)) · `standings-ux` · `testing-harness` · `tooling`.
