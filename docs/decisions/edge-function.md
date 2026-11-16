@@ -93,6 +93,51 @@
   for the pattern above: a batch write can fail on the DATA, not only on a
   conflict with existing rows, and an error that is thrown but stringified
   badly is as invisible as one never checked.
+- **2026-11-16 — Recurrence, nine days on: the fix above is STILL NOT
+  deployed, and three more titles are missing.** Reported that day: "Seven
+  Bridges Road" was not in the picks autocomplete, and pressing Sync song
+  catalog did not add it. Checked the same day, read-only apart from one
+  press. The live function is byte-identical to `829ca6a`'s (download and
+  compare of all four files): its `syncSongs` has no dedupe and its handler
+  still returns `String(e)`. One press from the CLI at 13:36 UTC returned
+  HTTP 500, body `{"ok":false,"error":"[object Object]"}`, with
+  `songs_cache` at 369 rows before and after. The Carton still lists "When I
+  Paint My Masterpiece " under ids 365 and 366, so every press since
+  2026-11-07 has failed the same way; it now has 373 rows, 372 distinct
+  names. **Missing, all three covers added to the Carton after the 11-07
+  stopgap, each played once:** "Seven Bridges Road" (id 373, created
+  2026-11-07 22:08 UTC, played 2026-11-07), "59th Street Bridge Song
+  (Feelin' Groovy)" (id 374, created and played 2026-11-13) and "D.A.N.C.E."
+  (id 375, created 2026-11-15, played 2026-11-14). None has a trailing
+  space; all are `isoriginal` 0. `setlist_songs` holds all three, so scoring
+  and the setlist view were unaffected: as on 11-07, only the autocomplete
+  and the not-in-catalog confirm were wrong. **Stopgap:** the 11-07 shape for
+  these three titles (expected count 372) was given to the dev on
+  2026-11-16; NOT run as of this line. **Deploy path NOT decided as of this
+  line** (the hotfix branch off `829ca6a`, or the next deploy from `main`).
+  Until one ships, every new Carton title needs the stopgap again.
+- **2026-11-16 — Found in the same check and absent from the 11-07 entry:
+  seven older rows in `songs_cache` carry a trailing space the Carton has
+  since removed.** "All The Way Down (Shadow Pt. 2) ", "American Music ",
+  "Green Earrings ", "Rosanna ", "Saint of Circumstance ", "The Stake " and
+  "Time Escaping " are stored with the space; the Carton's rows hold the
+  trimmed names, each with `updated_at` 2026-08-09, after the sync froze on
+  2026-07-18. So by exact name they were already unmatched on 2026-11-07,
+  and that entry's "363 of 370" counted them as present (an inference from
+  the dates: how the 11-07 comparison was made is not recorded). Players
+  see nothing wrong today, because `normSong` and the catalog check ignore
+  outer whitespace. **The consequence arrives with the first successful
+  sync:** `syncSongs` upserts and never deletes, so the trimmed names are
+  inserted BESIDE the stale rows: 379 rows, not 372, and each of the seven
+  shows twice in the autocomplete, identical to the eye. Rehearsed
+  2026-11-16 on a local copy of the 369-row table with that day's Carton
+  payload: the deployed batch fails with 21000, `mapSongRows`' 372-row batch
+  succeeds, the count is 379 with or without the stopgap first, and no
+  existing row's `is_original` changes. The 11-07 sentence "a later
+  successful sync upserts cleanly OVER those rows" is true of the stopgap
+  rows and not of these seven. What to do about the seven (delete the stale
+  rows after the first good sync, or dedupe the list in the client) is NOT
+  decided.
 
 ---
 
