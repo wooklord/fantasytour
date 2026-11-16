@@ -370,6 +370,16 @@ raises on purpose so its before/after shows in the SQL editor's error panel
      all three with this change unless the work is branched from the live
      commit. `discord-routing.md` and `edge-function.md` hold the notes on
      that hotfix branch.
+     - **Correction, 2026-11-16.** The note above is left as written; it
+       was true on 2026-11-15 and is not now. The live function is
+       `hotfix/reminder-catalog` at `0f889a8` (function version 35,
+       deployed 2026-11-16): `829ca6a` plus the 3-hour reminder and the
+       catalog sync fix, ported by hand. `main` is ahead of live only by
+       deploy A's wiring (`131bfd2`), checked line by line that day; the
+       one other difference is the `setlistCheck.js` import line, which
+       names five exports on `main` and only `mapSongRows` on the branch.
+       So a deploy from `main` would now ship deploy A with this change,
+       and nothing else. Record: `edge-function.md`, 2026-11-16.
    - The 08:00 ET auto pass (`autoFinalize`) is not a press. Whether it is
      logged is not stated.
    - The "Scores reopened" Discord post text and the nine passages above

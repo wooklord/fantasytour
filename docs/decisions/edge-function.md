@@ -220,6 +220,18 @@
     works. Candidates (a) to (c) above are still not decided. `CLAUDE.md`'s
     stub for this file still reads "deploy pending": it was left untouched
     on 2026-11-16 on Kyle's instruction and is now out of date.
+    *Updated later the same day, with Kyle's word: the stub now reads
+    deployed.*
+- **Before any edge deploy, read the deploy checklist in
+  `.scratch/local-notes.md`** (heading "EDGE DEPLOY CHECKLIST"): read the
+  function's settings before and after, pin them explicitly, check line
+  endings. This line is a pointer; the detail is not in tracked files.
+- **OPEN QUESTION for the Reopen deploy plan, raised 2026-11-16. NOT
+  decided:** how the function's settings get pinned permanently. Two
+  candidates: a tracked `supabase/config.toml`, which publishes the
+  setting in this public repo, or an untracked deploy script that always
+  passes it. Until one is chosen, the pin is a manual step in that
+  checklist.
 
 ---
 
