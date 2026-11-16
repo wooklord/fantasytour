@@ -103,8 +103,8 @@ check("author: Discord's username cap is 80", USERNAME_MAX, 80);
 // without the block (the mention hazard from the decision record).
 // ---------------------------------------------------------------
 const messages = [
-  "⏰ **1 hour to lock** — Ardmore Music Hall. Still waiting on: @everyone, @here, <@123456789012345678>, <@&987654321098765432>",
-  "⏰ **1 hour to lock** — Ardmore Music Hall. Everyone's in 🥚",
+  "⏰ **3 hours to lock** — Ardmore Music Hall. Still waiting on: @everyone, @here, <@123456789012345678>, <@&987654321098765432>",
+  "⏰ **3 hours to lock** — Ardmore Music Hall. Everyone's in 🥚",
   "🔒 **Picks are locked** for Ardmore Music Hall — 9 sheets in. Boards are live in the app.",
   "🏆 **Ardmore Music Hall** is final\n**Casual**: @everyone · 14 pts\n**Official**: <@123456789012345678> · 12 pts",
   "👑 **Fall 2026 is in the books!**\n🥇 @here · 88   🥈 x · 80   🥉 y · 71",
