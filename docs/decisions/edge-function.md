@@ -232,6 +232,15 @@
   setting in this public repo, or an untracked deploy script that always
   passes it. Until one is chosen, the pin is a manual step in that
   checklist.
+- **2026-11-16 — A correction to Chat, recorded.** Chat told the assistant
+  twice that day that `CLAUDE.md` was at its 40k ceiling. That had been
+  false since `717ba18` on 2026-11-15, which took the file from 39,986
+  characters to 35,894 (`0590030` then took it to 33,282). Chat was
+  working from the "14 under" figure reported earlier on 2026-11-15 and
+  never checked. Cost: two phrases trimmed from the `CLAUDE.md`
+  edge-function stub in `d5a6666` ("whole", "the error read"), restored
+  in this commit. Real headroom on 2026-11-16: 6,719 characters under
+  40,000, counted at `d5a6666` (33,281 characters).
 
 ---
 

@@ -92,8 +92,11 @@ forced a write to disk). Three rules, effective 2026-08-12:
    file's index (and a stub under the entry name, if the entry has one).**
    This changes only the *destination* in rules 1 and 2(a); "write it when
    it's made, not at wrap-up" is unchanged. This file stays under 40k
-   characters so Claude Code loads all of it: if a pointer stub needs more
-   than 5 lines, the content belongs in `docs/`, not here. Resolved
+   characters (Kyle's decision, 2026-10-18; it stands). Its reason was
+   corrected 2026-11-16: 40,000 characters is the lowest point at which
+   the installed Claude Code (2.1.325) WARNS about a large file; whether
+   anything is cut off above that was not tested. If a pointer stub needs
+   more than 5 lines, the content belongs in `docs/`, not here. Resolved
    checkpoints and dated verifications go to `docs/history/`.
 
 ---
@@ -237,9 +240,10 @@ in the file each one names.
   multi-row-insert failure in `activateSeasons()` (fixed: upsert + stamp only
   on success; watch for an unguarded batch write followed by an unconditional
   "done" stamp anywhere) and the still-open unit test for its error path.
-  Same family, 2026-11-07: `sync_songs` failed on EVERY press since 2026-07-18
-  (a duplicate Carton title sank the upsert, error "[object Object]");
-  deployed 2026-11-16 (`hotfix/reminder-catalog`, function version 35).
+  Same family, 2026-11-07: `sync_songs` failed on EVERY press since
+  2026-07-18 (a duplicate Carton title sank the whole upsert; the error read
+  "[object Object]"); deployed 2026-11-16 (`hotfix/reminder-catalog`,
+  function version 35).
 - **✅ Ranked-choice deploy batch and first production run (2026-08-14/15).**
   If ranked scores ever look uniform and low, check the deployed `scoring.js`
   has `scoreRankedPicks` first; recovery is `reopen` → fix → `finalize`.
