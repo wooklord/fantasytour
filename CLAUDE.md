@@ -222,11 +222,11 @@ in the file each one names.
   shared channel while it still reports `SUBSCRIBED`; publication and RLS are
   independent gates. `scores`/`league_shows` have no public policy by design,
   so `realtime_pings` (roadmap decision 4) carries their toasts.
-- **Auth and security — `docs/decisions/auth-security.md`:** login
-  rate-limiting (3-part fix, progressive delay NOT lockout; gate #1);
-  `ft_session` holds the plaintext PIN (token exchange is the fix; gate #2);
-  PINs ARE bcrypt-hashed; 401/403 on auth failure; the ADMIN PIN RESET live
+- **Auth and security — `docs/decisions/auth-security.md`:** login rate-limiting (3-part fix,
+  progressive delay NOT lockout; gate #1); `ft_session` holds the plaintext PIN (token exchange
+  is the fix; gate #2); PINs ARE bcrypt-hashed; 401/403 on auth failure; the ADMIN PIN RESET live
   read (a reset breaks other sessions silently; playbook `docs/admin_playbook_forgot_pin.md`).
+  Gates #1 and #2: trigger passed 2026-10-11; status in local notes.
 - **✅ Domain move 2026-08-15** to `fantasyeggy.wooklord.net` needed no code
   changes; never set a cookie with a `domain` attribute.
   `docs/history/2026-08-domain-move.md`.
@@ -375,13 +375,15 @@ mechanics — `docs/decisions/deferred.md`.
    shared anon key. Built (Session 3): `docs/decisions/realtime.md`.
 5. **Notification-preference toggle: deferred**, separate work, no trigger.
 
-Sessions 1–4 are done. Session 5 (second-league launch) is partially done
-and gated on the PRE-SESSION-5 GATE below.
+Sessions 1–4 are done. Session 5 (second-league launch) is partially done.
+The PRE-SESSION-5 GATE written to precede it was overtaken on 2026-10-11:
+`docs/decisions/pre-session-5-gate.md`.
 
 ### DATED DEADLINES — check these first, they expire
 
-Distinct from the Pre-Session-5 gate below, which is triggered by an *event*
-(launching the Facebook League). These are triggered by a *date* and stop
+Distinct from the Pre-Session-5 gate, which was triggered by an *event* (the
+second league's launch) and was overtaken on 2026-10-11:
+`docs/decisions/pre-session-5-gate.md`. These are triggered by a *date* and stop
 being actionable once it passes. Indexed here because they otherwise live
 only inside the Postgres/Supabase gotchas section, where nothing points at
 them. **The Status column is the count** — closed rows stay as a record
@@ -392,40 +394,19 @@ was moved verbatim to `docs/history/closed-deadlines.md` with its outcome not
 recorded. The closed rows (three 2026-08-14 items, the 2026-10-14 Green Eggs
 overlay) are in the same file.
 
-### PRE-SESSION-5 GATE (walk this list before launching the Facebook League)
+### PRE-SESSION-5 GATE — OVERTAKEN 2026-10-11, kept as a record
 
-Items elsewhere in this file are gated on "before Session 5 / before the
-Facebook League / before a non-dev league admin exists." Each was recorded
-beside the code it concerns, which is right for understanding it and wrong
-for remembering it — a trigger buried next to its own implementation is a
-trigger nobody re-reads at the moment it fires. **This table is the index;
-its Status column is the count.** Completed items keep their row and their
-number rather than being deleted, so the ordering note at the bottom
-("settle #4 before #5, and #1–#3 before either") keeps referring to the same
-things it was written about. **The full reasoning stays in the
-bullets referenced, deliberately not duplicated here**, since a duplicated
-rationale is one that drifts. (#7 is the exception to that last rule: it has
-no home bullet elsewhere, so its reasoning lives directly below the table.)
+Written to be walked before the second league launched and before any non-dev
+league admin existed. Green Eggs launched, and its first non-dev league admins
+joined on 2026-10-11, with the gate not completed, so it is a record now, not a
+pending checklist: `docs/decisions/pre-session-5-gate.md` (seven items,
+numbering kept).
 
-| # | Item | Where the full bullet lives | Why it's gated here |
-|---|---|---|---|
-| 1 | **Login rate-limiting** (3-part fix: progressive delay + aggregate spray throttle + weak-PIN rejection) | Postgres/Supabase gotchas — "Login rate-limiting: the top real security exposure" | ~50 semi-strangers is where enumerable nicknames + short PINs stop being theoretical |
-| 2 | **`ft_session` plaintext PIN → server-issued token** | Same section, the bullet immediately after #1 | The stored session IS the credential, with no revocation path; scope as its own session, it's real work |
-| 3 | ✅ **DONE 2026-08-15** — **Domain move to a `wooklord.net` subdomain**, live at `fantasyeggy.wooklord.net` | Same section, the roadmap bullet after #2 | Origin isolation for #2, and PWA installs become expensive to move *after* recruitment. Row kept rather than deleted so the numbering and the ordering note below stay valid |
-| 4 | **Ladder-mutability revisit** (Module B) | "Alternate scoring modes" → Module B locked decisions → "Decided: mid-season ladder edits stay unguarded" | Unguarded config edits silently rewrite already-published scores; acceptable only while one trusted person can edit |
-| 5 | **Appointing any non-dev league admin** | Cross-cuts #4 and the `admin_update_config`/`admin_set_season_roster` integrity notes | This is the event that invalidates "only the dev can do damage," which several decisions currently rest on |
-| 6 | ✅ **DECIDED 2026-10-12** — **Official opt-in default revisit**: the dev reaffirmed default `true`; Stage F (never actually applied — found 2026-10-11) stands as the fix and is item (e) of the post-first-show batch | 2.0 rebuild key decisions — the `official_opt_in` bullet | Opt-in-by-default was a closed-group convenience; the dev chose it deliberately for the semi-public pool too. Row kept so the numbering holds |
-| 7 | ✅ **DONE 2026-08-16** — **`get_show_picks` is now membership-gated**, matching `get_bracket_scores`; `player_id` dropped from the payload in favour of a server-computed `is_mine`. Reveal-after-cutoff unchanged | The bullet immediately below this table, and `sql/stage_p_get_show_picks_membership.sql` | Anyone with the publishable key could scrape every player's nickname, UUID and full pick history; at ~50 semi-strangers that stopped being a closed-group detail |
-
-**#7 in full** — ✅ resolved 2026-08-16 by Stage P; the membership gate
-cannot be exercised by the dev's own account (register a throwaway
-non-global-admin account to test it) and `is_mine` must be checked both
-ways, not inferred from the page rendering: `docs/history/2026-08-16-stage-p.md`.
-
-**Ordering and the deferred list — `docs/decisions/deferred.md`:** settle #4
-before #5, and #1–#3 before either; the desktop sidebar is deferred at
-mention-weight; cross-league stats, the webhook DB+UI, the notification
-toggle and game numbering each have a revisit trigger there.
+**Ordering and the deferred list — `docs/decisions/deferred.md`:** the gate's
+ordering note (settle #4 before #5, and #1–#3 before either) was written for an
+event that passed 2026-10-11, and it was not met; the desktop sidebar is
+deferred at mention-weight; cross-league stats, the webhook DB+UI, the
+notification toggle and game numbering each have a revisit trigger there.
 
 **DECIDED 2026-08-17, NOT STARTED: `sync_shows`, `sync_songs` and `score` are
 UNAUTHENTICATED** — `docs/decisions/cron-secret-edge-auth.md`. Dual path (a
@@ -473,7 +454,8 @@ phrased two ways (`picks.js` vs `shows.js`, unresolved):
 on a full-history backfill. Module B's four locked decisions (2026-08-12): pure
 rank-value scoring, perfect-sheet against the full ladder by coverage, fixed
 row count regardless of format, partial sheets allowed. Mid-season ladder
-edits stay unguarded — revisit before any non-dev league admin (gate #4).
+edits stay unguarded; the revisit was tied to the first non-dev league admin
+(gate #4), an event that passed 2026-10-11. Current status is kept in local notes.
 
 ---
 
@@ -557,7 +539,8 @@ matches — full text in `scoring-rules`) · `deploy-cache` ·
 `discord-routing` · `edge-function` · `frontend-css` ·
 `multi-league-switcher` · `official-opt-in-default` · `onboarding` ·
 `post-first-show-batch` (the 🚨 overlay entry, LOCKED list, batch (a)–(f),
-DST bug) · `postgres-rules` · `realtime` · `score-corrections` (Stage AA + first fix APPLIED 2026-11-15;
+DST bug) · `postgres-rules` · `pre-session-5-gate` (overtaken 2026-10-11) ·
+`realtime` · `score-corrections` (Stage AA + first fix APPLIED 2026-11-15;
 Reopen Global-only + audit log DECIDED, NOT BUILT, wanted by 11-20; backups open) · `scoring-modes` ·
 `scoring-rules` · `setlist-check` (decision (2), the daily setlist check:
 LOCKED 2026-10-31, not built; item 8 scope 2026-11-15: not scorer/deploy bugs,
@@ -572,3 +555,5 @@ whose repair is the dev's alone (Global)) · `standings-ux` · `testing-harness`
 `closed-deadlines` · `pre-2.0-feature-snapshot` (not current) ·
 `pre-2.0-pending-work` · `rebuild-session-log` (Sessions 0–5) ·
 `stage-a-and-build-sequence` · `stage-c-build-log`.
+
+Local notes = `.scratch/local-notes.md`: untracked; holds per-item status and sensitive reasoning. Tracked files say "local notes" and carry none of it.
