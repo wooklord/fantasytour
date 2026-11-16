@@ -55,8 +55,6 @@ Sibling app: the "Ambassadors" tour-map PWA (separate project, same developer).
 - Publishable/anon key: `sb_publishable_qN1goR6-Ss3cErnJJIJdKw_xr5nrFuo`
   — this is PUBLIC by design (it's in the deployed frontend JS). Safe to commit.
 - The **service_role / secret key must NEVER** be committed or put in the frontend.
-- The current `index.html` has these two constants filled in near the top of its
-  `<script>` (`SUPABASE_URL`, `SUPABASE_ANON`).
 
 ---
 
@@ -389,12 +387,10 @@ only inside the Postgres/Supabase gotchas section, where nothing points at
 them. **The Status column is the count** — closed rows stay as a record
 rather than being deleted.
 
-| Date | Status | Item | Full bullet |
-|---|---|---|---|
-| **2026-10-15 21:00 UTC** | 🔔 **GREEN EGGS ENABLED 2026-10-14 via its own secret, ⚠️ CORRECTED 2026-10-28: posts go to Green Eggs' Discord; AMBASSADORS: NO working channel until D7, own secret set 2026-10-31 — supersedes PAUSED 2026-10-11** | **League 2 posts via `DISCORD_WEBHOOK_GREEN_EGGS` (set 2026-10-14), whose value — per the dev, not readable from here — is the SAME webhook URL the deleted global secret used, built for Ambassadors, reused. League 1 has no per-league secret and the global `DISCORD_WEBHOOK` stays deleted, so it posts nothing.** Verified by name only the same day: 8 names = seven platform defaults + `DISCORD_WEBHOOK_GREEN_EGGS`; no `DISCORD_WEBHOOK`; no `DISCORD_WEBHOOK_AMBASSADORS`. Stamps advance with or without a hook (`index.ts:440`, `:460`, `:496`, `:527`, `:604`), so nothing replays on restore. **This date is a TWO-SIDED propagation TEST observed in ONE channel:** EXACTLY ONE reminder for show 1786387666 must appear in the one webhook channel — Green Eggs' — and BOTH `league_shows` rows must stamp `remind_sent`. Two reminders = league 1's hook is live, the deletion did not reach the running function; zero = the new secret was not read (check the exact name first). Record either outcome and reassess. **Batch item (f), re-scoped 2026-10-14:** (i) a separate Discord-side webhook for Green Eggs, re-pointing the secret's value BEFORE deleting any Discord-side webhook (a dead URL fails silently, `index.ts:103-107`); (ii) a per-league Ambassadors secret (✅ D7, 2026-10-31); (iii) the league-name prefix, SUPERSEDED 2026-10-28 by a per-league author name (Discord split). Verify any new secret by NAME only, never print or ask for the value or its digest | "🔔 ENABLED 2026-10-14" and "🔇 SILENCED 2026-10-14" sub-bullets inside the 🚨 entry |
-
-Closed rows (three 2026-08-14 items, the 2026-10-14 Green Eggs overlay):
-`docs/history/closed-deadlines.md`.
+**No row is listed here as of 2026-11-15.** The 2026-10-15 reminder-test row
+was moved verbatim to `docs/history/closed-deadlines.md` with its outcome not
+recorded. The closed rows (three 2026-08-14 items, the 2026-10-14 Green Eggs
+overlay) are in the same file.
 
 ### PRE-SESSION-5 GATE (walk this list before launching the Facebook League)
 
@@ -496,20 +492,10 @@ activation"); resolve identity with a query at the time you need it.
 - **Broken the day it was written** (`caab1d6`, redacted 2026-08-15; history
   deliberately not rewritten — the leak was dominated by the then-anon
   `get_show_picks`): `docs/history/2026-08-15-nickname-redaction.md`.
-- **`test2-scoring-comparison.html` is GRANDFATHERED, explicitly.** It
-  carries the full roster (ten nicknames, 16–26 occurrences each, with
-  per-player scoring data) and predates this rule by a long way — added in
-  `ff7a3f0`, *"Add two standalone analysis docs for sharing outside the
-  org"*, i.e. it was created deliberately for external sharing, not leaked
-  into the repo by accident. **Removing it is a separate decision, not a
-  cleanup task**, and it needs the dev's call because the sharing intent
-  was the point of the file. Recorded here so a future reader finds an
-  explanation rather than an unexplained contradiction and "fixes" it —
-  or, worse, concludes the rule is dead because the repo visibly ignores
-  it. (`test/tiebreak.test.mjs`, `src/features/standings.js` and the
-  analysis HTML also carry a few real nicknames as fixture/example data;
-  same grandfathering, lower stakes, worth swapping for invented names
-  whenever those files are next touched for another reason.)
+- **`test2-scoring-comparison.html` is GRANDFATHERED, explicitly.** Removing it
+  is a separate decision, not a cleanup task, and it needs the dev's call. A few
+  other files carry real nicknames as fixture data under the same
+  grandfathering. Why, and which files: `docs/decisions/conventions.md`.
 
 Instance-specific values (name, branding, default slots, data source) live in
 named constants (`src/core/config.js` for frontend; a top-of-file constant in
@@ -540,39 +526,18 @@ at `bb2dea4`.
 - Cron: the scoring function runs on a schedule; the schedule SQL embeds the anon key
   in an Authorization header — if the key ever rotates, the cron header needs updating
   too (two places: frontend constants + cron header).
-- **Local preview: `npm run dev`** (rebuilds via `build.mjs` then serves via
-  `serve.mjs`) — one command, so there's no separate "did I rebuild?" step and no
-  way to be looking at a stale `app.js`. Fixed at `http://localhost:8080/`,
-  always with `Cache-Control: no-store` (and `Pragma`/`Expires` to match) on
-  every response, no flag to remember. Prints the LAN URL too (`http://<your
-  IP>:8080/`) for checking on a phone on the same network. Before starting a
-  second one, check whether it's already running: `netstat -ano | findstr :8080`
-  — `serve.mjs` also fails loudly with that exact command if the port's taken,
-  instead of a second server silently coming up alongside a stale one (this
-  project has accumulated stray preview servers, and once eight orphaned Claude
-  Code processes, from exactly that). Stop a stale one with
-  `powershell -Command "Stop-Process -Id <pid> -Force"`.
-  **On mobile, open a new private/incognito tab, not an existing regular one** —
-  a tab that was already open (or opened earlier in the session) can keep
-  showing an old bundle even though the server itself is never caching; a fresh
-  private tab guarantees the load actually hits the server.
+- **Local preview: `npm run dev`**, fixed at `http://localhost:8080/`. Before
+  starting a second one, check `netstat -ano | findstr :8080`. **On mobile, open
+  a new private/incognito tab, not an existing regular one.** Full note:
+  `docs/decisions/deploy-cache.md` (Local preview).
 
 ## Tooling / account notes (full text: `docs/decisions/tooling.md`)
 
-- **An account switch needs re-auth in TWO places**: Claude Code (`/logout`,
-  `/login`) AND the Chrome extension separately. A wrong-account extension
-  reports "extension is not connected" / `[]`, which reads as "no browser" —
-  check which account the extension is signed into before debugging Chrome.
+- **An account switch needs re-auth in TWO places**: Claude Code AND the Chrome
+  extension, separately.
 - **NEVER TYPE A DESTRUCTIVE STATEMENT INTO THE SUPABASE SQL EDITOR.** Typed
-  input silently drops characters (211 typed → 203 landed, tail lost), so a
-  truncated `delete ... where ... and slot in (...)` can lose its narrowing
-  clause and still run. Use
-  `window.monaco.editor.getModels()[0].setValue(...)` (`form_input` does not
-  update the model), then before executing verify the length, `endsWith` on
-  the final clause, the narrowing predicate is present, and `delete` appears
-  once. Return primitives only from `javascript_tool` — echoing the SQL trips
-  its cookie/query-string guard and kills the call. Read result rows via
-  `textContent` on `[role="row"]`; `innerText` on `.rdg` returns empty.
+  input silently drops characters. Set the text through the editor's model and
+  verify it before executing: `docs/decisions/tooling.md` (Quick reference).
 
 ## Tone / working style the dev prefers
 
@@ -586,7 +551,7 @@ Each file opens with the `CLAUDE.md` lines it came from. New records go here
 by default (durability rule 4).
 
 `docs/decisions/` (binding): `admin-panel` · `auth-security` · `backups` ·
-`boot-removed-at` · `cron-secret-edge-auth` · `deferred` (plus two 2026-10-18
+`boot-removed-at` · `conventions` · `cron-secret-edge-auth` · `deferred` (plus two 2026-10-18
 scoring bugs: stale `setlist_songs` footnote/cover, score-write diff never
 matches — full text in `scoring-rules`) · `deploy-cache` ·
 `discord-routing` · `edge-function` · `frontend-css` ·

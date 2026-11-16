@@ -3,6 +3,25 @@
 > Extracted verbatim from `CLAUDE.md` at commit 54a5ab8 (2026-10-18), original lines 4460–4508. Nested entries were de-indented to top level; wording is unchanged.
 > Decision record — currently binding. `CLAUDE.md` holds only a pointer stub under the same entry name; this file is the full text and rationale.
 
+## Quick reference (moved verbatim from `CLAUDE.md` at `c9b2f89` on 2026-11-15 for headroom, original lines 562–575)
+
+- **An account switch needs re-auth in TWO places**: Claude Code (`/logout`,
+  `/login`) AND the Chrome extension separately. A wrong-account extension
+  reports "extension is not connected" / `[]`, which reads as "no browser" —
+  check which account the extension is signed into before debugging Chrome.
+- **NEVER TYPE A DESTRUCTIVE STATEMENT INTO THE SUPABASE SQL EDITOR.** Typed
+  input silently drops characters (211 typed → 203 landed, tail lost), so a
+  truncated `delete ... where ... and slot in (...)` can lose its narrowing
+  clause and still run. Use
+  `window.monaco.editor.getModels()[0].setValue(...)` (`form_input` does not
+  update the model), then before executing verify the length, `endsWith` on
+  the final clause, the narrowing predicate is present, and `delete` appears
+  once. Return primitives only from `javascript_tool` — echoing the SQL trips
+  its cookie/query-string guard and kills the call. Read result rows via
+  `textContent` on `[role="row"]`; `innerText` on `.rdg` returns empty.
+
+## Full record (extracted 2026-10-18)
+
 - **The corporate→personal account switch needs re-auth in TWO places, not
   one** (hit 2026-08-14). Claude Code itself (`/logout`, then `/login`) and
   the **Chrome extension separately** — signing one in does not sign in the

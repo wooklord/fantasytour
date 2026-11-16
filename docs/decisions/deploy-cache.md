@@ -133,3 +133,22 @@ lower, since it is the file that carries the pointer.
 deploy, which is most of them. Worth doing before the next breaking RPC
 change, or before the player count makes "tell everyone to reload" stop
 being a viable fallback.
+
+## Local preview (moved verbatim from `CLAUDE.md` at `c9b2f89` on 2026-11-15 for headroom, original lines 543–558)
+
+- **Local preview: `npm run dev`** (rebuilds via `build.mjs` then serves via
+  `serve.mjs`) — one command, so there's no separate "did I rebuild?" step and no
+  way to be looking at a stale `app.js`. Fixed at `http://localhost:8080/`,
+  always with `Cache-Control: no-store` (and `Pragma`/`Expires` to match) on
+  every response, no flag to remember. Prints the LAN URL too (`http://<your
+  IP>:8080/`) for checking on a phone on the same network. Before starting a
+  second one, check whether it's already running: `netstat -ano | findstr :8080`
+  — `serve.mjs` also fails loudly with that exact command if the port's taken,
+  instead of a second server silently coming up alongside a stale one (this
+  project has accumulated stray preview servers, and once eight orphaned Claude
+  Code processes, from exactly that). Stop a stale one with
+  `powershell -Command "Stop-Process -Id <pid> -Force"`.
+  **On mobile, open a new private/incognito tab, not an existing regular one** —
+  a tab that was already open (or opened earlier in the session) can keep
+  showing an old bundle even though the server itself is never caching; a fresh
+  private tab guarantees the load actually hits the server.

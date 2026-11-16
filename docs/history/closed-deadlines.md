@@ -27,3 +27,11 @@ order to differ from rank order and nothing in the pipeline produces that.
 See the caveat inside the VERIFIED bullet — it is a permanent property, not
 an outstanding task, and re-opening it as one would be re-deriving a
 conclusion already reached.
+
+## The 2026-10-15 row (moved verbatim from `CLAUDE.md` at `c9b2f89` on 2026-11-15 for headroom, original line 394)
+
+Outcome not recorded as of 2026-11-15.
+
+| Date | Status | Item | Full bullet |
+|---|---|---|---|
+| **2026-10-15 21:00 UTC** | 🔔 **GREEN EGGS ENABLED 2026-10-14 via its own secret, ⚠️ CORRECTED 2026-10-28: posts go to Green Eggs' Discord; AMBASSADORS: NO working channel until D7, own secret set 2026-10-31 — supersedes PAUSED 2026-10-11** | **League 2 posts via `DISCORD_WEBHOOK_GREEN_EGGS` (set 2026-10-14), whose value — per the dev, not readable from here — is the SAME webhook URL the deleted global secret used, built for Ambassadors, reused. League 1 has no per-league secret and the global `DISCORD_WEBHOOK` stays deleted, so it posts nothing.** Verified by name only the same day: 8 names = seven platform defaults + `DISCORD_WEBHOOK_GREEN_EGGS`; no `DISCORD_WEBHOOK`; no `DISCORD_WEBHOOK_AMBASSADORS`. Stamps advance with or without a hook (`index.ts:440`, `:460`, `:496`, `:527`, `:604`), so nothing replays on restore. **This date is a TWO-SIDED propagation TEST observed in ONE channel:** EXACTLY ONE reminder for show 1786387666 must appear in the one webhook channel — Green Eggs' — and BOTH `league_shows` rows must stamp `remind_sent`. Two reminders = league 1's hook is live, the deletion did not reach the running function; zero = the new secret was not read (check the exact name first). Record either outcome and reassess. **Batch item (f), re-scoped 2026-10-14:** (i) a separate Discord-side webhook for Green Eggs, re-pointing the secret's value BEFORE deleting any Discord-side webhook (a dead URL fails silently, `index.ts:103-107`); (ii) a per-league Ambassadors secret (✅ D7, 2026-10-31); (iii) the league-name prefix, SUPERSEDED 2026-10-28 by a per-league author name (Discord split). Verify any new secret by NAME only, never print or ask for the value or its digest | "🔔 ENABLED 2026-10-14" and "🔇 SILENCED 2026-10-14" sub-bullets inside the 🚨 entry |
