@@ -241,6 +241,11 @@
   edge-function stub in `d5a6666` ("whole", "the error read"), restored
   in this commit. Real headroom on 2026-11-16: 6,719 characters under
   40,000, counted at `d5a6666` (33,281 characters).
+- **2026-11-16 — Device check: the catalog bug is CLOSED.** Kyle confirmed
+  on his phone that day that "Seven Bridges Road" appears in the picks
+  autocomplete after a full close and reopen of the app. That closes the
+  bug reported that morning. What is still open is in the entries above:
+  candidates (a) to (c), and how the function's settings get pinned.
 
 ---
 
